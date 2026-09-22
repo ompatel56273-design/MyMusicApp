@@ -24,24 +24,8 @@ export interface IFilesystemAdapter {
   ): Promise<{ filesDiscovered: number; directoriesDiscovered: number }>;
 }
 
-/**
- * Recognized Audio Containers / Extensions per Docs/09_AUDIO_FORMAT_SUPPORT.md
- */
-export const SUPPORTED_AUDIO_EXTENSIONS = new Set([
-  'mp3',
-  'flac',
-  'wav',
-  'ogg',
-  'm4a',
-  'aac',
-  'opus',
-  'webm',
-  'alac',
-  'aiff',
-  'aif',
-  'wma',
-  'ape'
-]);
+export { SUPPORTED_AUDIO_EXTENSIONS_SET as SUPPORTED_AUDIO_EXTENSIONS } from '../../core/audio/audio-validator';
+import { getAudioExtension as validateAudioExt, isSupportedAudioFile } from '../../core/audio/audio-validator';
 
 /**
  * Base Filesystem Adapter with standard path normalization and audio extension validation.
@@ -94,16 +78,11 @@ export class BaseFilesystemAdapter {
   }
 
   public getAudioExtension(filename: string): string | null {
-    const lastDot = filename.lastIndexOf('.');
-    if (lastDot === -1 || lastDot === filename.length - 1) {
-      return null;
-    }
-    const ext = filename.substring(lastDot + 1).toLowerCase();
-    return SUPPORTED_AUDIO_EXTENSIONS.has(ext) ? ext : null;
+    return validateAudioExt(filename);
   }
 
   public isAudioFile(filename: string): boolean {
-    return this.getAudioExtension(filename) !== null;
+    return isSupportedAudioFile(filename);
   }
 }
 

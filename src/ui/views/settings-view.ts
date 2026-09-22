@@ -1,16 +1,33 @@
 import type { IView } from './view-interface';
 import type { RouteParams } from '../navigation/route-types';
-import type { IAudioEngine, IAudioSettingsService, IVisualizerService, IGalaxyService } from '../../services/contracts/service-contracts';
+import type {
+  IAudioEngine,
+  IAudioSettingsService,
+  IVisualizerService,
+  IGalaxyService,
+  IScannerService,
+  ILibraryService
+} from '../../services/contracts/service-contracts';
 import type { VisualizerMode } from '../../domain/entities/visualizer-settings';
 import { EqualizerComponent } from '../components/audio/equalizer-component';
 import { ReplayGainControlsComponent } from '../components/audio/replaygain-controls-component';
 import { ThemeManager, type ThemePreference, type ResolvedTheme } from '../theme/theme-manager';
+import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-filesystem-adapter';
+import type { IDatabaseAdapter } from '../../data/db/database-adapter';
+import { STORES } from '../../data/db/schema';
+import { FileAccessCapabilityService } from '../../services/scanner/file-access-capability';
+import type { EventBus } from '../../core/events/event-bus';
 
 export interface SettingsViewDependencies {
   audioEngine?: IAudioEngine | undefined;
   audioSettingsService?: IAudioSettingsService | undefined;
   visualizerService?: IVisualizerService | undefined;
   galaxyService?: IGalaxyService | undefined;
+  scannerService?: IScannerService | undefined;
+  libraryService?: ILibraryService | undefined;
+  fsAdapter?: BrowserFilesystemAdapter | undefined;
+  dbAdapter?: IDatabaseAdapter | undefined;
+  eventBus?: EventBus | undefined;
 }
 
 export class SettingsView implements IView {
@@ -19,16 +36,26 @@ export class SettingsView implements IView {
   private readonly audioSettingsService?: IAudioSettingsService | undefined;
   private readonly visualizerService?: IVisualizerService | undefined;
   private readonly galaxyService?: IGalaxyService | undefined;
+  private readonly scannerService?: IScannerService | undefined;
+  private readonly libraryService?: ILibraryService | undefined;
+  private readonly fsAdapter?: BrowserFilesystemAdapter | undefined;
+  private readonly dbAdapter?: IDatabaseAdapter | undefined;
+  private readonly capabilityService = FileAccessCapabilityService.getInstance();
 
   private equalizerComponent: EqualizerComponent | null = null;
   private replayGainComponent: ReplayGainControlsComponent | null = null;
   private themeUnsub: (() => void) | null = null;
+  private connectedFolderName: string | null = null;
 
   constructor(deps?: SettingsViewDependencies) {
     this.audioEngine = deps?.audioEngine;
     this.audioSettingsService = deps?.audioSettingsService;
     this.visualizerService = deps?.visualizerService;
     this.galaxyService = deps?.galaxyService;
+    this.scannerService = deps?.scannerService;
+    this.libraryService = deps?.libraryService;
+    this.fsAdapter = deps?.fsAdapter;
+    this.dbAdapter = deps?.dbAdapter;
   }
 
   public mount(container: HTMLElement, _params?: RouteParams): void {
@@ -38,6 +65,7 @@ export class SettingsView implements IView {
     this.attachThemeListeners();
     this.attachVisualizerSettingsListeners();
     this.attachGalaxySettingsListeners();
+    this.attachMusicAccessListeners();
   }
 
   public unmount(): void {
@@ -61,6 +89,7 @@ export class SettingsView implements IView {
 
   private render(): void {
     if (!this.container) return;
+    const caps = this.capabilityService.getCapabilities();
 
     this.container.innerHTML = `
       <style>
@@ -214,6 +243,33 @@ export class SettingsView implements IView {
           box-sizing: border-box;
         }
 
+        .settings-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 10px 18px;
+          border-radius: var(--radius-lg);
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all var(--duration-fast) var(--ease-smooth);
+          border: 1px solid var(--glass-border);
+          background: var(--glass-surface);
+          color: var(--color-text-primary);
+          min-height: 40px;
+        }
+        .settings-btn:hover:not(:disabled) {
+          background: rgba(255, 255, 255, 0.1);
+          transform: translateY(-1px);
+        }
+        .settings-btn-primary {
+          background: var(--color-accent-gradient);
+          color: #ffffff;
+          border: none;
+          box-shadow: var(--shadow-glow-purple);
+        }
+
         /* Tablet Responsive (768px - 1199px) */
         @media (max-width: 1199px) and (min-width: 768px) {
           .settings-grid-layout {
@@ -288,7 +344,7 @@ export class SettingsView implements IView {
               Settings
             </h2>
             <p style="font-size: 14px; font-weight: 500; color: var(--color-text-secondary); margin: 0; max-width: 560px; line-height: 1.5;">
-              Customize your music experience. Configure themes, audio DSP equalization, dynamic ReplayGain normalization, real-time visualizer, and Audio Galaxy.
+              Customize your music experience. Manage local music access, audio DSP equalization, dynamic ReplayGain normalization, real-time visualizer, and Audio Galaxy.
             </p>
           </div>
         </header>
@@ -297,7 +353,11 @@ export class SettingsView implements IView {
         <div class="settings-grid-layout">
           <!-- Category Sidebar Nav -->
           <nav class="settings-nav-card" aria-label="Settings Categories">
-            <button class="settings-nav-item active" data-target="section-audio">
+            <button class="settings-nav-item active" data-target="section-music-access">
+              <span aria-hidden="true">📁</span>
+              <span>Local Music Access</span>
+            </button>
+            <button class="settings-nav-item" data-target="section-audio">
               <span aria-hidden="true">🎚</span>
               <span>Audio & Equalizer</span>
             </button>
@@ -321,6 +381,57 @@ export class SettingsView implements IView {
 
           <!-- Content Sections -->
           <div class="settings-content-area">
+            <!-- 0. Local Music Access Section -->
+            <section id="section-music-access" class="settings-card">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: var(--space-3); flex-wrap: wrap; gap: 8px;">
+                <div>
+                  <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent-secondary);">
+                    Local Storage
+                  </span>
+                  <h3 style="font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin: 2px 0 0 0;">
+                    Local Music Access
+                  </h3>
+                </div>
+                <span id="settings-music-access-badge" style="font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: var(--radius-full); background: rgba(148, 163, 184, 0.15); color: var(--color-text-secondary); border: 1px solid rgba(148, 163, 184, 0.3);">
+                  Checking status...
+                </span>
+              </div>
+
+              <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 14px 16px; display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 20px;">🔒</span>
+                <p style="margin: 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.4;">
+                  <strong>Your music stays on your device.</strong> MyMusicApp only accesses files you explicitly choose. Your audio is never uploaded to any cloud service.
+                </p>
+              </div>
+
+              <div id="settings-scan-status-msg" style="display: none; font-size: 13px; padding: 10px 14px; border-radius: var(--radius-md); background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3);"></div>
+
+              <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px;">
+                <button id="settings-btn-rescan" class="settings-btn settings-btn-primary">
+                  <span>🔄</span>
+                  <span>Rescan Music</span>
+                </button>
+
+                ${caps.hasDirectoryPicker ? `
+                  <button id="settings-btn-change-folder" class="settings-btn">
+                    <span>📁</span>
+                    <span>Change Music Folder</span>
+                  </button>
+                ` : `
+                  <span style="font-size: 12px; color: var(--color-text-muted); align-self: center;">
+                    Folder access is not supported by this browser.
+                  </span>
+                `}
+
+                <button id="settings-btn-choose-files" class="settings-btn">
+                  <span>🎵</span>
+                  <span>Choose Audio Files</span>
+                </button>
+              </div>
+
+              <input type="file" id="settings-file-input" multiple accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.webm,.aiff,.aif,.alac" style="display: none;" />
+            </section>
+
             <!-- 1. Equalizer & DSP Slot -->
             <div id="section-audio" style="display: flex; flex-direction: column; gap: var(--space-6); width: 100%;">
               <div id="settings-equalizer-slot"></div>
@@ -380,51 +491,54 @@ export class SettingsView implements IView {
               </div>
 
               <div class="settings-controls-grid">
-                <div style="display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; width: 100%;">
-                  <label for="settings-viz-mode" style="font-size: 12px; font-weight: 600; color: var(--color-text-muted);">Default Visualizer Mode</label>
-                  <select id="settings-viz-mode" class="app-select" aria-label="Default Visualizer Mode">
-                    <option value="bars">Bars (Frequency Spectrogram)</option>
-                    <option value="waveform">Waveform (Time Domain Oscilloscope)</option>
-                    <option value="circular">Circular / Radial Energy</option>
-                    <option value="spectrum">Filled Spectrum Flow</option>
-                    <option value="particles">Energy Particle Cloud</option>
-                    <option value="minimal">Minimalist Meter</option>
+                <div>
+                  <label for="settings-viz-mode" style="font-size: 12px; font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 6px;">
+                    Render Style
+                  </label>
+                  <select id="settings-viz-mode" style="width: 100%; background: var(--color-bg-surface-elevated); border: 1px solid var(--glass-border); color: var(--color-text-primary); border-radius: var(--radius-md); padding: 8px 12px; font-size: 13px; font-weight: 500;">
+                    <option value="bars">Frequency Spectrum Bars</option>
+                    <option value="wave">Oscilloscope Waveform</option>
+                    <option value="circular">Circular Radial Ring</option>
+                    <option value="particles">Neon Audio Particles</option>
                   </select>
                 </div>
-
-                <div style="display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; width: 100%;">
-                  <label for="settings-viz-fps" style="font-size: 12px; font-weight: 600; color: var(--color-text-muted);">FPS Frame Rate Limit</label>
-                  <select id="settings-viz-fps" class="app-select" aria-label="FPS Frame Rate Limit">
-                    <option value="30">30 FPS (Power Saver)</option>
-                    <option value="60">60 FPS (Default Smooth)</option>
-                    <option value="120">120 FPS (High Refresh Pro)</option>
+                <div>
+                  <label for="settings-viz-fps" style="font-size: 12px; font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 6px;">
+                    Frame Rate Target
+                  </label>
+                  <select id="settings-viz-fps" style="width: 100%; background: var(--color-bg-surface-elevated); border: 1px solid var(--glass-border); color: var(--color-text-primary); border-radius: var(--radius-md); padding: 8px 12px; font-size: 13px; font-weight: 500;">
+                    <option value="60">60 FPS (Ultra Smooth)</option>
+                    <option value="30">30 FPS (Battery Efficient)</option>
                   </select>
                 </div>
               </div>
             </section>
 
-            <!-- 4. Audio Galaxy Preferences Section -->
+            <!-- 4. Audio Galaxy Configuration Section -->
             <section id="section-galaxy" class="settings-card">
-              <div style="border-bottom: 1px solid var(--glass-border); padding-bottom: var(--space-3);">
-                <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent-primary);">
-                  Cosmic Library Graph
-                </span>
-                <h3 style="font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin: 2px 0 0 0;">
-                  Audio Galaxy Preferences
-                </h3>
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: var(--space-3); flex-wrap: wrap; gap: var(--space-2);">
+                <div>
+                  <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent-primary);">
+                    Cosmic Exploration
+                  </span>
+                  <h3 style="font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin: 2px 0 0 0;">
+                    Audio Galaxy Preferences
+                  </h3>
+                </div>
               </div>
 
               <div class="settings-controls-grid">
-                <div style="display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; width: 100%;">
-                  <label for="settings-galaxy-lod" style="font-size: 12px; font-weight: 600; color: var(--color-text-muted);">Initial Level of Detail (LOD)</label>
-                  <select id="settings-galaxy-lod" class="app-select" aria-label="Initial Level of Detail">
-                    <option value="1">LOD 1 — Macro Overview (Genres / Artists)</option>
-                    <option value="2">LOD 2 — Exploration (Artists / Albums)</option>
-                    <option value="3">LOD 3 — Detailed (Albums / Tracks)</option>
+                <div>
+                  <label for="settings-galaxy-lod" style="font-size: 12px; font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 6px;">
+                    Default Detail Level
+                  </label>
+                  <select id="settings-galaxy-lod" style="width: 100%; background: var(--color-bg-surface-elevated); border: 1px solid var(--glass-border); color: var(--color-text-primary); border-radius: var(--radius-md); padding: 8px 12px; font-size: 13px; font-weight: 500;">
+                    <option value="1">LOD 1 - Macro Genres</option>
+                    <option value="2">LOD 2 - Artists & Bands</option>
+                    <option value="3">LOD 3 - Full Track Constellations</option>
                   </select>
                 </div>
-
-                <div style="display: flex; flex-direction: column; gap: var(--space-2); justify-content: center; min-width: 0;">
+                <div style="display: flex; flex-direction: column; gap: 10px; justify-content: center;">
                   <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer; font-size: 13px; font-weight: 500; color: var(--color-text-primary);">
                     <input type="checkbox" id="settings-galaxy-playlists" style="accent-color: var(--color-accent-primary);" />
                     Show Playlist Orbits
@@ -518,17 +632,19 @@ export class SettingsView implements IView {
     const options = this.container.querySelectorAll<HTMLElement>('.settings-theme-option');
     const badge = this.container.querySelector<HTMLElement>('#settings-theme-status-badge');
 
-    const updateUI = (resolved: ResolvedTheme, pref: ThemePreference) => {
+    const updateSelection = (pref: ThemePreference, resolved: ResolvedTheme) => {
       options.forEach(opt => {
-        const val = opt.getAttribute('data-theme-val') as ThemePreference;
-        const isActive = val === pref;
-        opt.classList.toggle('active', isActive);
-        opt.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        const val = opt.getAttribute('data-theme-val');
+        if (val === pref) {
+          opt.classList.add('active');
+        } else {
+          opt.classList.remove('active');
+        }
       });
 
       if (badge) {
         if (pref === 'system') {
-          badge.textContent = `System Match (${resolved === 'dark' ? 'Dark' : 'Light'}) Active`;
+          badge.textContent = `System Match (${resolved === 'dark' ? 'Dark' : 'Light'})`;
         } else if (pref === 'light') {
           badge.textContent = 'Light Mode Active';
         } else {
@@ -537,25 +653,19 @@ export class SettingsView implements IView {
       }
     };
 
-    options.forEach(opt => {
-      const handleSelect = () => {
-        const val = opt.getAttribute('data-theme-val') as ThemePreference;
-        if (val) {
-          themeManager.setPreference(val);
-        }
-      };
+    updateSelection(themeManager.getPreference(), themeManager.getResolvedTheme());
 
-      opt.addEventListener('click', handleSelect);
-      opt.addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          handleSelect();
+    options.forEach(opt => {
+      opt.addEventListener('click', () => {
+        const pref = opt.getAttribute('data-theme-val') as ThemePreference;
+        if (pref) {
+          themeManager.setPreference(pref);
         }
       });
     });
 
     this.themeUnsub = themeManager.subscribe((resolved, pref) => {
-      updateUI(resolved, pref);
+      updateSelection(pref, resolved);
     });
   }
 
@@ -621,5 +731,154 @@ export class SettingsView implements IView {
         void this.galaxyService.saveSettings({ showFolders: foldersCheckbox.checked });
       }
     });
+  }
+
+  private attachMusicAccessListeners(): void {
+    if (!this.container) return;
+
+    const rescanBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-rescan');
+    const changeFolderBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-change-folder');
+    const chooseFilesBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-choose-files');
+    const fileInput = this.container.querySelector<HTMLInputElement>('#settings-file-input');
+    const statusMsg = this.container.querySelector<HTMLElement>('#settings-scan-status-msg');
+
+    this.updateMusicAccessStatus();
+
+    rescanBtn?.addEventListener('click', async () => {
+      if (!this.scannerService || this.scannerService.isScanning) return;
+
+      if (statusMsg) {
+        statusMsg.style.display = 'block';
+        statusMsg.textContent = 'Rescanning music library...';
+      }
+
+      try {
+        const root = this.connectedFolderName ? `folder://${this.connectedFolderName}` : '';
+        if (root && this.fsAdapter?.getDirectoryHandle(root)) {
+          await this.scannerService.scanDirectory(root);
+          if (statusMsg) {
+            statusMsg.textContent = 'Rescan completed successfully!';
+            setTimeout(() => { if (statusMsg) statusMsg.style.display = 'none'; }, 3000);
+          }
+        } else {
+          if (statusMsg) {
+            statusMsg.textContent = 'No connected music folder found. Please choose a folder or audio files.';
+          }
+        }
+      } catch (err: any) {
+        if (statusMsg) {
+          statusMsg.textContent = `Rescan failed: ${err?.message || 'Unknown error'}`;
+        }
+      }
+      this.updateMusicAccessStatus();
+    });
+
+    changeFolderBtn?.addEventListener('click', async () => {
+      if (typeof (window as any).showDirectoryPicker !== 'function') return;
+
+      try {
+        const handle: FileSystemDirectoryHandle = await (window as any).showDirectoryPicker({
+          mode: 'read'
+        });
+
+        if (!handle) return;
+
+        const rootPath = `folder://${handle.name}`;
+        this.connectedFolderName = handle.name;
+
+        if (this.fsAdapter) {
+          this.fsAdapter.registerDirectoryHandle(rootPath, handle);
+        }
+
+        if (this.dbAdapter) {
+          await this.dbAdapter.put(STORES.SETTINGS, {
+            key: 'music_directory_handle',
+            handle,
+            path: rootPath,
+            name: handle.name,
+            updatedAt: Date.now()
+          });
+        }
+
+        if (this.scannerService) {
+          if (statusMsg) {
+            statusMsg.style.display = 'block';
+            statusMsg.textContent = `Scanning "${handle.name}"...`;
+          }
+          await this.scannerService.scanDirectory(rootPath);
+          if (statusMsg) {
+            statusMsg.textContent = `Library updated from "${handle.name}"!`;
+            setTimeout(() => { if (statusMsg) statusMsg.style.display = 'none'; }, 3000);
+          }
+        }
+
+        this.updateMusicAccessStatus();
+      } catch (e: any) {
+        if (e?.name !== 'AbortError' && statusMsg) {
+          statusMsg.style.display = 'block';
+          statusMsg.textContent = 'Failed to access folder.';
+        }
+      }
+    });
+
+    if (chooseFilesBtn && fileInput) {
+      chooseFilesBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', async () => {
+        if (fileInput.files && fileInput.files.length > 0 && this.scannerService?.importFiles) {
+          if (statusMsg) {
+            statusMsg.style.display = 'block';
+            statusMsg.textContent = `Importing ${fileInput.files.length} audio files...`;
+          }
+          const res = await this.scannerService.importFiles(fileInput.files);
+          if (statusMsg) {
+            statusMsg.textContent = `Added ${res.filesAdded} audio files to library.`;
+            setTimeout(() => { if (statusMsg) statusMsg.style.display = 'none'; }, 3000);
+          }
+          this.updateMusicAccessStatus();
+        }
+      });
+    }
+  }
+
+  private updateMusicAccessStatus(): void {
+    if (!this.container) return;
+    const badge = this.container.querySelector<HTMLElement>('#settings-music-access-badge');
+    if (!badge) return;
+
+    if (this.dbAdapter) {
+      void this.dbAdapter.get<{ key: string; name: string }>(STORES.SETTINGS, 'music_directory_handle').then(record => {
+        if (record && record.name) {
+          this.connectedFolderName = record.name;
+          badge.textContent = `Folder: ${record.name} (Connected)`;
+          badge.style.background = 'rgba(52, 211, 153, 0.15)';
+          badge.style.color = '#34d399';
+          badge.style.borderColor = 'rgba(52, 211, 153, 0.3)';
+        } else {
+          this.checkLibraryCount(badge);
+        }
+      }).catch(() => {
+        this.checkLibraryCount(badge);
+      });
+    } else {
+      this.checkLibraryCount(badge);
+    }
+  }
+
+  private checkLibraryCount(badge: HTMLElement): void {
+    if (this.libraryService) {
+      void this.libraryService.getLibraryStats().then(stats => {
+        if (stats.trackCount > 0) {
+          badge.textContent = `${stats.trackCount} Local Tracks Available`;
+          badge.style.background = 'rgba(99, 102, 241, 0.15)';
+          badge.style.color = '#818cf8';
+          badge.style.borderColor = 'rgba(99, 102, 241, 0.3)';
+        } else {
+          badge.textContent = 'Not Connected';
+          badge.style.background = 'rgba(148, 163, 184, 0.15)';
+          badge.style.color = 'var(--color-text-secondary)';
+          badge.style.borderColor = 'rgba(148, 163, 184, 0.3)';
+        }
+      });
+    }
   }
 }

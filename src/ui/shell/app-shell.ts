@@ -12,9 +12,11 @@ import { HeaderComponent } from './header-component';
 import { SidebarComponent } from './sidebar-component';
 import { MiniPlayerComponent } from './mini-player-component';
 import { KeyboardManager } from '../keyboard/keyboard-manager';
-import type { IPlaybackManager, ILibraryService, ISearchService, IArtworkService, IPlaylistService, ILyricsService, IAudioEngine, IAudioSettingsService, IVisualizerService, IGalaxyService } from '../../services/contracts/service-contracts';
+import type { IPlaybackManager, ILibraryService, ISearchService, IArtworkService, IPlaylistService, ILyricsService, IAudioEngine, IAudioSettingsService, IVisualizerService, IGalaxyService, IScannerService } from '../../services/contracts/service-contracts';
 import { EventBus } from '../../core/events/event-bus';
 import type { Disposable } from '../../core/types/common';
+import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-filesystem-adapter';
+import type { IDatabaseAdapter } from '../../data/db/database-adapter';
 
 import { ThemeManager } from '../theme/theme-manager';
 
@@ -29,6 +31,9 @@ export interface AppShellDependencies {
   audioSettingsService?: IAudioSettingsService | undefined;
   visualizerService?: IVisualizerService | undefined;
   galaxyService?: IGalaxyService | undefined;
+  scannerService?: IScannerService | undefined;
+  fsAdapter?: BrowserFilesystemAdapter | undefined;
+  dbAdapter?: IDatabaseAdapter | undefined;
   eventBus: EventBus;
 }
 
@@ -136,7 +141,12 @@ export class AppShell {
           audioEngine: deps.audioEngine,
           audioSettingsService: deps.audioSettingsService,
           visualizerService: deps.visualizerService,
-          galaxyService: deps.galaxyService
+          galaxyService: deps.galaxyService,
+          scannerService: deps.scannerService,
+          libraryService: deps.libraryService,
+          fsAdapter: deps.fsAdapter,
+          dbAdapter: deps.dbAdapter,
+          eventBus: deps.eventBus
         })
       ],
       [

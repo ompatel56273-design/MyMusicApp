@@ -81,6 +81,7 @@ export interface IScannerService {
   readonly isScanning: boolean;
   scanDirectory(path: string): Promise<void>;
   cancelScan(): Promise<void>;
+  importFiles?(files: readonly File[] | FileList): Promise<{ filesAdded: number; filesSkipped: number }>;
 }
 
 /**

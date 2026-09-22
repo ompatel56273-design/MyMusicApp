@@ -1226,19 +1226,19 @@ export class HomeView implements IView {
     const albumEl = this.container.querySelector('#stat-album-count');
     const playlistEl = this.container.querySelector('#stat-playlist-count');
 
-    if (songEl) songEl.textContent = this.libraryStats.trackCount > 0 ? this.libraryStats.trackCount.toLocaleString() : '2,541';
-    if (artistEl) artistEl.textContent = this.libraryStats.artistCount > 0 ? this.libraryStats.artistCount.toLocaleString() : '320';
-    if (albumEl) albumEl.textContent = this.libraryStats.albumCount > 0 ? this.libraryStats.albumCount.toLocaleString() : '186';
-    if (playlistEl) playlistEl.textContent = this.libraryStats.playlistCount > 0 ? this.libraryStats.playlistCount.toLocaleString() : '48';
+    if (songEl) songEl.textContent = this.libraryStats.trackCount.toLocaleString();
+    if (artistEl) artistEl.textContent = this.libraryStats.artistCount.toLocaleString();
+    if (albumEl) albumEl.textContent = this.libraryStats.albumCount.toLocaleString();
+    if (playlistEl) playlistEl.textContent = this.libraryStats.playlistCount.toLocaleString();
 
     // Mobile stats
     const mobLiked = this.container.querySelector('#mobile-liked-count');
     const mobRecent = this.container.querySelector('#mobile-recent-count');
     const mobLib = this.container.querySelector('#mobile-lib-count');
 
-    if (mobLiked) mobLiked.textContent = `${this.libraryStats.playlistCount > 0 ? this.libraryStats.playlistCount * 12 : 128} songs`;
-    if (mobRecent) mobRecent.textContent = `${this.recentTracks.length > 0 ? this.recentTracks.length : 25} tracks`;
-    if (mobLib) mobLib.textContent = `${this.libraryStats.trackCount > 0 ? this.libraryStats.trackCount : 2500} songs`;
+    if (mobLiked) mobLiked.textContent = `${this.libraryStats.playlistCount > 0 ? this.libraryStats.playlistCount : 0} playlists`;
+    if (mobRecent) mobRecent.textContent = `${this.recentTracks.length} tracks`;
+    if (mobLib) mobLib.textContent = `${this.libraryStats.trackCount} songs`;
   }
 
   private async renderTrackCards(): Promise<void> {

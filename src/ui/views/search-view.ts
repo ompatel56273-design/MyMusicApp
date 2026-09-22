@@ -96,10 +96,10 @@ export class SearchView implements IView {
       if (stored) {
         this.recentSearches = JSON.parse(stored);
       } else {
-        this.recentSearches = ['The Weeknd', 'Dua Lipa', 'Chill Mix', 'Starboy', 'Lossless'];
+        this.recentSearches = [];
       }
     } catch (_e) {
-      this.recentSearches = ['The Weeknd', 'Dua Lipa', 'Chill Mix', 'Starboy', 'Lossless'];
+      this.recentSearches = [];
     }
   }
 
@@ -270,7 +270,7 @@ export class SearchView implements IView {
       { name: 'Lo-Fi', icon: '☕', color: 'linear-gradient(135deg, rgba(20, 184, 166, 0.25) 0%, rgba(13, 148, 136, 0.15) 100%)', border: 'rgba(20, 184, 166, 0.35)' }
     ];
 
-    const quickPills = ['The Weeknd', 'Lossless Audio', 'Starboy', 'Chill Vibes', 'Taylor Swift', 'Dua Lipa'];
+    const quickPills = ['Lossless Audio', 'FLAC', 'Favorites', 'Hi-Res', 'MP3', 'Recent'];
 
     return `
       <div style="display: grid; grid-template-columns: 1fr; gap: var(--space-6);">

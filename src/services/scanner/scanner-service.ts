@@ -8,6 +8,8 @@ import { Logger } from '../../core/logging/logger';
 import { EventBus } from '../../core/events/event-bus';
 import { DomainEvents } from '../../domain/events/domain-events';
 import { ScannerError } from '../../core/errors/app-error';
+import { isSupportedAudioFile, getAudioExtension } from '../../core/audio/audio-validator';
+import type { MetadataService } from '../metadata/metadata-service';
 
 export class ScannerService implements IScannerService {
   private _state: ScannerState = 'idle';
@@ -17,6 +19,7 @@ export class ScannerService implements IScannerService {
   private readonly trackRepo: ITrackRepository;
   private readonly folderRepo: IFolderRepository;
   private readonly eventBus: EventBus;
+  private readonly metadataService?: MetadataService | undefined;
   private readonly logger = new Logger('ScannerService');
 
   constructor(
@@ -24,13 +27,15 @@ export class ScannerService implements IScannerService {
     audioFileRepo: IAudioFileRepository,
     trackRepo: ITrackRepository,
     folderRepo: IFolderRepository,
-    eventBus: EventBus
+    eventBus: EventBus,
+    metadataService?: MetadataService
   ) {
     this.fsAdapter = fsAdapter;
     this.audioFileRepo = audioFileRepo;
     this.trackRepo = trackRepo;
     this.folderRepo = folderRepo;
     this.eventBus = eventBus;
+    this.metadataService = metadataService;
   }
 
   public get isScanning(): boolean {
@@ -72,6 +77,7 @@ export class ScannerService implements IScannerService {
     const discoveredPaths = new Set<string>();
     const pendingFileBatches: AudioFile[] = [];
     const pendingTrackBatches: Track[] = [];
+    const newlyAddedTrackIds: { trackId: string; filePath: string; container: AudioContainer }[] = [];
     const BATCH_SIZE = 50;
 
     let lastProgressTime = 0;
@@ -167,7 +173,7 @@ export class ScannerService implements IScannerService {
               id: trackId,
               fileId,
               title: cleanTitle,
-              durationMs: 0, // Placeholder until Phase 4 metadata extraction
+              durationMs: 0,
               format: {
                 container,
                 codec,
@@ -185,6 +191,7 @@ export class ScannerService implements IScannerService {
 
             pendingFileBatches.push(newFile);
             pendingTrackBatches.push(newTrack);
+            newlyAddedTrackIds.push({ trackId, filePath: entry.path, container });
           }
 
           // Flush batch if full
@@ -219,6 +226,19 @@ export class ScannerService implements IScannerService {
       // Flush remaining batch
       if (pendingFileBatches.length > 0) {
         await this.flushBatch(pendingFileBatches, pendingTrackBatches);
+      }
+
+      // Enrich metadata for newly added tracks if metadataService is present
+      if (this.metadataService && newlyAddedTrackIds.length > 0 && !signal.aborted) {
+        for (const item of newlyAddedTrackIds) {
+          if (signal.aborted) break;
+          try {
+            const buffer = await this.fsAdapter.readFile(item.filePath);
+            await this.metadataService.enrichTrackMetadata(item.trackId, buffer, item.container);
+          } catch (enrichErr) {
+            this.logger.warn(`Metadata enrichment skipped for: ${item.filePath}`, { error: String(enrichErr) });
+          }
+        }
       }
 
       if (signal.aborted) {
@@ -285,6 +305,106 @@ export class ScannerService implements IScannerService {
     } finally {
       this.abortController = null;
     }
+  }
+
+  /**
+   * Directly imports user-selected audio files from an input or file picker.
+   */
+  public async importFiles(
+    files: readonly File[] | FileList
+  ): Promise<{ filesAdded: number; filesSkipped: number }> {
+    const fileList = Array.from(files);
+    let filesAdded = 0;
+    let filesSkipped = 0;
+    const sessionId = `import_${Date.now()}`;
+
+    const existingPaths = await this.audioFileRepo.listAllPaths();
+
+    for (const file of fileList) {
+      if (!isSupportedAudioFile(file)) {
+        filesSkipped++;
+        continue;
+      }
+
+      const ext = getAudioExtension(file.name) || 'mp3';
+      const virtualPath = `local://files/${file.name}`;
+
+      // Register file in adapter if supported
+      if ('registerFile' in this.fsAdapter && typeof (this.fsAdapter as any).registerFile === 'function') {
+        (this.fsAdapter as any).registerFile(virtualPath, file);
+      }
+
+      // Check if already in repository with same name/size/modified
+      const existing = existingPaths.get(virtualPath);
+      if (existing && existing.sizeBytes === file.size && existing.modifiedTimeMs === file.lastModified) {
+        filesSkipped++;
+        continue;
+      }
+
+      const fileId = `file_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const trackId = `track_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+      const audioFile: AudioFile = {
+        id: fileId,
+        path: virtualPath,
+        filename: file.name,
+        extension: ext,
+        sizeBytes: file.size,
+        modifiedTimeMs: file.lastModified,
+        scanSessionId: sessionId,
+        availability: 'available'
+      };
+
+      const lastDot = file.name.lastIndexOf('.');
+      const cleanTitle = lastDot > 0 ? file.name.substring(0, lastDot) : file.name;
+      const container = ext as AudioContainer;
+
+      const track: Track = {
+        id: trackId,
+        fileId,
+        title: cleanTitle,
+        durationMs: 0,
+        format: {
+          container,
+          codec: container as unknown as AudioCodec,
+          sampleRate: 44100,
+          channels: 2,
+          isLossless: container === 'flac' || container === 'wav' || container === 'alac' || container === 'aiff'
+        },
+        dateAdded: Date.now(),
+        dateModified: file.lastModified,
+        playCount: 0,
+        isFavorite: false,
+        hasLyrics: false,
+        availability: 'available'
+      };
+
+      await this.audioFileRepo.save(audioFile);
+      await this.trackRepo.save(track);
+      filesAdded++;
+
+      // Enrich metadata
+      if (this.metadataService) {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const buffer = new Uint8Array(arrayBuffer);
+          await this.metadataService.enrichTrackMetadata(trackId, buffer, container);
+        } catch (enrichErr) {
+          this.logger.warn(`Metadata extraction failed for ${file.name}:`, { error: String(enrichErr) });
+        }
+      }
+    }
+
+    if (filesAdded > 0) {
+      this.eventBus.publish(DomainEvents.LIBRARY_UPDATED, {
+        tracksAdded: filesAdded,
+        tracksUpdated: 0,
+        tracksRemoved: 0,
+        timestamp: Date.now()
+      });
+    }
+
+    return { filesAdded, filesSkipped };
   }
 
   public async cancelScan(): Promise<void> {

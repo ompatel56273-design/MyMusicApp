@@ -9,6 +9,7 @@ import { Logger } from '../../core/logging/logger';
 export class BrowserFilesystemAdapter extends BaseFilesystemAdapter implements IFilesystemAdapter {
   private readonly logger = new Logger('BrowserFilesystemAdapter');
   private rootHandles = new Map<string, FileSystemDirectoryHandle>();
+  private fileMap = new Map<string, File>();
 
   public isAvailable(): boolean {
     return typeof window !== 'undefined' && 'showDirectoryPicker' in window;
@@ -19,9 +20,32 @@ export class BrowserFilesystemAdapter extends BaseFilesystemAdapter implements I
     this.rootHandles.set(normalized, handle);
   }
 
+  public getDirectoryHandle(path: string): FileSystemDirectoryHandle | undefined {
+    const normalized = this.normalizePath(path);
+    return this.rootHandles.get(normalized);
+  }
+
+  public registerFile(path: string, file: File): void {
+    const normalized = this.normalizePath(path);
+    this.fileMap.set(normalized, file);
+  }
+
+  public getRegisteredFile(path: string): File | undefined {
+    const normalized = this.normalizePath(path);
+    return this.fileMap.get(normalized);
+  }
+
   public async readFile(path: string): Promise<Uint8Array> {
     const normalized = this.normalizePath(path);
-    // Find matching root handle
+
+    // 1. Check if directly registered in fileMap
+    const directFile = this.fileMap.get(normalized);
+    if (directFile) {
+      const arrayBuffer = await directFile.arrayBuffer();
+      return new Uint8Array(arrayBuffer);
+    }
+
+    // 2. Find matching root handle
     let matchedRoot = '';
     let relativePath = '';
     for (const [root] of this.rootHandles) {
@@ -35,7 +59,7 @@ export class BrowserFilesystemAdapter extends BaseFilesystemAdapter implements I
 
     const rootHandle = this.rootHandles.get(matchedRoot);
     if (!rootHandle) {
-      throw new ScannerError(`No root handle found for file path: ${path}`, 'ERR_HANDLE_NOT_FOUND');
+      throw new ScannerError(`No file or root handle found for file path: ${path}`, 'ERR_HANDLE_NOT_FOUND');
     }
 
     const segments = relativePath.split('/');
