@@ -1,0 +1,499 @@
+import { Logger } from '../../core/logging/logger';
+import { EventBus } from '../../core/events/event-bus';
+import { AudioEngineError } from '../../core/errors/app-error';
+import { DomainEvents } from '../../domain/events/domain-events';
+import type { PlaybackState, RepeatMode, ShuffleMode } from '../../domain/value-objects/audio-types';
+import type { Track, QueueItem, PlaybackHistoryItem, PlaybackPosition } from '../../domain/entities/models';
+import type {
+  ITrackRepository,
+  IAudioFileRepository,
+  IQueueRepository,
+  IHistoryRepository
+} from '../../domain/repositories/repository-contracts';
+import type { IPlaybackManager, IAudioEngine } from '../contracts/service-contracts';
+import type { IFilesystemAdapter } from '../scanner/filesystem-adapter';
+import { QueueManager } from './queue-manager';
+import type { AudioEngine } from '../audio/audio-engine';
+
+export interface PlaybackManagerDependencies {
+  audioEngine: IAudioEngine;
+  filesystem: IFilesystemAdapter;
+  trackRepo: ITrackRepository;
+  audioFileRepo: IAudioFileRepository;
+  queueRepo?: IQueueRepository | undefined;
+  historyRepo?: IHistoryRepository | undefined;
+  eventBus: EventBus;
+  logger?: Logger | undefined;
+}
+
+/**
+ * Authoritative Single Playback Controller.
+ * Implements IPlaybackManager and orchestrates all playback state transitions,
+ * queue progression, position persistence, history tracking, and error recovery.
+ */
+export class PlaybackManager implements IPlaybackManager {
+  private readonly logger: Logger;
+  private readonly audioEngine: IAudioEngine;
+  private readonly filesystem: IFilesystemAdapter;
+  private readonly trackRepo: ITrackRepository;
+  private readonly audioFileRepo: IAudioFileRepository;
+  private readonly queueRepo?: IQueueRepository | undefined;
+  private readonly historyRepo?: IHistoryRepository | undefined;
+  private readonly eventBus: EventBus;
+  private readonly queueManager = new QueueManager();
+
+  private currentState: PlaybackState = 'idle';
+  private currentTrackEntity: Track | null = null;
+  private currentPositionMs = 0;
+  private currentDurationMs = 0;
+  private currentVolume = 1.0;
+  private isMutedValue = false;
+  private currentPlaybackRate = 1.0;
+
+  // Stale async operation guard
+  private operationToken = 0;
+
+  // Position persistence & history tracking
+  private lastPositionPersistTime = 0;
+  private sessionListenStartMs = 0;
+  private sessionListenedMs = 0;
+  private hasCountedPlay = false;
+
+  constructor(deps: PlaybackManagerDependencies) {
+    this.logger = deps.logger ?? new Logger('PlaybackManager');
+    this.audioEngine = deps.audioEngine;
+    this.filesystem = deps.filesystem;
+    this.trackRepo = deps.trackRepo;
+    this.audioFileRepo = deps.audioFileRepo;
+    this.queueRepo = deps.queueRepo;
+    this.historyRepo = deps.historyRepo;
+    this.eventBus = deps.eventBus;
+
+    this.setupAudioEngineCallbacks();
+  }
+
+  private setupAudioEngineCallbacks(): void {
+    if ('setCallbacks' in this.audioEngine && typeof (this.audioEngine as AudioEngine).setCallbacks === 'function') {
+      (this.audioEngine as AudioEngine).setCallbacks({
+        onTimeUpdate: (sec, durSec) => this.handleTimeUpdate(sec, durSec),
+        onEnded: () => void this.handleTrackEnded(),
+        onBuffering: (buffering) => this.handleBuffering(buffering),
+        onError: (err) => this.handleAudioError(err),
+        onStateChange: (isPlaying) => this.handleStateChange(isPlaying)
+      });
+    }
+  }
+
+  public get state(): PlaybackState {
+    return this.currentState;
+  }
+
+  public get currentTrack(): Track | null {
+    return this.currentTrackEntity;
+  }
+
+  public get positionMs(): number {
+    return this.currentPositionMs;
+  }
+
+  public get durationMs(): number {
+    return this.currentDurationMs;
+  }
+
+  public get volume(): number {
+    return this.currentVolume;
+  }
+
+  public get isMuted(): boolean {
+    return this.isMutedValue;
+  }
+
+  public get playbackRate(): number {
+    return this.currentPlaybackRate;
+  }
+
+  public get repeatMode(): RepeatMode {
+    return this.queueManager.getRepeatMode();
+  }
+
+  public get shuffleMode(): ShuffleMode {
+    return this.queueManager.getShuffleMode();
+  }
+
+  public get queue(): readonly QueueItem[] {
+    return this.queueManager.getItems();
+  }
+
+  public get currentQueueIndex(): number {
+    return this.queueManager.getActiveIndex();
+  }
+
+  /**
+   * Play a track, optionally providing a full queue context.
+   */
+  public async playTrack(track: Track, queueContext?: readonly Track[]): Promise<void> {
+    const token = ++this.operationToken;
+
+    // Check missing availability
+    if (track.availability === 'missing') {
+      this.transitionToState('error');
+      const err = new AudioEngineError(`Track "${track.title}" physical file is missing.`, 'FILE_MISSING');
+      this.logger.warn(err.message, { trackId: track.id });
+      throw err;
+    }
+
+    // Record previous track's position & flush history if applicable
+    await this.persistCurrentPosition();
+
+    // Reset session listening metrics for new track
+    this.sessionListenStartMs = Date.now();
+    this.sessionListenedMs = 0;
+    this.hasCountedPlay = false;
+
+    // Set or update queue
+    if (queueContext && queueContext.length > 0) {
+      const idx = queueContext.findIndex(t => t.id === track.id);
+      this.queueManager.setQueue(queueContext, idx !== -1 ? idx : 0);
+      this.emitQueueChanged();
+      void this.syncQueueToRepository();
+    } else {
+      // Add track to queue if not present
+      const tracks = this.queueManager.getTracks();
+      const existingIdx = tracks.findIndex(t => t.id === track.id);
+      if (existingIdx === -1) {
+        this.queueManager.addTracks([track]);
+        this.queueManager.setActiveIndex(this.queueManager.getTracks().length - 1);
+        this.emitQueueChanged();
+        void this.syncQueueToRepository();
+      } else {
+        this.queueManager.setActiveIndex(existingIdx);
+      }
+    }
+
+    const previousTrack = this.currentTrackEntity;
+    this.currentTrackEntity = track;
+    this.currentDurationMs = track.durationMs || 0;
+    this.currentPositionMs = 0;
+    this.transitionToState('loading');
+
+    this.eventBus.publish(DomainEvents.TRACK_CHANGED, {
+      currentTrack: track,
+      previousTrack,
+      positionMs: 0
+    });
+
+    try {
+      // Read physical audio file
+      const audioFile = await this.audioFileRepo.getById(track.fileId);
+      if (!audioFile || audioFile.availability === 'missing') {
+        throw new AudioEngineError(`Audio file record ${track.fileId} is missing or deleted.`, 'FILE_NOT_FOUND');
+      }
+
+      const fileBuffer = await this.filesystem.readFile(audioFile.path);
+      const blob = new Blob([fileBuffer.buffer as ArrayBuffer], { type: track.format.container ? `audio/${track.format.container}` : 'audio/mpeg' });
+
+      if (token !== this.operationToken) return;
+
+      await this.audioEngine.loadBuffer(blob, { replayGain: track.replayGain });
+
+      if (token !== this.operationToken) return;
+
+      this.transitionToState('ready');
+      await this.audioEngine.play();
+      this.transitionToState('playing');
+    } catch (err) {
+      if (token !== this.operationToken) return;
+      this.transitionToState('error');
+      const audioErr = err instanceof AudioEngineError ? err : new AudioEngineError('Playback initialization failed', 'PLAY_INIT_ERROR', undefined, err as Error);
+      this.logger.error('Failed to play track:', { trackId: track.id, error: audioErr.message });
+      throw audioErr;
+    }
+  }
+
+  public async pause(): Promise<void> {
+    if (this.currentState === 'playing') {
+      this.audioEngine.pause();
+      this.transitionToState('paused');
+      await this.persistCurrentPosition();
+      this.updateListeningDuration();
+    }
+  }
+
+  public async resume(): Promise<void> {
+    if (this.currentState === 'paused' || this.currentState === 'ready') {
+      this.sessionListenStartMs = Date.now();
+      await this.audioEngine.play();
+      this.transitionToState('playing');
+    }
+  }
+
+  public async stop(): Promise<void> {
+    this.audioEngine.stop();
+    await this.persistCurrentPosition();
+    this.currentPositionMs = 0;
+    this.transitionToState('stopped');
+  }
+
+  public async seek(positionMs: number): Promise<void> {
+    const clamped = Math.max(0, Math.min(this.currentDurationMs || Infinity, positionMs));
+    this.currentPositionMs = clamped;
+    this.audioEngine.seek(clamped / 1000.0);
+
+    this.eventBus.publish(DomainEvents.PLAYBACK_TIME_UPDATED, {
+      positionMs: this.currentPositionMs,
+      durationMs: this.currentDurationMs
+    });
+
+    await this.persistCurrentPosition();
+  }
+
+  public async next(): Promise<void> {
+    const nextIdx = this.queueManager.getNextIndex();
+    if (nextIdx !== null) {
+      const tracks = this.queueManager.getTracks();
+      const nextTrack = tracks[nextIdx];
+      if (nextTrack) {
+        this.queueManager.setActiveIndex(nextIdx);
+        this.emitQueueChanged();
+        await this.playTrack(nextTrack);
+        return;
+      }
+    }
+
+    // End of queue reached and repeat mode is off
+    await this.stop();
+  }
+
+  public async previous(): Promise<void> {
+    const currentSec = this.currentPositionMs / 1000.0;
+    const prevIdx = this.queueManager.getPreviousIndex(currentSec, 3.0);
+
+    if (prevIdx !== null) {
+      const tracks = this.queueManager.getTracks();
+      const prevTrack = tracks[prevIdx];
+      if (prevTrack) {
+        if (prevIdx === this.queueManager.getActiveIndex() && currentSec > 3.0) {
+          // Restart track from 0
+          await this.seek(0);
+          return;
+        }
+
+        this.queueManager.setActiveIndex(prevIdx);
+        this.emitQueueChanged();
+        await this.playTrack(prevTrack);
+        return;
+      }
+    }
+
+    await this.seek(0);
+  }
+
+  public setVolume(volume: number): void {
+    this.currentVolume = Math.max(0, Math.min(1, volume));
+    this.audioEngine.setGain(this.isMutedValue ? 0 : this.currentVolume);
+  }
+
+  public setMuted(muted: boolean): void {
+    this.isMutedValue = muted;
+    this.audioEngine.setGain(this.isMutedValue ? 0 : this.currentVolume);
+  }
+
+  public setPlaybackRate(rate: number): void {
+    this.currentPlaybackRate = rate;
+    this.audioEngine.setPlaybackRate(rate);
+  }
+
+  public setRepeatMode(mode: RepeatMode): void {
+    this.queueManager.setRepeatMode(mode);
+    this.eventBus.publish(DomainEvents.PLAYBACK_MODES_CHANGED, {
+      repeat: this.queueManager.getRepeatMode(),
+      shuffle: this.queueManager.getShuffleMode()
+    });
+  }
+
+  public setShuffleMode(mode: ShuffleMode): void {
+    this.queueManager.setShuffleMode(mode);
+    this.eventBus.publish(DomainEvents.PLAYBACK_MODES_CHANGED, {
+      repeat: this.queueManager.getRepeatMode(),
+      shuffle: this.queueManager.getShuffleMode()
+    });
+    this.emitQueueChanged();
+  }
+
+  public async addToQueue(tracks: readonly Track[], playNext = false): Promise<void> {
+    this.queueManager.addTracks(tracks, playNext);
+    this.emitQueueChanged();
+    await this.syncQueueToRepository();
+  }
+
+  public async playQueueIndex(index: number): Promise<void> {
+    const tracks = this.queueManager.getTracks();
+    if (index < 0 || index >= tracks.length) return;
+    const track = tracks[index];
+    if (track) {
+      this.queueManager.setActiveIndex(index);
+      this.emitQueueChanged();
+      await this.playTrack(track);
+    }
+  }
+
+  public async removeFromQueue(index: number): Promise<void> {
+    this.queueManager.removeTrack(index);
+    this.emitQueueChanged();
+    await this.syncQueueToRepository();
+  }
+
+  public async reorderQueue(fromIndex: number, toIndex: number): Promise<void> {
+    this.queueManager.reorder(fromIndex, toIndex);
+    this.emitQueueChanged();
+    await this.syncQueueToRepository();
+  }
+
+  public async clearQueue(): Promise<void> {
+    this.queueManager.clear();
+    this.emitQueueChanged();
+    await this.syncQueueToRepository();
+  }
+
+  private handleTimeUpdate(sec: number, durSec: number): void {
+    this.currentPositionMs = Math.round(sec * 1000);
+    if (durSec > 0) {
+      this.currentDurationMs = Math.round(durSec * 1000);
+    }
+
+    this.eventBus.publish(DomainEvents.PLAYBACK_TIME_UPDATED, {
+      positionMs: this.currentPositionMs,
+      durationMs: this.currentDurationMs
+    });
+
+    this.updateListeningDuration();
+
+    // Throttled database position save (every 5 seconds)
+    const now = Date.now();
+    if (now - this.lastPositionPersistTime >= 5000) {
+      this.lastPositionPersistTime = now;
+      void this.persistCurrentPosition();
+    }
+  }
+
+  private updateListeningDuration(): void {
+    if (this.currentState === 'playing' && this.sessionListenStartMs > 0) {
+      const now = Date.now();
+      this.sessionListenedMs += (now - this.sessionListenStartMs);
+      this.sessionListenStartMs = now;
+    }
+
+    // Check listening history threshold: >= 30 seconds (30,000ms) or >= 50% of track
+    if (!this.hasCountedPlay && this.currentTrackEntity && this.currentDurationMs > 0) {
+      const halfDurationMs = this.currentDurationMs * 0.5;
+      const thresholdMs = Math.min(30000, halfDurationMs);
+
+      if (this.sessionListenedMs >= thresholdMs) {
+        this.hasCountedPlay = true;
+        void this.recordPlaybackHistory(false);
+      }
+    }
+  }
+
+  private async handleTrackEnded(): Promise<void> {
+    this.updateListeningDuration();
+    if (this.currentTrackEntity && !this.hasCountedPlay) {
+      this.hasCountedPlay = true;
+      await this.recordPlaybackHistory(true);
+    }
+    await this.next();
+  }
+
+  private handleBuffering(isBuffering: boolean): void {
+    if (isBuffering && this.currentState === 'playing') {
+      this.transitionToState('loading');
+    } else if (!isBuffering && this.currentState === 'loading') {
+      this.transitionToState('playing');
+    }
+  }
+
+  private handleAudioError(err: AudioEngineError): void {
+    this.transitionToState('error');
+    this.logger.error('AudioEngine reported an error:', { error: err.message, code: err.code });
+  }
+
+  private handleStateChange(isPlaying: boolean): void {
+    if (isPlaying && this.currentState !== 'playing') {
+      this.transitionToState('playing');
+    } else if (!isPlaying && this.currentState === 'playing') {
+      this.transitionToState('playing');
+    }
+  }
+
+  private transitionToState(newState: PlaybackState): void {
+    this.currentState = newState;
+    this.eventBus.publish(DomainEvents.PLAYBACK_STATE_CHANGED, {
+      state: this.currentState,
+      track: this.currentTrackEntity,
+      positionMs: this.currentPositionMs,
+      durationMs: this.currentDurationMs
+    });
+  }
+
+  private emitQueueChanged(): void {
+    this.eventBus.publish(DomainEvents.QUEUE_CHANGED, {
+      items: this.queueManager.getItems(),
+      activeIndex: this.queueManager.getActiveIndex()
+    });
+  }
+
+  private async persistCurrentPosition(): Promise<void> {
+    if (!this.historyRepo || !this.currentTrackEntity) return;
+
+    try {
+      const positionData: PlaybackPosition = {
+        trackId: this.currentTrackEntity.id,
+        positionMs: this.currentPositionMs,
+        updatedAt: Date.now()
+      };
+      await this.historyRepo.saveResumePosition(positionData);
+    } catch (err) {
+      this.logger.warn('Failed to persist playback position:', { error: String(err) });
+    }
+  }
+
+  private async recordPlaybackHistory(completed: boolean): Promise<void> {
+    if (!this.currentTrackEntity) return;
+
+    try {
+      // 1. Record history item
+      if (this.historyRepo) {
+        const historyRecord: Omit<PlaybackHistoryItem, 'id'> = {
+          trackId: this.currentTrackEntity.id,
+          playedAt: Date.now(),
+          durationListenedMs: this.sessionListenedMs,
+          completed
+        };
+        await this.historyRepo.addRecord(historyRecord);
+      }
+
+      // 2. Increment track play count & update lastPlayedAt
+      await this.trackRepo.incrementPlayCount(this.currentTrackEntity.id, Date.now());
+      const updatedTrack = await this.trackRepo.getById(this.currentTrackEntity.id);
+      if (updatedTrack) {
+        this.currentTrackEntity = updatedTrack;
+      }
+    } catch (err) {
+      this.logger.warn('Failed to record playback history:', { error: String(err) });
+    }
+  }
+
+  private async syncQueueToRepository(): Promise<void> {
+    if (!this.queueRepo) return;
+
+    try {
+      await this.queueRepo.clearQueue();
+      const items = this.queueManager.getItems();
+      if (items.length > 0) {
+        await this.queueRepo.saveQueue(items);
+      }
+    } catch (err) {
+      this.logger.warn('Failed to sync queue to repository:', { error: String(err) });
+    }
+  }
+}

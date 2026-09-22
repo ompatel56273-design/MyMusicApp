@@ -1,0 +1,22 @@
+{
+  "name": "music-player-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal Audio Operating System - Local-first, audio-first, ad-free, privacy-by-default music player",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "fake-indexeddb": "^6.2.5",
+    "typescript": "^5.7.3",
+    "vite": "^6.2.0",
+    "vitest": "^3.0.7"
+  }
+}
