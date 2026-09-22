@@ -89,11 +89,16 @@ export class VisualizerComponent {
           flex-direction: column;
           height: 100%;
           width: 100%;
-          border-radius: var(--radius-xl);
-          padding: var(--space-4);
+          border-radius: var(--radius-2xl);
+          padding: var(--space-5);
           box-sizing: border-box;
           position: relative;
           overflow: hidden;
+          background: var(--glass-surface);
+          border: 1px solid var(--glass-border);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
         "
       >
         <!-- Top Toolbar -->
@@ -102,45 +107,51 @@ export class VisualizerComponent {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: var(--space-3);
+            margin-bottom: var(--space-4);
             flex-wrap: wrap;
-            gap: var(--space-2);
+            gap: var(--space-3);
             z-index: 2;
           "
         >
           <div style="display: flex; align-items: center; gap: var(--space-3);">
-            <span style="font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-accent-primary, #ff6b00);">
-              Audio Visualizer
-            </span>
-            <label style="display: inline-flex; align-items: center; gap: var(--space-1); font-size: 12px; cursor: pointer; color: var(--color-text-secondary);">
+            <div>
+              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent-secondary);">
+                Live Spectrum
+              </span>
+              <h3 style="font-size: 18px; font-weight: 700; letter-spacing: -0.01em; margin: 2px 0 0 0; color: var(--color-text-primary);">
+                Audio Visualizer
+              </h3>
+            </div>
+            <label style="display: inline-flex; align-items: center; gap: var(--space-2); margin-left: var(--space-2); padding: 4px 12px; border-radius: var(--radius-full); background: ${this.currentSettings.enabled ? 'rgba(6, 182, 212, 0.15)' : 'rgba(255, 255, 255, 0.04)'}; border: 1px solid ${this.currentSettings.enabled ? 'rgba(6, 182, 212, 0.4)' : 'var(--glass-border)'}; font-size: 12px; font-weight: 700; cursor: pointer; color: ${this.currentSettings.enabled ? 'var(--color-accent-secondary)' : 'var(--color-text-muted)'}; transition: all var(--duration-fast);">
               <input
                 type="checkbox"
                 id="vis-enabled-toggle"
                 ${this.currentSettings.enabled ? 'checked' : ''}
-                style="accent-color: var(--color-accent-primary, #ff6b00); cursor: pointer;"
+                style="accent-color: var(--color-accent-secondary); cursor: pointer;"
               />
-              ${this.currentSettings.enabled ? 'Active' : 'Off'}
+              ${this.currentSettings.enabled ? 'ACTIVE' : 'OFF'}
             </label>
           </div>
 
-          <!-- Mode Picker -->
-          <div style="display: flex; gap: 4px; background: rgba(0, 0, 0, 0.3); padding: 2px; border-radius: var(--radius-md);">
+          <!-- Mode Picker Chips -->
+          <div style="display: flex; gap: 4px; background: rgba(0, 0, 0, 0.3); padding: 4px; border-radius: var(--radius-xl); border: 1px solid var(--glass-border); flex-wrap: wrap;">
             ${modes.map(m => `
               <button
                 type="button"
                 class="vis-mode-btn"
                 data-mode="${m}"
                 style="
-                  padding: 4px 10px;
-                  border-radius: var(--radius-sm);
+                  padding: 6px 14px;
+                  border-radius: var(--radius-lg);
                   border: none;
-                  font-size: 11px;
+                  font-size: 12px;
                   font-weight: 600;
                   text-transform: capitalize;
                   cursor: pointer;
-                  background: ${this.currentSettings.mode === m ? 'var(--color-accent-primary, #ff6b00)' : 'transparent'};
+                  background: ${this.currentSettings.mode === m ? 'var(--color-accent-gradient)' : 'transparent'};
                   color: ${this.currentSettings.mode === m ? '#ffffff' : 'var(--color-text-secondary)'};
-                  transition: all 0.15s ease;
+                  box-shadow: ${this.currentSettings.mode === m ? 'var(--shadow-glow-purple)' : 'none'};
+                  transition: all var(--duration-fast) var(--ease-smooth);
                 "
               >
                 ${m}
@@ -150,7 +161,7 @@ export class VisualizerComponent {
         </div>
 
         <!-- Canvas Surface -->
-        <div style="flex: 1; position: relative; min-height: 200px; width: 100%; display: flex; align-items: center; justify-content: center;">
+        <div style="flex: 1; position: relative; min-height: 220px; width: 100%; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.3); border-radius: var(--radius-xl); border: 1px solid var(--glass-border); overflow: hidden;">
           <canvas
             id="vis-canvas"
             aria-label="Real-time Audio Visualizer Canvas"

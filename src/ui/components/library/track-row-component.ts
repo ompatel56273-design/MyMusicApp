@@ -36,22 +36,23 @@ export class TrackRowComponent {
     row.style.height = '56px';
     row.style.boxSizing = 'border-box';
     row.style.borderBottom = '1px solid rgba(255, 255, 255, 0.04)';
-    row.style.borderRadius = 'var(--radius-sm)';
+    row.style.borderRadius = 'var(--radius-md)';
     row.style.cursor = isMissing ? 'not-allowed' : 'pointer';
     row.style.opacity = isMissing ? '0.45' : '1';
-    row.style.transition = 'background-color 0.15s ease';
+    row.style.transition = 'all var(--duration-fast) var(--ease-smooth)';
+    row.style.background = 'transparent';
 
     row.innerHTML = `
-      <div style="font-size: 12px; color: var(--color-text-muted); text-align: center;">
+      <div class="track-row-index" style="font-size: 12px; font-weight: 600; color: var(--color-text-muted); text-align: center;">
         ${track.trackNumber ?? index + 1}
       </div>
 
-      <div class="track-row-art" style="width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-bg-surface-elevated); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
-        <span style="font-size: 14px; color: var(--color-text-muted);">♫</span>
+      <div class="track-row-art" style="width: 38px; height: 38px; border-radius: var(--radius-sm); background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; border: 1px solid rgba(255, 255, 255, 0.08);">
+        <span style="font-size: 14px; color: var(--color-purple-neon);">🎵</span>
       </div>
 
       <div style="display: flex; flex-direction: column; overflow: hidden;">
-        <span class="track-title-text" title="${escapeHtml(track.title)}" style="font-size: 13px; font-weight: 500; color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+        <span class="track-title-text" title="${escapeHtml(track.title)}" style="font-size: 13px; font-weight: 600; color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
           ${escapeHtml(track.title)}
         </span>
       </div>
@@ -68,7 +69,7 @@ export class TrackRowComponent {
         ${formatBadge}
       </div>
 
-      <div style="font-size: 12px; color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums;">
+      <div style="font-size: 12px; color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums; font-weight: 500;">
         ${durationStr}
       </div>
 
@@ -78,7 +79,7 @@ export class TrackRowComponent {
           class="track-add-playlist-btn"
           aria-label="Add ${escapeHtml(track.title)} to playlist"
           title="Add to playlist"
-          style="background: transparent; border: none; font-size: 14px; cursor: pointer; color: var(--color-text-muted); padding: 2px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;"
+          style="background: transparent; border: none; font-size: 15px; cursor: pointer; color: var(--color-text-muted); padding: 2px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: all 0.15s ease;"
         >
           <span aria-hidden="true">+</span>
         </button>
@@ -87,12 +88,20 @@ export class TrackRowComponent {
           class="track-fav-btn"
           aria-label="${track.isFavorite ? 'Remove from favorites' : 'Add to favorites'}"
           aria-pressed="${track.isFavorite}"
-          style="background: transparent; border: none; font-size: 14px; cursor: pointer; color: ${track.isFavorite ? 'var(--color-accent-primary)' : 'var(--color-text-muted)'}; padding: 2px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;"
+          style="background: transparent; border: none; font-size: 15px; cursor: pointer; color: ${track.isFavorite ? 'var(--color-pink-neon)' : 'var(--color-text-muted)'}; padding: 2px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: all 0.15s ease;"
         >
-          <span aria-hidden="true">${track.isFavorite ? '★' : '☆'}</span>
+          <span aria-hidden="true">${track.isFavorite ? '❤️' : '🤍'}</span>
         </button>
       </div>
     `;
+
+    // Row hover effect
+    row.addEventListener('mouseenter', () => {
+      row.style.background = 'rgba(255, 255, 255, 0.04)';
+    });
+    row.addEventListener('mouseleave', () => {
+      row.style.background = 'transparent';
+    });
 
     // Artwork resolution
     const artBox = row.querySelector('.track-row-art');
@@ -155,22 +164,24 @@ export class TrackRowComponent {
       badgeText = `${track.format.bitDepth}b/${Math.round((track.format.sampleRate ?? 0) / 1000)}k`;
     }
 
-    const color = isLossless ? 'var(--color-accent-primary)' : 'var(--color-text-muted)';
-    const bg = isLossless ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.06)';
+    const color = isLossless ? 'var(--color-purple-neon)' : 'var(--color-text-muted)';
+    const bg = isLossless ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255, 255, 255, 0.06)';
 
     return `
       <span style="
         font-size: 10px;
-        font-weight: 600;
+        font-weight: 700;
         letter-spacing: 0.05em;
         color: ${color};
         background: ${bg};
-        padding: 2px 6px;
+        padding: 2px 7px;
         border-radius: var(--radius-sm);
         white-space: nowrap;
+        border: 1px solid ${isLossless ? 'rgba(168, 85, 247, 0.3)' : 'transparent'};
       ">
         ${badgeText}
       </span>
     `;
   }
 }
+

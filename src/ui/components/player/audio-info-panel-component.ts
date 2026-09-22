@@ -40,75 +40,77 @@ export class AudioInfoPanelComponent {
     const durationMinSec = this.formatDuration(t.durationMs);
 
     const isHiRes = (f.sampleRate && f.sampleRate > 48000) || (f.bitDepth && f.bitDepth > 16);
-    const qualityLabel = isHiRes ? 'Hi-Res Lossless' : f.isLossless ? 'Lossless CD Quality' : 'Lossy Audio';
-    const qualityColor = isHiRes ? '#ffaa00' : f.isLossless ? 'var(--color-accent-primary)' : 'var(--color-text-secondary)';
+
+    const qualityBadge = isHiRes
+      ? `<span style="font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; padding: 4px 10px; border-radius: var(--radius-full); background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15)); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);">HI-RES AUDIO</span>`
+      : f.isLossless
+      ? `<span style="font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 4px 10px; border-radius: var(--radius-full); background: linear-gradient(135deg, rgba(6, 182, 212, 0.25), rgba(168, 85, 247, 0.15)); border: 1px solid rgba(6, 182, 212, 0.4); color: var(--color-accent-secondary); box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);">LOSSLESS</span>`
+      : `<span style="font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 4px 10px; border-radius: var(--radius-full); background: var(--glass-surface); border: 1px solid var(--glass-border); color: var(--color-text-muted);">STANDARD</span>`;
 
     this.container.innerHTML = `
-      <div class="glass-panel audio-info-panel" style="height: 100%; overflow-y: auto; padding: var(--space-6); border-radius: var(--radius-xl); box-sizing: border-box; display: flex; flex-direction: column; gap: var(--space-5);">
+      <div class="glass-panel audio-info-panel" style="height: 100%; overflow-y: auto; padding: var(--space-6) var(--space-5); border-radius: var(--radius-xl); box-sizing: border-box; display: flex; flex-direction: column; gap: var(--space-4); background: var(--glass-surface); border: 1px solid var(--glass-border); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);">
         
         <!-- Header -->
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: var(--space-3);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: var(--space-3);">
           <div>
             <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted);">
-              Technical Audio Properties
+              Audio Information
             </span>
-            <h3 style="font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin: var(--space-1) 0 0 0;">
+            <h3 style="font-size: 16px; font-weight: 700; letter-spacing: -0.01em; color: var(--color-text-primary); margin: var(--space-1) 0 0 0;">
               ${t.title}
             </h3>
           </div>
-          <span style="font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: var(--radius-full); background: rgba(255, 255, 255, 0.08); border: 1px solid ${qualityColor}; color: ${qualityColor};">
-            ${qualityLabel}
-          </span>
+          ${qualityBadge}
         </div>
 
         <!-- Technical Properties Grid -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4);">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: var(--space-3);">
           
-          <div class="info-cell" style="background: rgba(255, 255, 255, 0.03); padding: var(--space-3); border-radius: var(--radius-md); border: 1px solid rgba(255, 255, 255, 0.05);">
-            <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 2px;">Container & Codec</div>
-            <div style="font-size: 14px; font-weight: 600; color: var(--color-text-primary); text-transform: uppercase;">
+          <div class="info-cell" style="background: rgba(255, 255, 255, 0.02); padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--glass-border);">
+            <div style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); margin-bottom: 2px;">Format & Codec</div>
+            <div style="font-size: 13px; font-weight: 700; color: var(--color-text-primary); text-transform: uppercase;">
               ${f.container} / ${f.codec}
             </div>
           </div>
 
-          <div class="info-cell" style="background: rgba(255, 255, 255, 0.03); padding: var(--space-3); border-radius: var(--radius-md); border: 1px solid rgba(255, 255, 255, 0.05);">
-            <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 2px;">Sample Rate</div>
-            <div style="font-size: 14px; font-weight: 600; color: var(--color-text-primary);">
-              ${f.sampleRate ? `${(f.sampleRate / 1000).toFixed(1)} kHz (${f.sampleRate.toLocaleString()} Hz)` : 'Unknown'}
+          <div class="info-cell" style="background: rgba(255, 255, 255, 0.02); padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--glass-border);">
+            <div style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); margin-bottom: 2px;">Sample Rate</div>
+            <div style="font-size: 13px; font-weight: 700; color: var(--color-text-primary);">
+              ${f.sampleRate ? `${(f.sampleRate / 1000).toFixed(1)} kHz` : 'Unknown'}
             </div>
           </div>
 
-          <div class="info-cell" style="background: rgba(255, 255, 255, 0.03); padding: var(--space-3); border-radius: var(--radius-md); border: 1px solid rgba(255, 255, 255, 0.05);">
-            <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 2px;">Bit Depth</div>
-            <div style="font-size: 14px; font-weight: 600; color: var(--color-text-primary);">
+          <div class="info-cell" style="background: rgba(255, 255, 255, 0.02); padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--glass-border);">
+            <div style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); margin-bottom: 2px;">Bit Depth</div>
+            <div style="font-size: 13px; font-weight: 700; color: var(--color-text-primary);">
               ${f.bitDepth ? `${f.bitDepth}-bit` : 'N/A (Compressed)'}
             </div>
           </div>
 
-          <div class="info-cell" style="background: rgba(255, 255, 255, 0.03); padding: var(--space-3); border-radius: var(--radius-md); border: 1px solid rgba(255, 255, 255, 0.05);">
-            <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 2px;">Bitrate</div>
-            <div style="font-size: 14px; font-weight: 600; color: var(--color-text-primary);">
+          <div class="info-cell" style="background: rgba(255, 255, 255, 0.02); padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--glass-border);">
+            <div style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); margin-bottom: 2px;">Bitrate</div>
+            <div style="font-size: 13px; font-weight: 700; color: var(--color-text-primary);">
               ${f.bitrate ? `${f.bitrate} kbps` : 'Variable / Lossless'}
             </div>
           </div>
 
-          <div class="info-cell" style="background: rgba(255, 255, 255, 0.03); padding: var(--space-3); border-radius: var(--radius-md); border: 1px solid rgba(255, 255, 255, 0.05);">
-            <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 2px;">Channels</div>
-            <div style="font-size: 14px; font-weight: 600; color: var(--color-text-primary);">
+          <div class="info-cell" style="background: rgba(255, 255, 255, 0.02); padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--glass-border);">
+            <div style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); margin-bottom: 2px;">Channels</div>
+            <div style="font-size: 13px; font-weight: 700; color: var(--color-text-primary);">
               ${f.channels === 1 ? '1 (Mono)' : f.channels === 2 ? '2 (Stereo)' : `${f.channels} Channels`}
             </div>
           </div>
 
-          <div class="info-cell" style="background: rgba(255, 255, 255, 0.03); padding: var(--space-3); border-radius: var(--radius-md); border: 1px solid rgba(255, 255, 255, 0.05);">
-            <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 2px;">Duration</div>
-            <div style="font-size: 14px; font-weight: 600; color: var(--color-text-primary);">
-              ${durationMinSec} (${(t.durationMs / 1000).toFixed(1)}s)
+          <div class="info-cell" style="background: rgba(255, 255, 255, 0.02); padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--glass-border);">
+            <div style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); margin-bottom: 2px;">Duration</div>
+            <div style="font-size: 13px; font-weight: 700; color: var(--color-text-primary);">
+              ${durationMinSec}
             </div>
           </div>
         </div>
 
         <!-- Library & Track Metadata -->
-        <div style="border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); font-size: 13px;">
+        <div style="border-top: 1px solid var(--glass-border); padding-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); font-size: 13px;">
           <div style="display: flex; justify-content: space-between;">
             <span style="color: var(--color-text-muted);">Album:</span>
             <span style="color: var(--color-text-primary); font-weight: 500;">${t.albumTitle || 'Unknown Album'}</span>
@@ -127,7 +129,7 @@ export class AudioInfoPanelComponent {
           </div>
           <div style="display: flex; justify-content: space-between;">
             <span style="color: var(--color-text-muted);">Availability:</span>
-            <span style="color: ${t.availability === 'available' ? '#44bb44' : '#ff4444'}; font-weight: 600; text-transform: capitalize;">${t.availability}</span>
+            <span style="color: ${t.availability === 'available' ? '#4ade80' : '#f87171'}; font-weight: 600; text-transform: capitalize;">${t.availability}</span>
           </div>
         </div>
 

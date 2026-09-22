@@ -63,11 +63,15 @@ export class QueuePanelComponent {
           display: flex;
           flex-direction: column;
           height: 100%;
-          min-height: 400px;
-          max-height: calc(100vh - 200px);
-          border-radius: var(--radius-lg);
-          padding: var(--space-4);
+          min-height: 380px;
+          max-height: calc(100vh - 180px);
+          border-radius: var(--radius-xl);
+          padding: var(--space-5);
           box-sizing: border-box;
+          background: var(--glass-surface);
+          border: 1px solid var(--glass-border);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
         "
       >
         <!-- Queue Header -->
@@ -76,18 +80,33 @@ export class QueuePanelComponent {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding-bottom: var(--space-3);
+            padding-bottom: var(--space-4);
             border-bottom: 1px solid var(--glass-border);
             margin-bottom: var(--space-3);
           "
         >
-          <div style="display: flex; flex-direction: column;">
-            <h3 style="font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin: 0;">
-              Play Queue
+          <div style="display: flex; align-items: center; gap: var(--space-2);">
+            <h3 style="font-size: 16px; font-weight: 700; letter-spacing: -0.01em; color: var(--color-text-primary); margin: 0;">
+              Up Next
             </h3>
-            <span style="font-size: 12px; color: var(--color-text-muted); margin-top: 2px;">
-              ${count} ${count === 1 ? 'track' : 'tracks'}${totalDurationMs > 0 ? ` • ${durationStr}` : ''}
+            <span
+              style="
+                font-size: 11px;
+                font-weight: 700;
+                padding: 2px 8px;
+                border-radius: var(--radius-full);
+                background: rgba(168, 85, 247, 0.15);
+                color: var(--color-accent-primary);
+                border: 1px solid rgba(168, 85, 247, 0.3);
+              "
+            >
+              ${count}
             </span>
+            ${totalDurationMs > 0 ? `
+              <span style="font-size: 12px; color: var(--color-text-muted);">
+                • ${durationStr}
+              </span>
+            ` : ''}
           </div>
 
           <button
@@ -95,15 +114,16 @@ export class QueuePanelComponent {
             aria-label="Clear play queue"
             ${count === 0 ? 'disabled' : ''}
             style="
-              background: transparent;
-              border: 1px solid ${count === 0 ? 'transparent' : 'var(--glass-border)'};
-              color: ${count === 0 ? 'var(--color-text-muted)' : 'var(--color-text-secondary)'};
-              padding: 4px 10px;
-              border-radius: var(--radius-sm);
+              background: ${count === 0 ? 'transparent' : 'rgba(239, 68, 68, 0.1)'};
+              border: 1px solid ${count === 0 ? 'transparent' : 'rgba(239, 68, 68, 0.25)'};
+              color: ${count === 0 ? 'var(--color-text-muted)' : '#f87171'};
+              padding: 6px 14px;
+              border-radius: var(--radius-full);
               font-size: 12px;
+              font-weight: 600;
               cursor: ${count === 0 ? 'default' : 'pointer'};
               opacity: ${count === 0 ? '0.4' : '1'};
-              transition: all var(--duration-fast);
+              transition: all var(--duration-fast) var(--ease-smooth);
             "
           >
             Clear
@@ -119,7 +139,8 @@ export class QueuePanelComponent {
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 2px;
+            gap: 6px;
+            padding-right: 2px;
           "
         ></div>
       </section>

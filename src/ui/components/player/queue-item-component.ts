@@ -27,41 +27,45 @@ export class QueueItemComponent {
     const durationStr = QueueItemComponent.formatDuration(track.durationMs);
 
     row.style.display = 'grid';
-    row.style.gridTemplateColumns = '28px 36px 1fr 50px 64px';
+    row.style.gridTemplateColumns = '24px 38px 1fr 50px 72px';
     row.style.alignItems = 'center';
     row.style.gap = 'var(--space-3)';
     row.style.padding = 'var(--space-2) var(--space-3)';
-    row.style.borderRadius = 'var(--radius-sm)';
-    row.style.background = isActive ? 'var(--color-bg-surface-elevated)' : 'transparent';
-    row.style.border = isActive ? '1px solid var(--glass-border-highlight)' : '1px solid transparent';
+    row.style.borderRadius = 'var(--radius-md)';
+    row.style.background = isActive ? 'rgba(168, 85, 247, 0.12)' : 'rgba(255, 255, 255, 0.02)';
+    row.style.border = isActive ? '1px solid rgba(168, 85, 247, 0.35)' : '1px solid rgba(255, 255, 255, 0.04)';
+    if (isActive) {
+      row.style.borderLeft = '3px solid var(--color-accent-primary)';
+      row.style.boxShadow = '0 0 16px rgba(168, 85, 247, 0.15)';
+    }
     row.style.cursor = 'pointer';
     row.style.transition = 'all var(--duration-fast) var(--ease-smooth)';
-    row.style.height = '48px';
+    row.style.minHeight = '52px';
     row.style.boxSizing = 'border-box';
 
     const indexOrPlaying = isActive
-      ? `<span style="color: var(--color-accent-primary); font-size: 14px;">▶</span>`
-      : `<span style="color: var(--color-text-muted); font-size: 12px;">${index + 1}</span>`;
+      ? `<span style="color: var(--color-accent-primary); font-size: 13px; font-weight: 700;">▶</span>`
+      : `<span style="color: var(--color-text-muted); font-size: 12px; font-weight: 500;">${index + 1}</span>`;
 
     row.innerHTML = `
       <div style="text-align: center; display: flex; align-items: center; justify-content: center;">
         ${indexOrPlaying}
       </div>
 
-      <div class="queue-row-art" style="width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-bg-surface); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
-        <span style="font-size: 13px; color: var(--color-text-muted);">♫</span>
+      <div class="queue-row-art" style="width: 38px; height: 38px; border-radius: var(--radius-sm); background: var(--color-bg-surface); border: 1px solid var(--glass-border); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
+        <span style="font-size: 14px; color: var(--color-text-muted); opacity: 0.6;">♫</span>
       </div>
 
       <div style="display: flex; flex-direction: column; overflow: hidden;">
-        <span style="font-size: 13px; font-weight: ${isActive ? '600' : '400'}; color: ${isActive ? 'var(--color-accent-primary)' : 'var(--color-text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+        <span style="font-size: 13px; font-weight: ${isActive ? '700' : '500'}; color: ${isActive ? 'var(--color-accent-primary)' : 'var(--color-text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
           ${track.title}
         </span>
-        <span style="font-size: 11px; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+        <span style="font-size: 11px; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;">
           ${track.artistName ?? 'Unknown Artist'}
         </span>
       </div>
 
-      <div style="font-size: 11px; color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums;">
+      <div style="font-size: 12px; font-weight: 500; color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums;">
         ${durationStr}
       </div>
 
@@ -70,18 +74,18 @@ export class QueueItemComponent {
           class="queue-move-up-btn"
           aria-label="Move track up"
           ${index === 0 ? 'disabled' : ''}
-          style="background: transparent; border: none; font-size: 10px; cursor: ${index === 0 ? 'default' : 'pointer'}; color: ${index === 0 ? 'rgba(255,255,255,0.1)' : 'var(--color-text-muted)'}; padding: 2px;"
+          style="min-width: 24px; min-height: 24px; background: transparent; border: none; font-size: 10px; cursor: ${index === 0 ? 'default' : 'pointer'}; color: ${index === 0 ? 'rgba(255,255,255,0.08)' : 'var(--color-text-muted)'}; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); transition: all 0.1s;"
         >▲</button>
         <button
           class="queue-move-down-btn"
           aria-label="Move track down"
           ${index === totalCount - 1 ? 'disabled' : ''}
-          style="background: transparent; border: none; font-size: 10px; cursor: ${index === totalCount - 1 ? 'default' : 'pointer'}; color: ${index === totalCount - 1 ? 'rgba(255,255,255,0.1)' : 'var(--color-text-muted)'}; padding: 2px;"
+          style="min-width: 24px; min-height: 24px; background: transparent; border: none; font-size: 10px; cursor: ${index === totalCount - 1 ? 'default' : 'pointer'}; color: ${index === totalCount - 1 ? 'rgba(255,255,255,0.08)' : 'var(--color-text-muted)'}; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); transition: all 0.1s;"
         >▼</button>
         <button
           class="queue-remove-btn"
           aria-label="Remove from queue"
-          style="background: transparent; border: none; font-size: 12px; cursor: pointer; color: var(--color-text-muted); padding: 2px; margin-left: 2px;"
+          style="min-width: 24px; min-height: 24px; background: transparent; border: none; font-size: 12px; cursor: pointer; color: var(--color-text-muted); display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); margin-left: 2px; transition: all 0.1s;"
         >✕</button>
       </div>
     `;

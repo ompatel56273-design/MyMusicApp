@@ -60,17 +60,16 @@ export class MockElement {
         this.className = Array.from(current).join(' ');
       },
       contains: (cls: string) => getClasses().includes(cls),
-      toggle: (cls: string) => {
+      toggle: (cls: string, force?: boolean) => {
         const current = new Set(getClasses());
-        let res = false;
-        if (current.has(cls)) {
-          current.delete(cls);
-        } else {
+        const shouldAdd = force !== undefined ? Boolean(force) : !current.has(cls);
+        if (shouldAdd) {
           current.add(cls);
-          res = true;
+        } else {
+          current.delete(cls);
         }
         this.className = Array.from(current).join(' ');
-        return res;
+        return shouldAdd;
       }
     };
   }
@@ -151,6 +150,13 @@ export class MockElement {
     if (name.toLowerCase() === 'class') return this.className || this.attributes.get('class') || null;
     if (name.toLowerCase() === 'checked') return this.checked ? 'true' : null;
     return this.attributes.get(name) ?? null;
+  }
+
+  public removeAttribute(name: string): void {
+    this.attributes.delete(name);
+    if (name.toLowerCase() === 'id') this.id = '';
+    if (name.toLowerCase() === 'class') this.className = '';
+    if (name.toLowerCase() === 'checked') this.checked = false;
   }
 
   public contains(node: any): boolean {
@@ -257,11 +263,20 @@ export class MockElement {
         if (node.className.includes(cls) || (node.getAttribute('class') || '').includes(cls)) isMatch = true;
       } else if (selector.includes('[') && selector.includes(']')) {
         const bracketStart = selector.indexOf('[');
-        const tag = bracketStart > 0 ? selector.slice(0, bracketStart).toLowerCase() : '';
+        const prefix = bracketStart > 0 ? selector.slice(0, bracketStart) : '';
         const attrExpr = selector.slice(bracketStart + 1, selector.indexOf(']'));
-        const tagMatch = !tag || node.tagName.toLowerCase() === tag;
+        let prefixMatch = true;
+        if (prefix.startsWith('.')) {
+          const cls = prefix.slice(1);
+          prefixMatch = node.className.includes(cls) || (node.getAttribute('class') || '').includes(cls);
+        } else if (prefix.startsWith('#')) {
+          const id = prefix.slice(1);
+          prefixMatch = node.id === id || node.getAttribute('id') === id;
+        } else if (prefix) {
+          prefixMatch = node.tagName.toLowerCase() === prefix.toLowerCase();
+        }
 
-        if (tagMatch) {
+        if (prefixMatch) {
           if (attrExpr.includes('=')) {
             const [attrName, attrRawVal] = attrExpr.split('=');
             const cleanVal = (attrRawVal || '').replace(/^["']|["']$/g, '');
@@ -380,7 +395,8 @@ export function setupMockDomEnvironment(): void {
       addEventListener: () => {},
       removeEventListener: () => {},
       hidden: false,
-      body: new MockElement('body')
+      body: new MockElement('body'),
+      documentElement: new MockElement('html')
     };
     (globalThis as any).document = doc;
     (globalThis as any).window = {
@@ -388,8 +404,22 @@ export function setupMockDomEnvironment(): void {
       removeEventListener: () => {},
       document: doc,
       devicePixelRatio: 1,
-      matchMedia: () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} })
+      matchMedia: (query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {}
+      })
     };
+    if (typeof (globalThis as any).localStorage === 'undefined') {
+      const storage = new Map<string, string>();
+      (globalThis as any).localStorage = {
+        getItem: (k: string) => storage.get(k) ?? null,
+        setItem: (k: string, v: string) => storage.set(k, String(v)),
+        removeItem: (k: string) => storage.delete(k),
+        clear: () => storage.clear()
+      };
+    }
     (globalThis as any).KeyboardEvent = class {
       public code: string;
       public key: string;

@@ -1,33 +1,63 @@
 /* ==========================================================================
-   MUSIC PLAYER APP — DESIGN SYSTEM TOKENS
-   Deep Cinematic Dark Atmosphere, Glassmorphism, Responsive Metrics
+   MYMUSICAPP — GLOBAL DESIGN SYSTEM & TOKENS
+   Deep Cinematic Dark Atmosphere, Neon Purple & Electric Cyan Accents,
+   Glassmorphism, Responsive Spacing & Controls
    ========================================================================== */
 
 :root {
-  /* --- Primary Color Palette --- */
-  --color-bg-base: #0a0d14;
-  --color-bg-surface: #101522;
-  --color-bg-surface-elevated: #161c2e;
-  --color-bg-surface-hover: #1f273d;
-  
+  /* --- Primary Color Palette (Deep Dark Cinematic) --- */
+  --color-bg-base: #07090e;
+  --color-bg-surface: #0d111a;
+  --color-bg-surface-elevated: #131926;
+  --color-bg-surface-hover: #1b2234;
+  --color-bg-surface-active: #232d45;
+  --color-bg-card: rgba(19, 25, 38, 0.7);
+  --color-bg-card-hover: rgba(27, 34, 52, 0.85);
+
   /* --- Translucent Glass Layers --- */
-  --glass-bg-primary: rgba(16, 21, 34, 0.75);
-  --glass-bg-secondary: rgba(22, 28, 46, 0.6);
+  --glass-bg-primary: rgba(13, 17, 26, 0.82);
+  --glass-bg-secondary: rgba(19, 25, 38, 0.68);
+  --glass-bg-elevated: rgba(27, 34, 52, 0.75);
+  --glass-bg-card: rgba(19, 25, 38, 0.55);
   --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-border-highlight: rgba(255, 255, 255, 0.15);
-  --glass-blur: 20px;
+  --glass-border-subtle: rgba(255, 255, 255, 0.04);
+  --glass-border-highlight: rgba(168, 85, 247, 0.4);
+  --glass-border-cyan: rgba(56, 189, 248, 0.4);
+  --glass-border-pink: rgba(236, 72, 153, 0.4);
+  --glass-blur: 24px;
+  --glass-blur-sm: 12px;
 
   /* --- Accent Colors --- */
-  --color-accent-primary: #38bdf8;       /* Electric Cyan */
-  --color-accent-secondary: #818cf8;     /* Indigo Glow */
-  --color-accent-highlight: #f59e0b;     /* Amber Highlight */
-  --color-accent-gradient: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+  --color-accent-primary: #8b5cf6;       /* Neon Purple */
+  --color-accent-purple-glow: #a855f7;  /* Bright Purple Glow */
+  --color-accent-purple-deep: #7c3aed;  /* Deep Vibrant Purple */
+  --color-accent-purple-soft: #c084fc;  /* Soft Purple */
+  
+  --color-accent-secondary: #38bdf8;     /* Electric Cyan */
+  --color-accent-cyan: #06b6d4;          /* Deep Cyan */
+  --color-accent-indigo: #818cf8;        /* Soft Indigo */
+  --color-accent-pink: #ec4899;          /* Neon Pink */
+  --color-accent-rose: #f43f5e;          /* Rose Red Accent */
+  --color-accent-highlight: #f59e0b;     /* Amber / Gold */
+  --color-accent-emerald: #10b981;       /* Emerald Green */
+
+  /* --- Gradients --- */
+  --gradient-primary: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
+  --gradient-purple-pink: linear-gradient(135deg, #c084fc 0%, #ec4899 100%);
+  --gradient-cyan-blue: linear-gradient(135deg, #38bdf8 0%, #3b82f6 100%);
+  --gradient-card-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.01) 100%);
+  --gradient-hero-dark: linear-gradient(180deg, rgba(7, 9, 14, 0.1) 0%, rgba(7, 9, 14, 0.85) 100%);
+  --gradient-glow-radial: radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.18) 0%, rgba(7, 9, 14, 0) 70%);
+  --color-accent-gradient: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
 
   /* --- Typography / Text Colors --- */
   --color-text-primary: #f8fafc;
   --color-text-secondary: #94a3b8;
-  --color-text-muted: #78889b;          /* WCAG AA contrast on surface layers */
-  --color-text-accent: #38bdf8;
+  --color-text-muted: #64748b;
+  --color-text-dim: #475569;
+  --color-text-accent: #a855f7;
+  --color-text-cyan: #38bdf8;
+  --color-text-pink: #f43f5e;
 
   /* --- Status / Functional Colors --- */
   --color-status-success: #10b981;
@@ -36,39 +66,124 @@
   --color-status-info: #3b82f6;
 
   /* --- Elevation & Shadows --- */
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
-  --shadow-glow: 0 0 20px rgba(56, 189, 248, 0.25);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.65);
+  --shadow-xl: 0 20px 48px rgba(0, 0, 0, 0.8);
+  --shadow-glow: 0 0 20px rgba(168, 85, 247, 0.35);
+  --shadow-glow-purple: 0 0 24px rgba(168, 85, 247, 0.4);
+  --shadow-glow-cyan: 0 0 24px rgba(56, 189, 248, 0.4);
+  --shadow-glow-pink: 0 0 24px rgba(236, 72, 153, 0.4);
+  --shadow-glow-pill: 0 4px 20px rgba(139, 92, 246, 0.45);
 
   /* --- Radii --- */
   --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
   --radius-full: 9999px;
 
   /* --- Spacing System --- */
+  --space-0-5: 2px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
+  --space-10: 40px;
   --space-12: 48px;
+  --space-16: 64px;
 
-  /* --- Sizing --- */
+  --glass-surface: rgba(19, 25, 38, 0.7);
+
+  /* --- Layout & Component Sizing --- */
   --sidebar-width: 260px;
   --sidebar-collapsed-width: 72px;
-  --mini-player-height: 84px;
-  --header-height: 64px;
+  --mini-player-height: 88px;
+  --header-height: 68px;
+  --bottom-nav-height: 64px;
 
   /* --- Animation & Transitions --- */
   --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --duration-fast: 150ms;
   --duration-normal: 250ms;
   --duration-slow: 400ms;
+}
+
+/* ==========================================================================
+   LIGHT MODE DESIGN TOKENS
+   Maintains Signature Neon Purple, Cyan, and Glass Surfaces in a Crisp Light Theme
+   ========================================================================== */
+[data-theme="light"] {
+  /* --- Primary Color Palette (Crisp Modern Light) --- */
+  --color-bg-base: #f1f5f9;
+  --color-bg-surface: #ffffff;
+  --color-bg-surface-elevated: #f8fafc;
+  --color-bg-surface-hover: #e2e8f0;
+  --color-bg-surface-active: #cbd5e1;
+  --color-bg-card: rgba(255, 255, 255, 0.92);
+  --color-bg-card-hover: rgba(255, 255, 255, 1);
+
+  /* --- Translucent Glass Layers (Light) --- */
+  --glass-bg-primary: rgba(255, 255, 255, 0.9);
+  --glass-bg-secondary: rgba(248, 250, 252, 0.85);
+  --glass-bg-elevated: rgba(255, 255, 255, 0.95);
+  --glass-bg-card: rgba(255, 255, 255, 0.85);
+  --glass-surface: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(15, 23, 42, 0.1);
+  --glass-border-subtle: rgba(15, 23, 42, 0.05);
+  --glass-border-highlight: rgba(147, 51, 234, 0.45);
+  --glass-border-cyan: rgba(6, 182, 212, 0.45);
+  --glass-border-pink: rgba(236, 72, 153, 0.45);
+
+  /* --- Typography / Text Colors (Light) --- */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #334155;
+  --color-text-muted: #64748b;
+  --color-text-dim: #94a3b8;
+  --color-text-accent: #7c3aed;
+  --color-text-cyan: #0284c7;
+  --color-text-pink: #db2777;
+
+  /* --- Elevation & Shadows (Light) --- */
+  --shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 6px 16px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
+  --shadow-xl: 0 20px 48px rgba(15, 23, 42, 0.16);
+  --shadow-glow: 0 0 20px rgba(147, 51, 234, 0.2);
+  --shadow-glow-purple: 0 0 24px rgba(147, 51, 234, 0.25);
+  --shadow-glow-cyan: 0 0 24px rgba(6, 182, 212, 0.25);
+  --shadow-glow-pink: 0 0 24px rgba(236, 72, 153, 0.25);
+  --shadow-glow-pill: 0 4px 18px rgba(124, 58, 237, 0.35);
+
+  /* --- Gradients --- */
+  --gradient-card-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.2) 100%);
+  --gradient-hero-dark: linear-gradient(180deg, rgba(241, 245, 249, 0.1) 0%, rgba(241, 245, 249, 0.95) 100%);
+  --gradient-glow-radial: radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.12) 0%, rgba(241, 245, 249, 0) 70%);
+}
+
+/* Explicit Dark Theme Scope */
+[data-theme="dark"] {
+  --color-bg-base: #07090e;
+  --color-bg-surface: #0d111a;
+  --color-bg-surface-elevated: #131926;
+  --color-bg-surface-hover: #1b2234;
+  --color-bg-surface-active: #232d45;
+  --color-bg-card: rgba(19, 25, 38, 0.7);
+  --color-bg-card-hover: rgba(27, 34, 52, 0.85);
+  --glass-surface: rgba(19, 25, 38, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-subtle: rgba(255, 255, 255, 0.04);
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+  --color-text-dim: #475569;
 }
 
 /* Base resets & typography */
@@ -78,19 +193,60 @@
   padding: 0;
 }
 
-body {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+html, body {
+  width: 100%;
+  height: 100%;
   background-color: var(--color-bg-base);
   color: var(--color-text-primary);
-  min-height: 100vh;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow: hidden;
   user-select: none;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Universal Select / Dropdown Sizing & Styling */
+select, .app-select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 14px;
+  background-color: var(--color-bg-surface-elevated);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-smooth), background-color var(--duration-fast) var(--ease-smooth);
+}
+
+select:focus-visible, .app-select:focus-visible {
+  border-color: var(--color-accent-purple-glow);
+  outline: 2px solid var(--color-accent-purple-glow);
+  outline-offset: 1px;
+}
+
+select option, select optgroup, .app-select option, .app-select optgroup {
+  background-color: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-weight: normal;
+}
+
+/* Subtle theme transition */
+@media (prefers-reduced-motion: no-preference) {
+  html, body, #app-shell, .glass-panel, .glass-panel-elevated, .glass-card, .settings-card, header, footer {
+    transition: background-color var(--duration-normal) var(--ease-smooth), border-color var(--duration-normal) var(--ease-smooth), color var(--duration-normal) var(--ease-smooth);
+  }
 }
 
 /* Global Focus Ring for Keyboard Navigation */
 :focus-visible {
-  outline: 2px solid var(--color-accent-primary) !important;
+  outline: 2px solid var(--color-accent-purple-glow) !important;
   outline-offset: 2px !important;
 }
 
@@ -107,10 +263,147 @@ body {
   border: 0 !important;
 }
 
-/* Glassmorphic helper classes */
+/* Custom Thin Cinematic Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 85, 247, 0.4);
+}
+
+/* Glassmorphism Helper Classes */
 .glass-panel {
   background: var(--glass-bg-primary);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--glass-border);
 }
+
+.glass-panel-elevated {
+  background: var(--glass-bg-elevated);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border-subtle);
+  box-shadow: var(--shadow-md);
+}
+
+.glass-card {
+  background: var(--glass-bg-card);
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.glass-card:hover {
+  background: var(--color-bg-card-hover);
+  border-color: var(--glass-border-highlight);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Interactive Pill Buttons */
+.btn-pill-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  min-height: 44px;
+  border-radius: var(--radius-full);
+  background: var(--gradient-primary);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-glow-pill);
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.btn-pill-primary:hover {
+  transform: scale(1.02);
+  box-shadow: 0 6px 24px rgba(168, 85, 247, 0.6);
+}
+
+.btn-pill-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  min-height: 44px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  backdrop-filter: blur(var(--glass-blur-sm));
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.btn-pill-secondary:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--glass-border-highlight);
+}
+
+/* Styled Range Sliders */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-full);
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: #ffffff;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.9);
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-spring);
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.25);
+  background: var(--color-accent-purple-glow);
+}
+
+/* Responsive Visibility Helpers */
+@media (max-width: 767px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .hide-tablet {
+    display: none !important;
+  }
+}
+
+@media (min-width: 1200px) {
+  .hide-desktop {
+    display: none !important;
+  }
+}
+

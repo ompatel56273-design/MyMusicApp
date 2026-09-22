@@ -38,19 +38,24 @@ export class ReplayGainControlsComponent {
     const balance = this.currentSettings.balance;
 
     this.container.innerHTML = `
-      <div class="replaygain-panel glass-panel" style="padding: var(--space-6); border-radius: var(--radius-xl); box-sizing: border-box; display: flex; flex-direction: column; gap: var(--space-6);">
+      <div class="replaygain-panel glass-panel" style="padding: var(--space-6); border-radius: var(--radius-2xl); box-sizing: border-box; display: flex; flex-direction: column; gap: var(--space-6); background: var(--glass-surface); border: 1px solid var(--glass-border); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);">
         <!-- ReplayGain Section -->
         <div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-2);">
-            <h4 style="font-size: 15px; font-weight: 700; margin: 0; color: var(--color-text-primary);">
-              ReplayGain Volume Normalization
-            </h4>
-            <span style="font-size: 12px; color: var(--color-accent-primary, #ff6b00); font-weight: 600;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-2); flex-wrap: wrap; gap: var(--space-2);">
+            <div>
+              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent-secondary);">
+                Dynamics Processing
+              </span>
+              <h4 style="font-size: 16px; font-weight: 700; margin: 2px 0 0 0; color: var(--color-text-primary);">
+                ReplayGain Volume Normalization
+              </h4>
+            </div>
+            <span style="font-size: 11px; color: #4ade80; font-weight: 700; background: rgba(74, 222, 128, 0.12); border: 1px solid rgba(74, 222, 128, 0.25); padding: 3px 10px; border-radius: var(--radius-full);">
               Peak Limiting Active
             </span>
           </div>
           <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 var(--space-4) 0; line-height: 1.5;">
-            Levels loudness using authoritative track and album ReplayGain tags. Safeguards against clipping with automatic peak attenuation.
+            Levels loudness across different albums and files using authoritative track and album tags.
           </p>
 
           <div style="display: flex; gap: var(--space-3);" role="radiogroup" aria-label="ReplayGain Mode">
@@ -63,16 +68,18 @@ export class ReplayGainControlsComponent {
                 aria-checked="${currentMode === mode}"
                 style="
                   flex: 1;
-                  padding: var(--space-2) var(--space-3);
-                  border-radius: var(--radius-md);
+                  min-height: 42px;
+                  padding: var(--space-2) var(--space-4);
+                  border-radius: var(--radius-lg);
                   font-size: 13px;
                   font-weight: 600;
                   text-transform: capitalize;
                   cursor: pointer;
-                  transition: all var(--duration-fast, 0.15s) ease;
-                  border: 1px solid ${currentMode === mode ? 'var(--color-accent-primary, #ff6b00)' : 'rgba(255, 255, 255, 0.12)'};
-                  background: ${currentMode === mode ? 'var(--color-accent-primary, #ff6b00)' : 'rgba(255, 255, 255, 0.04)'};
+                  transition: all var(--duration-fast) var(--ease-smooth);
+                  border: 1px solid ${currentMode === mode ? 'rgba(168, 85, 247, 0.4)' : 'var(--glass-border)'};
+                  background: ${currentMode === mode ? 'var(--color-accent-gradient)' : 'var(--glass-surface)'};
                   color: ${currentMode === mode ? '#ffffff' : 'var(--color-text-secondary)'};
+                  box-shadow: ${currentMode === mode ? 'var(--shadow-glow-purple)' : 'none'};
                 "
               >
                 ${mode}
@@ -82,18 +89,23 @@ export class ReplayGainControlsComponent {
         </div>
 
         <!-- Stereo Balance Section -->
-        <div style="border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: var(--space-4);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-2);">
-            <h4 style="font-size: 15px; font-weight: 700; margin: 0; color: var(--color-text-primary);">
-              Stereo Balance
-            </h4>
-            <span id="balance-readout" style="font-size: 12px; font-weight: 600; color: var(--color-text-primary);">
+        <div style="border-top: 1px solid var(--glass-border); padding-top: var(--space-4);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);">
+            <div>
+              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent-primary);">
+                Pan & Output
+              </span>
+              <h4 style="font-size: 16px; font-weight: 700; margin: 2px 0 0 0; color: var(--color-text-primary);">
+                Stereo Balance
+              </h4>
+            </div>
+            <span id="balance-readout" style="font-size: 12px; font-weight: 700; color: var(--color-accent-primary); background: rgba(168, 85, 247, 0.12); padding: 2px 10px; border-radius: var(--radius-full); border: 1px solid rgba(168, 85, 247, 0.25);">
               ${balance === 0 ? 'Center' : balance < 0 ? `${Math.abs(Math.round(balance * 100))}% Left` : `${Math.round(balance * 100)}% Right`}
             </span>
           </div>
 
-          <div style="display: flex; align-items: center; gap: var(--space-3);">
-            <span style="font-size: 12px; color: var(--color-text-muted); font-weight: 600;">L</span>
+          <div style="display: flex; align-items: center; gap: var(--space-3); background: rgba(0, 0, 0, 0.2); padding: var(--space-3) var(--space-4); border-radius: var(--radius-xl); border: 1px solid var(--glass-border);">
+            <span style="font-size: 12px; color: var(--color-text-muted); font-weight: 700;">L</span>
             <input
               type="range"
               id="stereo-balance-slider"
@@ -105,9 +117,9 @@ export class ReplayGainControlsComponent {
               aria-valuemin="-1"
               aria-valuemax="1"
               aria-valuenow="${balance}"
-              style="flex: 1; accent-color: var(--color-accent-primary, #ff6b00); cursor: pointer;"
+              style="flex: 1; accent-color: var(--color-accent-primary); cursor: pointer;"
             />
-            <span style="font-size: 12px; color: var(--color-text-muted); font-weight: 600;">R</span>
+            <span style="font-size: 12px; color: var(--color-text-muted); font-weight: 700;">R</span>
           </div>
         </div>
       </div>

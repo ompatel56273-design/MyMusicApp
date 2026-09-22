@@ -48,76 +48,76 @@ export class PlaylistDetailComponent {
     header.style.alignItems = 'center';
     header.style.padding = 'var(--space-6)';
     header.style.borderRadius = 'var(--radius-xl)';
-    header.style.background = 'linear-gradient(135deg, rgba(255, 120, 50, 0.08), rgba(255, 255, 255, 0.02))';
-    header.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+    header.style.background = 'linear-gradient(135deg, rgba(30, 27, 75, 0.45) 0%, rgba(15, 23, 42, 0.7) 100%)';
+    header.style.border = '1px solid var(--glass-border)';
+    header.style.backdropFilter = 'blur(16px)';
+    header.style.position = 'relative';
+    header.style.overflow = 'hidden';
 
     header.innerHTML = `
-      <div style="width: 100%; display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2);">
+      <div style="position: absolute; right: -30px; top: -30px; width: 220px; height: 220px; background: radial-gradient(circle, rgba(168, 85, 247, 0.2) 0%, transparent 70%); pointer-events: none; border-radius: 50%;"></div>
+      
+      <div style="width: 100%; display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); z-index: 1;">
         <button
           class="playlist-back-btn"
           aria-label="Back to Playlists"
-          style="display: inline-flex; align-items: center; gap: var(--space-2); background: transparent; border: 1px solid rgba(255, 255, 255, 0.12); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); color: var(--color-text-secondary); font-size: 13px; cursor: pointer; transition: all 0.15s ease;"
+          style="display: inline-flex; align-items: center; gap: var(--space-2); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); padding: 8px 16px; border-radius: var(--radius-full); color: var(--color-text-secondary); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s ease; min-height: 38px;"
         >
           ← Back to Playlists
         </button>
       </div>
 
-      <div class="playlist-detail-art" style="width: 140px; height: 140px; border-radius: var(--radius-lg); overflow: hidden; background: var(--color-bg-surface-elevated); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.1);">
-        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-accent-primary); opacity: 0.85;">
-          <path d="M9 18V5l12-2v13"></path>
-          <circle cx="6" cy="18" r="3"></circle>
-          <circle cx="18" cy="16" r="3"></circle>
-        </svg>
+      <div class="playlist-detail-art" style="width: 150px; height: 150px; border-radius: var(--radius-xl); overflow: hidden; background: linear-gradient(135deg, rgba(168, 85, 247, 0.3) 0%, rgba(236, 72, 153, 0.3) 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: var(--shadow-glow-purple); border: 1px solid rgba(255, 255, 255, 0.1); z-index: 1;">
+        <span style="font-size: 54px; color: var(--color-purple-neon);">📑</span>
       </div>
 
-      <div style="flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: var(--space-2);">
-        <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent-primary);">
+      <div style="flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: var(--space-2); z-index: 1;">
+        <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-purple-neon);">
           Playlist
         </span>
-        <h1 style="font-size: 32px; font-weight: 800; color: var(--color-text-primary); margin: 0; letter-spacing: -0.02em; line-height: 1.2;">
+        <h1 style="font-size: clamp(24px, 4vw, 36px); font-weight: 800; color: var(--color-text-primary); margin: 0; letter-spacing: -0.02em; line-height: 1.2;">
           ${escapeHtml(playlist.name)}
         </h1>
         ${playlist.description ? `<p style="font-size: 14px; color: var(--color-text-secondary); margin: 0;">${escapeHtml(playlist.description)}</p>` : ''}
         
         <div style="display: flex; gap: var(--space-4); align-items: center; font-size: 13px; color: var(--color-text-muted); margin-top: var(--space-1);">
-          <span>${playlist.trackCount} ${playlist.trackCount === 1 ? 'song' : 'songs'}</span>
+          <span style="font-weight: 600; color: var(--color-text-primary);">${playlist.trackCount} ${playlist.trackCount === 1 ? 'song' : 'songs'}</span>
           <span>•</span>
           <span>${totalDurationStr}</span>
         </div>
 
         <div class="playlist-action-bar" style="display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); align-items: center;">
           <button
-            class="pl-play-all-btn"
-            style="display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-5); background: var(--color-accent-primary); border: none; border-radius: var(--radius-full); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(255, 107, 0, 0.35); transition: transform 0.15s ease;"
+            class="pl-play-all-btn btn-primary"
+            style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 24px; background: linear-gradient(135deg, var(--color-purple-neon) 0%, var(--color-pink-neon) 100%); border: none; border-radius: var(--radius-full); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: var(--shadow-glow-purple); min-height: 44px; transition: all 0.15s ease;"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-            Play
+            <span>▶</span> Play
           </button>
 
           <button
             class="pl-shuffle-all-btn"
-            style="display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-4); background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--radius-full); color: var(--color-text-primary); font-size: 13px; font-weight: 500; cursor: pointer;"
+            style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); border-radius: var(--radius-full); color: var(--color-text-primary); font-size: 13px; font-weight: 600; cursor: pointer; min-height: 44px; transition: all 0.15s ease;"
           >
             🔀 Shuffle
           </button>
 
           <button
             class="pl-queue-all-btn"
-            style="display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-4); background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--radius-full); color: var(--color-text-primary); font-size: 13px; font-weight: 500; cursor: pointer;"
+            style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); border-radius: var(--radius-full); color: var(--color-text-primary); font-size: 13px; font-weight: 600; cursor: pointer; min-height: 44px; transition: all 0.15s ease;"
           >
             + Queue
           </button>
 
           <button
             class="pl-edit-btn"
-            style="padding: var(--space-2) var(--space-3); background: transparent; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--radius-full); color: var(--color-text-secondary); font-size: 13px; cursor: pointer;"
+            style="padding: 10px 18px; background: transparent; border: 1px solid var(--glass-border); border-radius: var(--radius-full); color: var(--color-text-secondary); font-size: 13px; font-weight: 600; cursor: pointer; min-height: 44px;"
           >
             Edit
           </button>
 
           <button
             class="pl-delete-btn"
-            style="padding: var(--space-2) var(--space-3); background: transparent; border: 1px solid rgba(255, 80, 80, 0.3); border-radius: var(--radius-full); color: #ff6666; font-size: 13px; cursor: pointer;"
+            style="padding: 10px 18px; background: transparent; border: 1px solid rgba(239, 68, 68, 0.35); border-radius: var(--radius-full); color: var(--color-status-error); font-size: 13px; font-weight: 600; cursor: pointer; min-height: 44px;"
           >
             Delete
           </button>

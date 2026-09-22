@@ -47,101 +47,125 @@ export class LibraryToolbar {
 
     this.container.innerHTML = `
       <div
-        class="library-toolbar"
+        class="library-toolbar glass-panel"
         style="
           display: flex;
           align-items: center;
           justify-content: space-between;
           flex-wrap: wrap;
           gap: var(--space-3);
-          margin-bottom: var(--space-4);
+          padding: 12px var(--space-4);
+          border-radius: var(--radius-lg);
+          background: rgba(18, 24, 38, 0.65);
+          backdrop-filter: blur(12px);
+          border: 1px solid var(--glass-border);
         "
       >
-        <!-- Quick Filter Input -->
-        <div style="flex: 1; min-width: 200px; max-width: 320px; position: relative;">
+        <!-- Search songs in library (Template 3) -->
+        <div style="flex: 1; min-width: 240px; max-width: 400px; position: relative; display: flex; align-items: center;">
+          <span style="position: absolute; left: 14px; font-size: 14px; color: var(--color-text-muted); pointer-events: none;">🔍</span>
           <input
             id="library-filter-input"
             type="search"
-            placeholder="Filter library..."
+            placeholder="Search songs in your library..."
             value="${this.state.searchQuery}"
-            aria-label="Filter library"
+            aria-label="Search songs in your library"
             style="
               width: 100%;
-              padding: 8px 12px;
-              background: var(--color-bg-surface-elevated);
+              padding: 10px 14px 10px 38px;
+              background: rgba(10, 14, 23, 0.7);
               border: 1px solid var(--glass-border);
-              border-radius: var(--radius-md);
+              border-radius: var(--radius-full);
               color: var(--color-text-primary);
               font-size: 13px;
               box-sizing: border-box;
+              outline: none;
+              transition: all var(--duration-fast) var(--ease-smooth);
             "
           />
         </div>
 
-        <!-- Controls: Format Filter & Sort -->
-        <div style="display: flex; align-items: center; gap: var(--space-3);">
-          <!-- Format Filter -->
-          <label style="display: flex; align-items: center; gap: var(--space-2); font-size: 12px; color: var(--color-text-muted);">
-            Format:
+        <!-- Controls: Genre / Format Filter & Sort (Template 3) -->
+        <div style="display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; width: 100%; max-width: 100%;">
+          <!-- Format / Genre Filter -->
+          <div style="position: relative; flex: 1; min-width: 140px;">
             <select
               id="library-format-select"
               aria-label="Filter by format"
+              class="app-select"
               style="
-                padding: 6px 10px;
+                min-height: 44px;
+                padding: 8px 14px;
                 background: var(--color-bg-surface-elevated);
                 border: 1px solid var(--glass-border);
-                border-radius: var(--radius-sm);
+                border-radius: var(--radius-full);
                 color: var(--color-text-primary);
-                font-size: 12px;
+                font-size: 13px;
+                font-weight: 500;
                 cursor: pointer;
+                outline: none;
+                width: 100%;
+                box-sizing: border-box;
               "
             >
               <option value="all" ${this.state.formatFilter === 'all' ? 'selected' : ''}>All Formats</option>
-              <option value="lossless" ${this.state.formatFilter === 'lossless' ? 'selected' : ''}>Lossless Only</option>
-              <option value="flac" ${this.state.formatFilter === 'flac' ? 'selected' : ''}>FLAC</option>
-              <option value="mp3" ${this.state.formatFilter === 'mp3' ? 'selected' : ''}>MP3</option>
-              <option value="aac" ${this.state.formatFilter === 'aac' ? 'selected' : ''}>AAC</option>
-              <option value="wav" ${this.state.formatFilter === 'wav' ? 'selected' : ''}>WAV</option>
+              <option value="lossless" ${this.state.formatFilter === 'lossless' ? 'selected' : ''}>Lossless Hi-Res</option>
+              <option value="flac" ${this.state.formatFilter === 'flac' ? 'selected' : ''}>FLAC Audio</option>
+              <option value="mp3" ${this.state.formatFilter === 'mp3' ? 'selected' : ''}>MP3 Audio</option>
+              <option value="aac" ${this.state.formatFilter === 'aac' ? 'selected' : ''}>AAC Audio</option>
+              <option value="wav" ${this.state.formatFilter === 'wav' ? 'selected' : ''}>WAV Audio</option>
             </select>
-          </label>
+          </div>
 
-          <!-- Sort Selector -->
-          <label style="display: flex; align-items: center; gap: var(--space-2); font-size: 12px; color: var(--color-text-muted);">
-            Sort by:
+          <!-- Sort Selector (Template 3 "Sort by: ...") -->
+          <div style="position: relative; flex: 1; min-width: 160px;">
             <select
               id="library-sort-select"
               aria-label="Sort tracks by"
+              class="app-select"
               style="
-                padding: 6px 10px;
+                min-height: 44px;
+                padding: 8px 14px;
                 background: var(--color-bg-surface-elevated);
                 border: 1px solid var(--glass-border);
-                border-radius: var(--radius-sm);
+                border-radius: var(--radius-full);
                 color: var(--color-text-primary);
-                font-size: 12px;
+                font-size: 13px;
+                font-weight: 500;
                 cursor: pointer;
+                outline: none;
+                width: 100%;
+                box-sizing: border-box;
               "
             >
-              <option value="title" ${this.state.sortBy === 'title' ? 'selected' : ''}>Title</option>
-              <option value="artist" ${this.state.sortBy === 'artist' ? 'selected' : ''}>Artist</option>
-              <option value="album" ${this.state.sortBy === 'album' ? 'selected' : ''}>Album</option>
-              <option value="dateAdded" ${this.state.sortBy === 'dateAdded' ? 'selected' : ''}>Date Added</option>
-              <option value="duration" ${this.state.sortBy === 'duration' ? 'selected' : ''}>Duration</option>
-              <option value="playCount" ${this.state.sortBy === 'playCount' ? 'selected' : ''}>Play Count</option>
+              <option value="title" ${this.state.sortBy === 'title' ? 'selected' : ''}>Sort by: Title A - Z</option>
+              <option value="artist" ${this.state.sortBy === 'artist' ? 'selected' : ''}>Sort by: Artist</option>
+              <option value="album" ${this.state.sortBy === 'album' ? 'selected' : ''}>Sort by: Album</option>
+              <option value="dateAdded" ${this.state.sortBy === 'dateAdded' ? 'selected' : ''}>Sort by: Date Added</option>
+              <option value="duration" ${this.state.sortBy === 'duration' ? 'selected' : ''}>Sort by: Duration</option>
+              <option value="playCount" ${this.state.sortBy === 'playCount' ? 'selected' : ''}>Sort by: Most Played</option>
             </select>
-          </label>
+          </div>
 
           <!-- Sort Direction Toggle -->
           <button
             id="library-sort-dir-btn"
             aria-label="Toggle sort direction (${this.state.sortDirection === 'asc' ? 'ascending' : 'descending'})"
+            title="Toggle sort direction"
             style="
-              padding: 6px 10px;
+              padding: 8px 16px;
               background: var(--color-bg-surface-elevated);
               border: 1px solid var(--glass-border);
-              border-radius: var(--radius-sm);
+              border-radius: var(--radius-full);
               color: var(--color-text-primary);
-              font-size: 12px;
+              font-size: 13px;
+              font-weight: 600;
               cursor: pointer;
+              transition: all var(--duration-fast) var(--ease-smooth);
+              min-height: 44px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
             "
           >
             ${this.state.sortDirection === 'asc' ? '▲ Asc' : '▼ Desc'}
@@ -182,3 +206,4 @@ export class LibraryToolbar {
     });
   }
 }
+

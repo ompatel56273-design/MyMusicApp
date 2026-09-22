@@ -30,22 +30,23 @@ export class PlaylistModalComponent {
     const modal = document.createElement('div');
     modal.className = 'glass-panel modal-content';
     modal.style.width = '100%';
-    modal.style.maxWidth = '460px';
+    modal.style.maxWidth = '480px';
     modal.style.borderRadius = 'var(--radius-xl)';
     modal.style.padding = 'var(--space-6)';
-    modal.style.boxShadow = '0 24px 48px rgba(0, 0, 0, 0.5)';
-    modal.style.border = '1px solid rgba(255, 255, 255, 0.1)';
-    modal.style.background = 'var(--color-bg-surface)';
+    modal.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.7)';
+    modal.style.border = '1px solid var(--glass-border-highlight)';
+    modal.style.background = 'rgba(15, 23, 42, 0.95)';
+    modal.style.backdropFilter = 'blur(20px)';
 
     modal.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-5);">
-        <h2 id="playlist-modal-title" style="font-size: 20px; font-weight: 700; color: var(--color-text-primary); margin: 0;">
+        <h2 id="playlist-modal-title" style="font-size: 20px; font-weight: 800; color: var(--color-text-primary); margin: 0; letter-spacing: -0.01em;">
           ${titleText}
         </h2>
         <button
           class="modal-close-btn"
           aria-label="Close dialog"
-          style="background: transparent; border: none; font-size: 20px; color: var(--color-text-muted); cursor: pointer; padding: 4px;"
+          style="background: transparent; border: none; font-size: 18px; color: var(--color-text-muted); cursor: pointer; padding: 6px; border-radius: 50%; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px;"
         >
           ✕
         </button>
@@ -54,7 +55,7 @@ export class PlaylistModalComponent {
       <form class="playlist-modal-form" style="display: flex; flex-direction: column; gap: var(--space-4);">
         <div style="display: flex; flex-direction: column; gap: var(--space-2);">
           <label for="playlist-name-input" style="font-size: 13px; font-weight: 600; color: var(--color-text-secondary);">
-            Playlist Name <span style="color: var(--color-accent-primary);">*</span>
+            Playlist Name <span style="color: var(--color-purple-neon);">*</span>
           </label>
           <input
             id="playlist-name-input"
@@ -63,9 +64,9 @@ export class PlaylistModalComponent {
             maxlength="100"
             placeholder="e.g. Late Night Beats"
             value="${options.playlist?.name ?? ''}"
-            style="width: 100%; box-sizing: border-box; padding: var(--space-3) var(--space-4); background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--radius-md); color: var(--color-text-primary); font-size: 14px; outline: none;"
+            style="width: 100%; box-sizing: border-box; padding: 12px 16px; background: rgba(10, 14, 23, 0.8); border: 1px solid var(--glass-border); border-radius: var(--radius-md); color: var(--color-text-primary); font-size: 14px; outline: none; transition: border-color var(--duration-fast);"
           />
-          <span class="playlist-modal-error" style="font-size: 12px; color: #ff5555; display: none;"></span>
+          <span class="playlist-modal-error" style="font-size: 12px; color: var(--color-status-error); display: none;"></span>
         </div>
 
         <div style="display: flex; flex-direction: column; gap: var(--space-2);">
@@ -77,22 +78,22 @@ export class PlaylistModalComponent {
             rows="3"
             maxlength="300"
             placeholder="Add an optional description"
-            style="width: 100%; box-sizing: border-box; padding: var(--space-3) var(--space-4); background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--radius-md); color: var(--color-text-primary); font-size: 14px; outline: none; resize: vertical;"
+            style="width: 100%; box-sizing: border-box; padding: 12px 16px; background: rgba(10, 14, 23, 0.8); border: 1px solid var(--glass-border); border-radius: var(--radius-md); color: var(--color-text-primary); font-size: 14px; outline: none; resize: vertical;"
           >${options.playlist?.description ?? ''}</textarea>
         </div>
 
-        <div style="display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-2);">
+        <div style="display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-3);">
           <button
             type="button"
             class="modal-cancel-btn"
-            style="padding: var(--space-2) var(--space-5); background: transparent; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: var(--radius-md); color: var(--color-text-primary); font-size: 14px; font-weight: 500; cursor: pointer;"
+            style="padding: 10px 20px; background: transparent; border: 1px solid var(--glass-border); border-radius: var(--radius-full); color: var(--color-text-secondary); font-size: 13px; font-weight: 600; cursor: pointer; min-height: 42px;"
           >
             Cancel
           </button>
           <button
             type="submit"
-            class="modal-submit-btn"
-            style="padding: var(--space-2) var(--space-5); background: var(--color-accent-primary); border: none; border-radius: var(--radius-md); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);"
+            class="modal-submit-btn btn-primary"
+            style="padding: 10px 24px; background: linear-gradient(135deg, var(--color-purple-neon) 0%, var(--color-pink-neon) 100%); border: none; border-radius: var(--radius-full); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: var(--shadow-glow-purple); min-height: 42px;"
           >
             ${submitText}
           </button>

@@ -1,5 +1,6 @@
 import type { Playlist } from '../../../domain/entities/models';
 import type { IArtworkService } from '../../../services/contracts/service-contracts';
+import { escapeHtml } from '../../../core/security/html-sanitizer';
 
 export interface PlaylistCardCallbacks {
   onSelect: (playlist: Playlist) => void;
@@ -26,80 +27,65 @@ export class PlaylistCardComponent {
 
     card.style.display = 'flex';
     card.style.flexDirection = 'column';
-    card.style.padding = 'var(--space-4)';
-    card.style.borderRadius = 'var(--radius-lg)';
+    card.style.padding = '14px';
+    card.style.borderRadius = 'var(--radius-xl)';
     card.style.cursor = 'pointer';
-    card.style.transition = 'transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out)';
+    card.style.transition = 'all var(--duration-fast) var(--ease-smooth)';
     card.style.position = 'relative';
     card.style.overflow = 'hidden';
     card.style.background = 'rgba(255, 255, 255, 0.03)';
-    card.style.border = '1px solid rgba(255, 255, 255, 0.07)';
+    card.style.border = '1px solid var(--glass-border)';
 
     const durationStr = PlaylistCardComponent.formatDuration(playlist.durationMs);
 
     card.innerHTML = `
-      <div class="playlist-art-wrap" style="position: relative; width: 100%; aspect-ratio: 1; border-radius: var(--radius-md); overflow: hidden; background: var(--color-bg-surface-elevated); margin-bottom: var(--space-3); display: flex; align-items: center; justify-content: center;">
-        <div class="playlist-art-img" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(255, 120, 50, 0.15), rgba(120, 50, 255, 0.2));">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-accent-primary); opacity: 0.85;">
-            <path d="M9 18V5l12-2v13"></path>
-            <circle cx="6" cy="18" r="3"></circle>
-            <circle cx="18" cy="16" r="3"></circle>
-          </svg>
+      <div class="playlist-art-wrap" style="position: relative; width: 100%; aspect-ratio: 1; border-radius: var(--radius-lg); overflow: hidden; background: linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(236, 72, 153, 0.25) 100%); margin-bottom: var(--space-3); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255, 255, 255, 0.06);">
+        <div class="playlist-art-img" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+          <span style="font-size: 38px; color: var(--color-purple-neon);">📑</span>
         </div>
 
         <button
           class="playlist-quick-play-btn"
-          aria-label="Play ${playlist.name}"
-          style="position: absolute; bottom: var(--space-3); right: var(--space-3); width: 44px; height: 44px; border-radius: var(--radius-full); background: var(--color-accent-primary); border: none; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); opacity: 0; transform: translateY(8px); transition: all 0.2s ease;"
+          aria-label="Play ${escapeHtml(playlist.name)}"
+          style="position: absolute; bottom: 10px; right: 10px; width: 44px; height: 44px; border-radius: var(--radius-full); background: linear-gradient(135deg, var(--color-purple-neon) 0%, var(--color-pink-neon) 100%); border: none; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--shadow-glow-purple); opacity: 0.9; transform: scale(0.95); transition: all 0.2s ease;"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-          </svg>
+          <span style="font-size: 16px; margin-left: 2px;">▶</span>
         </button>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-2); margin-bottom: var(--space-1);">
-        <h3 class="playlist-name-text" style="font-size: 15px; font-weight: 600; color: var(--color-text-primary); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;">
-          ${playlist.name}
+        <h3 class="playlist-name-text" style="font-size: 14px; font-weight: 700; color: var(--color-text-primary); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;">
+          ${escapeHtml(playlist.name)}
         </h3>
         <div class="playlist-actions-dropdown" style="position: relative;">
           <button
             class="playlist-menu-btn"
-            aria-label="More options for ${playlist.name}"
-            style="background: transparent; border: none; color: var(--color-text-muted); cursor: pointer; padding: 2px 6px; font-size: 16px; border-radius: var(--radius-sm); line-height: 1;"
+            aria-label="More options for ${escapeHtml(playlist.name)}"
+            title="Options"
+            style="background: transparent; border: none; color: var(--color-text-muted); cursor: pointer; padding: 2px 8px; font-size: 16px; border-radius: var(--radius-sm); line-height: 1; min-width: 32px; min-height: 32px; display: flex; align-items: center; justify-content: center;"
           >
             ⋮
           </button>
         </div>
       </div>
 
-      <div style="font-size: 12px; color: var(--color-text-secondary); display: flex; justify-content: space-between; align-items: center;">
+      <div style="font-size: 12px; color: var(--color-text-secondary); display: flex; justify-content: space-between; align-items: center; margin-top: 2px;">
         <span>${playlist.trackCount} ${playlist.trackCount === 1 ? 'song' : 'songs'}</span>
-        <span>${durationStr}</span>
+        <span style="color: var(--color-text-muted);">${durationStr}</span>
       </div>
     `;
 
     // Hover styling
     card.addEventListener('mouseenter', () => {
       card.style.transform = 'translateY(-3px)';
-      card.style.boxShadow = '0 12px 24px -6px rgba(0, 0, 0, 0.4)';
-      card.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-      const playBtn = card.querySelector<HTMLElement>('.playlist-quick-play-btn');
-      if (playBtn) {
-        playBtn.style.opacity = '1';
-        playBtn.style.transform = 'translateY(0)';
-      }
+      card.style.boxShadow = 'var(--shadow-glow-purple)';
+      card.style.borderColor = 'rgba(168, 85, 247, 0.4)';
     });
 
     card.addEventListener('mouseleave', () => {
-      card.style.transform = 'translateY(0)';
+      card.style.transform = 'none';
       card.style.boxShadow = 'none';
-      card.style.borderColor = 'rgba(255, 255, 255, 0.07)';
-      const playBtn = card.querySelector<HTMLElement>('.playlist-quick-play-btn');
-      if (playBtn) {
-        playBtn.style.opacity = '0';
-        playBtn.style.transform = 'translateY(8px)';
-      }
+      card.style.borderColor = 'var(--glass-border)';
     });
 
     // Artwork resolution if artworkId is present
@@ -107,7 +93,7 @@ export class PlaylistCardComponent {
       const artContainer = card.querySelector<HTMLElement>('.playlist-art-img');
       void artworkService.getArtworkUrl(playlist.artworkId, 'medium').then(url => {
         if (url && artContainer) {
-          artContainer.innerHTML = `<img src="${url}" alt="${playlist.name}" style="width: 100%; height: 100%; object-fit: cover;" />`;
+          artContainer.innerHTML = `<img src="${url}" alt="${escapeHtml(playlist.name)}" style="width: 100%; height: 100%; object-fit: cover;" />`;
         }
       });
     }
@@ -164,3 +150,4 @@ export class PlaylistCardComponent {
     return `${hrs} hr ${mins} min`;
   }
 }
+

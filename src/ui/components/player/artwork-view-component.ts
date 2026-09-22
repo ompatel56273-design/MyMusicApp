@@ -30,6 +30,20 @@ export class ArtworkViewComponent {
         "
       >
         <div
+          class="artwork-backdrop-glow"
+          aria-hidden="true"
+          style="
+            position: absolute;
+            inset: -8px;
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(6, 182, 212, 0.25));
+            border-radius: var(--radius-2xl);
+            filter: blur(20px);
+            opacity: 0.6;
+            z-index: 0;
+            pointer-events: none;
+          "
+        ></div>
+        <div
           id="np-artwork-box"
           style="
             width: 100%;
@@ -37,15 +51,17 @@ export class ArtworkViewComponent {
             border-radius: var(--radius-xl);
             background: var(--color-bg-surface-elevated);
             border: 1px solid var(--glass-border);
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 40px rgba(99, 102, 241, 0.2);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(168, 85, 247, 0.2);
             display: flex;
             align-items: center;
             justify-content: center;
             overflow: hidden;
+            position: relative;
+            z-index: 1;
             transition: all var(--duration-normal) var(--ease-smooth);
           "
         >
-          <span style="font-size: 64px; color: var(--color-text-muted);">♫</span>
+          <span style="font-size: 64px; color: var(--color-text-muted); opacity: 0.5;">♫</span>
         </div>
       </div>
     `;

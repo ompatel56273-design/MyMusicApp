@@ -39,18 +39,19 @@ export class SongsTabView {
     }
 
     this.container.innerHTML = `
-      <div class="songs-tab-container" style="display: flex; flex-direction: column; height: 100%; min-height: 400px;">
+      <div class="songs-tab-container glass-panel" style="display: flex; flex-direction: column; flex: 1; min-height: 400px; background: rgba(18, 24, 38, 0.4); border-radius: var(--radius-xl); border: 1px solid var(--glass-border); padding: var(--space-3); overflow: hidden;">
+        <!-- Songs Table Header (Template 3) -->
         <div
           class="songs-table-header"
           style="
             display: grid;
             grid-template-columns: 36px 40px 1fr 1fr 1fr 70px 60px 40px;
             gap: var(--space-3);
-            padding: var(--space-2) var(--space-4);
+            padding: var(--space-3) var(--space-4);
             font-size: 11px;
-            font-weight: 600;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.08em;
             color: var(--color-text-muted);
             border-bottom: 1px solid var(--glass-border);
             margin-bottom: var(--space-2);
@@ -66,9 +67,10 @@ export class SongsTabView {
           <div style="text-align: center;">Fav</div>
         </div>
 
-        <div id="songs-viewport" style="flex: 1; overflow-y: auto; max-height: calc(100vh - 280px); min-height: 300px;">
-          <div id="songs-loading" style="padding: var(--space-8); text-align: center; color: var(--color-text-muted);">
-            Loading songs...
+        <div id="songs-viewport" style="flex: 1; overflow-y: auto; max-height: calc(100vh - 320px); min-height: 300px;">
+          <div id="songs-loading" style="padding: var(--space-12); text-align: center; color: var(--color-text-muted);">
+            <div style="font-size: 28px; margin-bottom: 8px;">🎵</div>
+            <div>Loading songs...</div>
           </div>
         </div>
       </div>
@@ -127,8 +129,10 @@ export class SongsTabView {
 
     if (this.filteredTracks.length === 0) {
       viewport.innerHTML = `
-        <div style="padding: var(--space-8); text-align: center; color: var(--color-text-muted);">
-          No songs found in library.
+        <div style="padding: var(--space-12); text-align: center; color: var(--color-text-muted);">
+          <div style="font-size: 32px; margin-bottom: 12px;">🎶</div>
+          <div style="font-size: 15px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 6px;">No songs found</div>
+          <div style="font-size: 13px;">No audio tracks match your active search or filter criteria.</div>
         </div>
       `;
       return;
@@ -228,3 +232,4 @@ export class SongsTabView {
     }
   }
 }
+

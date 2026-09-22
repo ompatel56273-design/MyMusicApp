@@ -25,6 +25,7 @@ export class MiniPlayerComponent {
   private currentPositionMs = 0;
   private currentDurationMs = 0;
   private isSeeking = false;
+  private isFavorite = false;
 
   constructor(deps: MiniPlayerDependencies) {
     this.playbackManager = deps.playbackManager;
@@ -39,6 +40,7 @@ export class MiniPlayerComponent {
     this.isPlaying = this.playbackManager.state === 'playing';
     this.currentPositionMs = this.playbackManager.positionMs;
     this.currentDurationMs = this.playbackManager.durationMs;
+    this.isFavorite = this.currentTrack?.isFavorite ?? false;
 
     this.render();
     this.bindEvents();
@@ -65,28 +67,128 @@ export class MiniPlayerComponent {
     const playIcon = this.isPlaying ? '⏸' : '▶';
 
     this.container.innerHTML = `
-      <footer
-        class="glass-panel"
-        role="region"
-        aria-label="Now Playing Mini Player"
-        style="
+      <style>
+        .mini-player-bar {
           height: var(--mini-player-height);
           display: flex;
           align-items: center;
           justify-content: space-between;
           padding: 0 var(--space-6);
           border-top: 1px solid var(--glass-border);
-          z-index: 10;
-        "
+          z-index: 20;
+          gap: var(--space-4);
+          position: relative;
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          overflow: hidden;
+        }
+
+        .mini-info-col {
+          display: flex;
+          align-items: center;
+          gap: var(--space-3);
+          width: 280px;
+          min-width: 0;
+          cursor: pointer;
+        }
+
+        .mini-controls-col {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+          flex: 1;
+          max-width: 580px;
+          min-width: 0;
+        }
+
+        .mini-aux-col {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          width: 260px;
+          justify-content: flex-end;
+          min-width: 0;
+        }
+
+        /* Mobile Mini Player (< 768px) */
+        @media (max-width: 767px) {
+          .mini-player-bar {
+            height: 60px;
+            padding: 0 10px;
+            gap: 6px;
+          }
+
+          .mini-info-col {
+            width: auto;
+            flex: 1;
+            gap: 8px;
+          }
+
+          #mini-artwork-box {
+            width: 40px !important;
+            height: 40px !important;
+          }
+
+          #mini-track-title {
+            font-size: 13px !important;
+            max-width: 130px;
+          }
+
+          #mini-track-artist {
+            font-size: 11px !important;
+            max-width: 130px;
+          }
+
+          .mini-controls-col {
+            max-width: none;
+            flex: 0 0 auto;
+          }
+
+          .mini-controls-col > div:last-child {
+            display: none !important; /* Hide progress bar text row on mobile */
+          }
+
+          #mini-shuffle-btn, #mini-repeat-btn {
+            display: none !important;
+          }
+
+          #mini-prev-btn, #mini-next-btn {
+            min-width: 36px !important;
+            min-height: 36px !important;
+            font-size: 15px !important;
+          }
+
+          #mini-play-btn {
+            width: 40px !important;
+            height: 40px !important;
+            min-width: 40px !important;
+            min-height: 40px !important;
+            font-size: 14px !important;
+          }
+
+          .mini-aux-col {
+            display: none !important;
+          }
+        }
+      </style>
+
+      <footer
+        id="app-mini-player"
+        class="glass-panel-elevated mini-player-bar"
+        role="region"
+        aria-label="Now Playing Mini Player"
       >
-        <!-- Track Info -->
-        <div id="mini-track-info" style="display: flex; align-items: center; gap: var(--space-4); width: 280px; min-width: 200px; cursor: pointer;">
+        <!-- Left: Track Info & Artwork -->
+        <div id="mini-track-info" class="mini-info-col">
           <div
             id="mini-artwork-box"
             style="
-              width: 48px;
-              height: 48px;
-              border-radius: var(--radius-sm);
+              width: 52px;
+              height: 52px;
+              border-radius: var(--radius-md);
               background: var(--color-bg-surface-elevated);
               border: 1px solid var(--glass-border);
               display: flex;
@@ -94,24 +196,50 @@ export class MiniPlayerComponent {
               justify-content: center;
               overflow: hidden;
               flex-shrink: 0;
+              box-shadow: var(--shadow-sm);
+              transition: all var(--duration-fast) var(--ease-smooth);
             "
           >
-            <span style="font-size: 20px; color: var(--color-text-muted);" aria-hidden="true">♫</span>
+            <span style="font-size: 22px; color: var(--color-text-muted);" aria-hidden="true">♫</span>
           </div>
 
-          <div style="display: flex; flex-direction: column; overflow: hidden;">
-            <span id="mini-track-title" title="${title}" style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          <div style="display: flex; flex-direction: column; overflow: hidden; gap: 2px; min-width: 0;">
+            <span id="mini-track-title" title="${title}" style="font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--color-text-primary); letter-spacing: -0.01em;">
               ${title}
             </span>
             <span id="mini-track-artist" title="${artist}" style="font-size: 12px; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
               ${artist}
             </span>
           </div>
+
+          <!-- Heart / Favorite Button -->
+          <button
+            id="mini-fav-btn"
+            aria-label="${this.isFavorite ? 'Remove from favorites' : 'Add to favorites'}"
+            aria-pressed="${this.isFavorite}"
+            style="
+              background: transparent;
+              border: none;
+              color: ${this.isFavorite ? 'var(--color-accent-pink)' : 'var(--color-text-muted)'};
+              font-size: 16px;
+              cursor: pointer;
+              min-width: 44px;
+              min-height: 44px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              transition: transform var(--duration-fast) var(--ease-spring);
+              flex-shrink: 0;
+            "
+          >
+            ${this.isFavorite ? '♥' : '♡'}
+          </button>
         </div>
 
-        <!-- Center Controls & Timeline -->
-        <div style="display: flex; flex-direction: column; align-items: center; gap: var(--space-2); flex: 1; max-width: 540px;">
-          <div style="display: flex; align-items: center; gap: var(--space-2);">
+        <!-- Center: Controls & Timeline -->
+        <div class="mini-controls-col">
+          <!-- Controls Row -->
+          <div style="display: flex; align-items: center; gap: var(--space-3);">
             <button
               id="mini-shuffle-btn"
               aria-label="Toggle Shuffle"
@@ -119,7 +247,7 @@ export class MiniPlayerComponent {
               style="
                 background: transparent;
                 border: none;
-                color: ${this.playbackManager.shuffleMode === 'on' ? 'var(--color-accent-primary)' : 'var(--color-text-muted)'};
+                color: ${this.playbackManager.shuffleMode === 'on' ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)'};
                 font-size: 14px;
                 cursor: pointer;
                 min-width: 44px;
@@ -127,6 +255,7 @@ export class MiniPlayerComponent {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
+                transition: color var(--duration-fast) var(--ease-smooth);
               "
             ><span aria-hidden="true">🔀</span></button>
 
@@ -137,35 +266,39 @@ export class MiniPlayerComponent {
                 background: transparent;
                 border: none;
                 color: var(--color-text-primary);
-                font-size: 16px;
+                font-size: 18px;
                 cursor: pointer;
                 min-width: 44px;
                 min-height: 44px;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
+                transition: transform var(--duration-fast) var(--ease-smooth);
               "
             ><span aria-hidden="true">⏮</span></button>
 
+            <!-- Large Play / Pause Glowing Button -->
             <button
               id="mini-play-btn"
               aria-label="${this.isPlaying ? 'Pause track' : 'Play track'}"
               aria-pressed="${this.isPlaying}"
               style="
-                width: 44px;
-                height: 44px;
-                min-width: 44px;
-                min-height: 44px;
+                width: 46px;
+                height: 46px;
+                min-width: 46px;
+                min-height: 46px;
                 border-radius: var(--radius-full);
-                background: var(--color-accent-gradient);
+                background: var(--gradient-primary);
                 border: none;
                 color: #ffffff;
-                font-size: 14px;
+                font-size: 16px;
+                font-weight: 700;
                 cursor: pointer;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                box-shadow: var(--shadow-glow);
+                box-shadow: var(--shadow-glow-purple);
+                transition: transform var(--duration-fast) var(--ease-spring);
               "
             ><span aria-hidden="true">${playIcon}</span></button>
 
@@ -176,13 +309,14 @@ export class MiniPlayerComponent {
                 background: transparent;
                 border: none;
                 color: var(--color-text-primary);
-                font-size: 16px;
+                font-size: 18px;
                 cursor: pointer;
                 min-width: 44px;
                 min-height: 44px;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
+                transition: transform var(--duration-fast) var(--ease-smooth);
               "
             ><span aria-hidden="true">⏭</span></button>
 
@@ -193,7 +327,7 @@ export class MiniPlayerComponent {
               style="
                 background: transparent;
                 border: none;
-                color: ${this.playbackManager.repeatMode !== 'off' ? 'var(--color-accent-primary)' : 'var(--color-text-muted)'};
+                color: ${this.playbackManager.repeatMode !== 'off' ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)'};
                 font-size: 14px;
                 cursor: pointer;
                 min-width: 44px;
@@ -201,12 +335,14 @@ export class MiniPlayerComponent {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
+                transition: color var(--duration-fast) var(--ease-smooth);
               "
             ><span aria-hidden="true">${this.playbackManager.repeatMode === 'one' ? '🔂' : '🔁'}</span></button>
           </div>
 
+          <!-- Timeline Row -->
           <div style="display: flex; align-items: center; gap: var(--space-3); width: 100%;">
-            <span id="mini-time-current" style="font-size: 11px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 35px; text-align: right;">
+            <span id="mini-time-current" style="font-size: 11px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 35px; text-align: right; font-weight: 500;">
               ${this.formatTime(this.currentPositionMs)}
             </span>
             <input
@@ -216,16 +352,17 @@ export class MiniPlayerComponent {
               max="${this.currentDurationMs || 100}"
               value="${this.currentPositionMs}"
               aria-label="Playback Progress"
-              style="flex: 1; height: 4px; accent-color: var(--color-accent-primary); cursor: pointer;"
+              style="flex: 1; height: 4px; accent-color: var(--color-accent-purple-glow); cursor: pointer;"
             />
-            <span id="mini-time-duration" style="font-size: 11px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 35px;">
+            <span id="mini-time-duration" style="font-size: 11px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 35px; font-weight: 500;">
               ${this.formatTime(this.currentDurationMs)}
             </span>
           </div>
         </div>
 
-        <!-- Volume -->
-        <div style="display: flex; align-items: center; gap: var(--space-3); width: 180px; justify-content: flex-end;">
+        <!-- Right: Volume & Auxiliary Actions -->
+        <div class="mini-aux-col">
+          <!-- Volume Group -->
           <button
             id="mini-mute-btn"
             aria-label="${this.playbackManager.isMuted ? 'Unmute' : 'Mute'}"
@@ -253,8 +390,48 @@ export class MiniPlayerComponent {
             step="0.01"
             value="${this.playbackManager.volume}"
             aria-label="Volume"
-            style="width: 80px; height: 4px; accent-color: var(--color-accent-primary); cursor: pointer;"
+            style="width: 80px; height: 4px; accent-color: var(--color-accent-purple-glow); cursor: pointer;"
           />
+
+          <!-- Queue Toggle Button -->
+          <button
+            id="mini-queue-btn"
+            aria-label="View Queue"
+            style="
+              background: transparent;
+              border: none;
+              color: var(--color-text-secondary);
+              font-size: 15px;
+              cursor: pointer;
+              min-width: 44px;
+              min-height: 44px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+            "
+          >
+            <span aria-hidden="true">📑</span>
+          </button>
+
+          <!-- Fullscreen / Expand Now Playing -->
+          <button
+            id="mini-fullscreen-btn"
+            aria-label="Expand Now Playing"
+            style="
+              background: transparent;
+              border: none;
+              color: var(--color-text-secondary);
+              font-size: 15px;
+              cursor: pointer;
+              min-width: 44px;
+              min-height: 44px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+            "
+          >
+            <span aria-hidden="true">⛶</span>
+          </button>
         </div>
       </footer>
     `;
@@ -264,9 +441,21 @@ export class MiniPlayerComponent {
     if (!this.container) return;
 
     const trackInfo = this.container.querySelector('#mini-track-info');
-    trackInfo?.addEventListener('click', () => {
+    trackInfo?.addEventListener('click', (e: Event) => {
+      // Don't trigger if clicked on favorite button
+      if ((e.target as HTMLElement).closest('#mini-fav-btn')) return;
       if (this.router) {
         this.router.navigate('nowplaying');
+      }
+    });
+
+    const favBtn = this.container.querySelector<HTMLButtonElement>('#mini-fav-btn');
+    favBtn?.addEventListener('click', () => {
+      this.isFavorite = !this.isFavorite;
+      if (favBtn) {
+        favBtn.textContent = this.isFavorite ? '♥' : '♡';
+        favBtn.style.color = this.isFavorite ? 'var(--color-accent-pink)' : 'var(--color-text-muted)';
+        favBtn.setAttribute('aria-pressed', String(this.isFavorite));
       }
     });
 
@@ -318,12 +507,23 @@ export class MiniPlayerComponent {
       const pos = parseInt(progressSlider.value, 10);
       void this.playbackManager.seek(pos);
     });
+
+    // Queue button -> navigate to nowplaying
+    this.container.querySelector('#mini-queue-btn')?.addEventListener('click', () => {
+      this.router?.navigate('nowplaying');
+    });
+
+    // Fullscreen button -> navigate to nowplaying
+    this.container.querySelector('#mini-fullscreen-btn')?.addEventListener('click', () => {
+      this.router?.navigate('nowplaying');
+    });
   }
 
   private subscribeToDomainEvents(): void {
     this.subscriptions.push(
       this.eventBus.subscribe(DomainEvents.TRACK_CHANGED, (e: any) => {
         this.currentTrack = e.currentTrack;
+        this.isFavorite = this.currentTrack?.isFavorite ?? false;
         this.updateTrackInfo();
       })
     );
@@ -355,9 +555,16 @@ export class MiniPlayerComponent {
     const titleEl = this.container.querySelector('#mini-track-title');
     const artistEl = this.container.querySelector('#mini-track-artist');
     const artworkBox = this.container.querySelector('#mini-artwork-box');
+    const favBtn = this.container.querySelector<HTMLButtonElement>('#mini-fav-btn');
 
     if (titleEl) titleEl.textContent = this.currentTrack?.title || 'No Track Selected';
     if (artistEl) artistEl.textContent = this.currentTrack?.artistName || 'Select a song to play';
+
+    if (favBtn) {
+      favBtn.textContent = this.isFavorite ? '♥' : '♡';
+      favBtn.style.color = this.isFavorite ? 'var(--color-accent-pink)' : 'var(--color-text-muted)';
+      favBtn.setAttribute('aria-pressed', String(this.isFavorite));
+    }
 
     if (artworkBox) {
       const artId = (this.currentTrack as any)?.artworkId || this.currentTrack?.albumId;
@@ -368,7 +575,7 @@ export class MiniPlayerComponent {
           return;
         }
       }
-      artworkBox.innerHTML = `<span style="font-size: 20px; color: var(--color-text-muted);">♫</span>`;
+      artworkBox.innerHTML = `<span style="font-size: 22px; color: var(--color-text-muted);">♫</span>`;
     }
   }
 
@@ -377,7 +584,8 @@ export class MiniPlayerComponent {
     const playBtn = this.container.querySelector('#mini-play-btn');
     if (playBtn) {
       playBtn.textContent = this.isPlaying ? '⏸' : '▶';
-      playBtn.setAttribute('aria-label', this.isPlaying ? 'Pause' : 'Play');
+      playBtn.setAttribute('aria-label', this.isPlaying ? 'Pause track' : 'Play track');
+      playBtn.setAttribute('aria-pressed', String(this.isPlaying));
     }
   }
 
@@ -401,11 +609,13 @@ export class MiniPlayerComponent {
     const repeatBtn = this.container.querySelector<HTMLButtonElement>('#mini-repeat-btn');
 
     if (shuffleBtn) {
-      shuffleBtn.style.color = this.playbackManager.shuffleMode === 'on' ? 'var(--color-accent-primary)' : 'var(--color-text-muted)';
+      shuffleBtn.style.color = this.playbackManager.shuffleMode === 'on' ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)';
+      shuffleBtn.setAttribute('aria-pressed', String(this.playbackManager.shuffleMode === 'on'));
     }
     if (repeatBtn) {
-      repeatBtn.style.color = this.playbackManager.repeatMode !== 'off' ? 'var(--color-accent-primary)' : 'var(--color-text-muted)';
+      repeatBtn.style.color = this.playbackManager.repeatMode !== 'off' ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)';
       repeatBtn.textContent = this.playbackManager.repeatMode === 'one' ? '🔂' : '🔁';
+      repeatBtn.setAttribute('aria-pressed', String(this.playbackManager.repeatMode !== 'off'));
     }
   }
 
@@ -417,3 +627,4 @@ export class MiniPlayerComponent {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   }
 }
+

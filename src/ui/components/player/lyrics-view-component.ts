@@ -189,16 +189,18 @@ export class LyricsViewComponent {
     if (!this.container) return;
 
     this.container.innerHTML = `
-      <div class="glass-panel lyrics-synced-container" style="height: 100%; overflow-y: auto; padding: var(--space-8) var(--space-6); border-radius: var(--radius-xl); box-sizing: border-box; scroll-behavior: smooth; position: relative;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-6); border-bottom: 1px solid rgba(255, 255, 255, 0.06); padding-bottom: var(--space-3);">
-          <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent-primary);">
-            Synchronized Lyrics
-          </span>
-          <button class="edit-lyrics-btn" style="background: transparent; border: none; font-size: 12px; color: var(--color-text-muted); cursor: pointer;">
+      <div class="glass-panel lyrics-synced-container" style="height: 100%; overflow-y: auto; padding: var(--space-6) var(--space-5); border-radius: var(--radius-xl); box-sizing: border-box; scroll-behavior: smooth; position: relative; background: var(--glass-surface); border: 1px solid var(--glass-border); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); border-bottom: 1px solid var(--glass-border); padding-bottom: var(--space-3);">
+          <div style="display: flex; align-items: center; gap: var(--space-2);">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-accent-primary); background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); padding: 2px 10px; border-radius: var(--radius-full);">
+              Synchronized Lyrics
+            </span>
+          </div>
+          <button class="edit-lyrics-btn" style="background: var(--glass-surface); border: 1px solid var(--glass-border); font-size: 12px; font-weight: 600; color: var(--color-text-secondary); padding: 4px 12px; border-radius: var(--radius-full); cursor: pointer; transition: all var(--duration-fast) var(--ease-smooth);">
             Edit LRC
           </button>
         </div>
-        <div class="cues-list" style="display: flex; flex-direction: column; gap: var(--space-4); padding: 40px 0; text-align: center;"></div>
+        <div class="cues-list" style="display: flex; flex-direction: column; gap: var(--space-3); padding: 40px 0; text-align: center;"></div>
       </div>
     `;
 
@@ -223,11 +225,11 @@ export class LyricsViewComponent {
         cueEl.style.fontWeight = '500';
         cueEl.style.lineHeight = '1.6';
         cueEl.style.color = 'var(--color-text-muted)';
-        cueEl.style.opacity = '0.35';
+        cueEl.style.opacity = '0.4';
         cueEl.style.cursor = 'pointer';
-        cueEl.style.transition = 'all 0.25s ease';
+        cueEl.style.transition = 'all var(--duration-normal) var(--ease-smooth)';
         cueEl.style.padding = 'var(--space-2) var(--space-4)';
-        cueEl.style.borderRadius = 'var(--radius-md)';
+        cueEl.style.borderRadius = 'var(--radius-lg)';
 
         // Safe text rendering
         cueEl.textContent = cue.text || '♫';
@@ -235,12 +237,14 @@ export class LyricsViewComponent {
         // Hover effect
         cueEl.addEventListener('mouseenter', () => {
           if (this.activeCueIndex !== index) {
-            cueEl.style.opacity = '0.7';
+            cueEl.style.opacity = '0.75';
+            cueEl.style.background = 'rgba(255, 255, 255, 0.03)';
           }
         });
         cueEl.addEventListener('mouseleave', () => {
           if (this.activeCueIndex !== index) {
-            cueEl.style.opacity = '0.35';
+            cueEl.style.opacity = '0.4';
+            cueEl.style.background = 'transparent';
           }
         });
 
@@ -290,12 +294,14 @@ export class LyricsViewComponent {
     allCues.forEach((el, index) => {
       if (index === this.activeCueIndex) {
         el.classList.add('active-cue');
-        el.style.color = 'var(--color-text-primary, #ffffff)';
+        el.style.color = '#ffffff';
         el.style.opacity = '1';
         el.style.fontWeight = '700';
-        el.style.fontSize = '21px';
+        el.style.fontSize = '22px';
         el.style.transform = 'scale(1.04)';
-        el.style.textShadow = '0 0 16px rgba(255, 120, 50, 0.4)';
+        el.style.textShadow = '0 0 20px rgba(168, 85, 247, 0.6), 0 0 35px rgba(168, 85, 247, 0.3)';
+        el.style.background = 'rgba(168, 85, 247, 0.14)';
+        el.style.border = '1px solid rgba(168, 85, 247, 0.3)';
 
         // Auto-scroll into center if user is not actively manually scrolling
         if (!this.isUserScrolling) {
@@ -304,11 +310,13 @@ export class LyricsViewComponent {
       } else {
         el.classList.remove('active-cue');
         el.style.color = 'var(--color-text-muted)';
-        el.style.opacity = '0.35';
+        el.style.opacity = '0.4';
         el.style.fontWeight = '500';
         el.style.fontSize = '18px';
         el.style.transform = 'scale(1)';
         el.style.textShadow = 'none';
+        el.style.background = 'transparent';
+        el.style.border = '1px solid transparent';
       }
     });
   }

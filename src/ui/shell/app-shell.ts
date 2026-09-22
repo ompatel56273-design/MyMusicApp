@@ -16,6 +16,8 @@ import type { IPlaybackManager, ILibraryService, ISearchService, IArtworkService
 import { EventBus } from '../../core/events/event-bus';
 import type { Disposable } from '../../core/types/common';
 
+import { ThemeManager } from '../theme/theme-manager';
+
 export interface AppShellDependencies {
   playbackManager: IPlaybackManager;
   libraryService: ILibraryService;
@@ -32,7 +34,7 @@ export interface AppShellDependencies {
 
 /**
  * Master Application Shell.
- * Mounts persistent layout regions (Header, Sidebar, Main Content Viewport, MiniPlayer),
+ * Mounts persistent layout regions (Header, Sidebar, Main Content Viewport, MiniPlayer, Mobile Bottom Nav),
  * manages view switching based on RouterService, and coordinates global keyboard shortcuts.
  */
 export class AppShell {
@@ -51,11 +53,19 @@ export class AppShell {
   private readonly eventBus?: EventBus | undefined;
   private eventBusSub: Disposable | null = null;
 
+  private mobileNavItems: { id: AppRoute; label: string; icon: string }[] = [
+    { id: 'home', label: 'Home', icon: '⌂' },
+    { id: 'library', label: 'Library', icon: '𝄤' },
+    { id: 'search', label: 'Search', icon: '🔍' },
+    { id: 'playlists', label: 'Playlists', icon: '☰' },
+    { id: 'settings', label: 'Settings', icon: '⚙' }
+  ];
+
   constructor(deps: AppShellDependencies) {
     this.eventBus = deps.eventBus;
     this.router = new RouterService('home');
     this.header = new HeaderComponent(this.router);
-    this.sidebar = new SidebarComponent(this.router);
+    this.sidebar = new SidebarComponent(this.router, deps.libraryService);
     this.miniPlayer = new MiniPlayerComponent({
       playbackManager: deps.playbackManager,
       artworkService: deps.artworkService,
@@ -90,7 +100,16 @@ export class AppShell {
       : new GalaxyView();
 
     this.views = new Map<AppRoute, IView>([
-      ['home', new HomeView(deps.libraryService)],
+      [
+        'home',
+        new HomeView(deps.libraryService, {
+          playbackManager: deps.playbackManager,
+          router: this.router,
+          artworkService: deps.artworkService,
+          playlistService: deps.playlistService,
+          eventBus: deps.eventBus
+        })
+      ],
       [
         'library',
         new LibraryView({
@@ -99,7 +118,16 @@ export class AppShell {
           artworkService: deps.artworkService
         })
       ],
-      ['search', new SearchView(deps.searchService)],
+      [
+        'search',
+        new SearchView({
+          searchService: deps.searchService,
+          playbackManager: deps.playbackManager,
+          libraryService: deps.libraryService,
+          artworkService: deps.artworkService,
+          routerService: this.router
+        })
+      ],
       ['playlists', playlistsView],
       ['galaxy', galaxyView],
       [
@@ -107,7 +135,8 @@ export class AppShell {
         new SettingsView({
           audioEngine: deps.audioEngine,
           audioSettingsService: deps.audioSettingsService,
-          visualizerService: deps.visualizerService
+          visualizerService: deps.visualizerService,
+          galaxyService: deps.galaxyService
         })
       ],
       [
@@ -127,6 +156,7 @@ export class AppShell {
   }
 
   public mount(container: HTMLElement): void {
+    ThemeManager.getInstance();
     this.container = container;
     this.renderLayout();
 
@@ -140,15 +170,18 @@ export class AppShell {
     const miniPlayerEl = this.container.querySelector<HTMLElement>('#shell-miniplayer-slot');
     if (miniPlayerEl) this.miniPlayer.mount(miniPlayerEl);
 
+    this.bindMobileNav();
     this.keyboardManager.init();
 
     // Subscribe to route changes
     this.routerSub = this.router.subscribe(state => {
       this.switchView(state);
+      this.updateMobileNavActive(state);
     });
 
     // Mount initial view
     this.switchView(this.router.current);
+    this.updateMobileNavActive(this.router.current);
 
     // Live Announcer Event Subscription
     if (this.eventBus) {
@@ -204,36 +237,81 @@ export class AppShell {
 
     this.container.innerHTML = `
       <style>
-        @media (max-width: 600px) {
+        #app-shell {
+          display: grid;
+          grid-template-rows: var(--header-height) 1fr var(--mini-player-height);
+          grid-template-columns: var(--sidebar-width) 1fr;
+          grid-template-areas:
+            'sidebar header'
+            'sidebar main'
+            'miniplayer miniplayer';
+          height: 100vh;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          background: var(--color-bg-base);
+          color: var(--color-text-primary);
+          overflow: hidden;
+          position: relative;
+        }
+
+        #shell-bottom-nav-slot {
+          display: none;
+        }
+
+        /* Tablet Responsive (768px – 1199px) */
+        @media (min-width: 768px) and (max-width: 1199px) {
           #app-shell {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: 220px 1fr;
+          }
+        }
+
+        /* Mobile Responsive (< 768px) */
+        @media (max-width: 767px) {
+          #app-shell {
+            grid-template-rows: var(--header-height) 1fr auto auto;
+            grid-template-columns: 1fr;
             grid-template-areas:
               'header'
               'main'
-              'miniplayer' !important;
+              'miniplayer'
+              'bottomnav';
+            width: 100%;
+            max-width: 100%;
+            overflow-x: hidden;
           }
           #shell-sidebar-slot {
             display: none !important;
           }
+          #shell-bottom-nav-slot {
+            display: flex !important;
+            grid-area: bottomnav;
+            height: var(--bottom-nav-height);
+            z-index: 30;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+          }
+          #shell-miniplayer-slot {
+            grid-area: miniplayer;
+            z-index: 25;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+          }
+          #shell-viewport-slot {
+            padding-bottom: var(--space-4);
+            min-width: 0;
+            max-width: 100%;
+            box-sizing: border-box;
+          }
         }
       </style>
-      <div id="app-shell" style="
-        display: grid;
-        grid-template-rows: auto 1fr auto;
-        grid-template-columns: auto 1fr;
-        grid-template-areas:
-          'header header'
-          'sidebar main'
-          'miniplayer miniplayer';
-        height: 100vh;
-        width: 100vw;
-        background: var(--color-bg-base);
-        color: var(--color-text-primary);
-        overflow: hidden;
-      ">
+      <div id="app-shell">
         <div id="shell-live-announcer" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+        <div id="shell-sidebar-slot" style="grid-area: sidebar; height: 100%;"></div>
         <div id="shell-header-slot" style="grid-area: header;"></div>
-        <div id="shell-sidebar-slot" style="grid-area: sidebar;"></div>
         <main id="shell-viewport-slot" role="main" style="
           grid-area: main;
           overflow-y: auto;
@@ -242,8 +320,79 @@ export class AppShell {
           position: relative;
         "></main>
         <div id="shell-miniplayer-slot" style="grid-area: miniplayer;"></div>
+        
+        <!-- Mobile Bottom Navigation Bar -->
+        <nav
+          id="shell-bottom-nav-slot"
+          class="glass-panel-elevated"
+          role="navigation"
+          aria-label="Mobile Bottom Navigation"
+          style="
+            border-top: 1px solid var(--glass-border);
+            align-items: center;
+            justify-content: space-around;
+            padding: 0 var(--space-2);
+          "
+        >
+          ${this.mobileNavItems
+            .map(
+              item => `
+            <button
+              class="mobile-nav-btn"
+              data-mobile-route="${item.id}"
+              aria-label="${item.label}"
+              aria-current="${this.router.current.route === item.id ? 'page' : 'false'}"
+              style="
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 3px;
+                flex: 1;
+                min-height: 48px;
+                background: transparent;
+                border: none;
+                color: ${this.router.current.route === item.id ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)'};
+                font-size: 11px;
+                font-weight: ${this.router.current.route === item.id ? '700' : '500'};
+                cursor: pointer;
+                transition: all var(--duration-fast) var(--ease-smooth);
+              "
+            >
+              <span style="font-size: 18px;">${item.icon}</span>
+              <span>${item.label}</span>
+            </button>
+          `
+            )
+            .join('')}
+        </nav>
       </div>
     `;
+  }
+
+  private bindMobileNav(): void {
+    if (!this.container) return;
+    const buttons = this.container.querySelectorAll<HTMLButtonElement>('.mobile-nav-btn');
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const route = btn.getAttribute('data-mobile-route') as AppRoute;
+        if (route) {
+          this.router.navigate(route);
+        }
+      });
+    });
+  }
+
+  private updateMobileNavActive(state: RouteState): void {
+    if (!this.container) return;
+    const buttons = this.container.querySelectorAll<HTMLButtonElement>('.mobile-nav-btn');
+    buttons.forEach(btn => {
+      const route = btn.getAttribute('data-mobile-route');
+      const isActive = route === state.route;
+      btn.setAttribute('aria-current', isActive ? 'page' : 'false');
+      btn.style.color = isActive ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)';
+      btn.style.fontWeight = isActive ? '700' : '500';
+    });
   }
 
   private switchView(state: RouteState): void {
@@ -272,3 +421,4 @@ export class AppShell {
     nextView.mount(viewport, state.params);
   }
 }
+

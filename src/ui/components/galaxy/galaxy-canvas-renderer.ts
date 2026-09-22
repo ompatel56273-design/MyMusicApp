@@ -13,12 +13,25 @@ export interface GalaxyRendererCallbacks {
   onCameraChange?: (camera: ViewportCamera) => void;
 }
 
+interface CosmicStar {
+  x: number;
+  y: number;
+  size: number;
+  opacity: number;
+  color: string;
+}
+
 /**
- * High-Performance Pure HTML5 Canvas 2D Audio Galaxy Renderer.
+ * High-Performance Pure HTML5 Canvas 2D Audio Galaxy Renderer (Template 10).
  * Implements:
- * - Dynamic Level-of-Detail (LOD 1: Overview, LOD 2: Exploration, LOD 3: Detail, LOD 4: Focus)
- * - Viewport Spatial Culling
- * - Pointer Panning & Smooth / Immediate Zooming
+ * - Cosmic Starfield & Multi-layer Nebula Background
+ * - Glowing Central Core ("My Music" cosmic anchor)
+ * - Concentric Orbital Trajectory Rings
+ * - Spherical 3D Planetary Gradients & Atmospheric Glows
+ * - Saturn-style Planetary Rings for Major Nodes
+ * - Dynamic Level-of-Detail (LOD 1: Overview to LOD 4: Deep Focus)
+ * - Spatial Culling & Viewport Clipping
+ * - Pointer Drag Panning, Smooth Camera Interpolation & Mouse Wheel Zooming
  * - Node Selection & Neighborhood Edge Highlighting
  * - High-DPI devicePixelRatio Support
  */
@@ -33,8 +46,11 @@ export class GalaxyCanvasRenderer {
   private playingEntityId: string | null = null;
   private reducedMotion = false;
 
-  private camera: ViewportCamera = { x: 0, y: 0, zoom: 0.8 };
-  private targetCamera: ViewportCamera = { x: 0, y: 0, zoom: 0.8 };
+  private camera: ViewportCamera = { x: 0, y: 0, zoom: 0.75 };
+  private targetCamera: ViewportCamera = { x: 0, y: 0, zoom: 0.75 };
+
+  // Static cosmic starfield in world space for parallax/depth
+  private stars: CosmicStar[] = [];
 
   // Pointer drag state
   private isDragging = false;
@@ -48,9 +64,27 @@ export class GalaxyCanvasRenderer {
   // Animation frame loop
   private animationHandle: number | null = null;
   private isNeedsRedraw = true;
+  private pulsePhase = 0;
 
   constructor(callbacks?: GalaxyRendererCallbacks) {
     if (callbacks) this.callbacks = callbacks;
+    this.initCosmicStars();
+  }
+
+  private initCosmicStars(): void {
+    this.stars = [];
+    const starColors = ['#ffffff', '#a855f7', '#38bdf8', '#c084fc', '#e0e7ff'];
+    for (let i = 0; i < 180; i++) {
+      const radius = 200 + Math.random() * 2200;
+      const angle = Math.random() * Math.PI * 2;
+      this.stars.push({
+        x: Math.cos(angle) * radius,
+        y: Math.sin(angle) * radius,
+        size: Math.random() < 0.15 ? 2.2 : Math.random() * 1.5 + 0.5,
+        opacity: 0.2 + Math.random() * 0.7,
+        color: starColors[Math.floor(Math.random() * starColors.length)] || '#ffffff'
+      });
+    }
   }
 
   public attachCanvas(canvas: HTMLCanvasElement): void {
@@ -87,7 +121,7 @@ export class GalaxyCanvasRenderer {
     if (nodeId && this.graph) {
       const node = this.graph.nodes.find(n => n.id === nodeId);
       if (node) {
-        this.centerOnCoordinates(node.x, node.y, 1.8);
+        this.centerOnCoordinates(node.x, node.y, 1.6);
       }
     }
     this.requestRedraw();
@@ -99,7 +133,7 @@ export class GalaxyCanvasRenderer {
   }
 
   public resetCamera(): void {
-    this.centerOnCoordinates(0, 0, 0.8);
+    this.centerOnCoordinates(0, 0, 0.75);
   }
 
   public zoomIn(): void {
@@ -179,6 +213,7 @@ export class GalaxyCanvasRenderer {
 
   private renderLoop = (): void => {
     this.animationHandle = null;
+    this.pulsePhase = (this.pulsePhase + 0.03) % (Math.PI * 2);
 
     // Smooth camera interpolation towards target
     if (!this.reducedMotion) {
@@ -204,13 +239,13 @@ export class GalaxyCanvasRenderer {
       this.isNeedsRedraw = false;
     }
 
-    // Keep animating if camera has not settled
+    // Keep animating if camera moving or playing/selected node pulsing
     const isCameraMoving =
       Math.abs(this.targetCamera.x - this.camera.x) > 0.5 ||
       Math.abs(this.targetCamera.y - this.camera.y) > 0.5 ||
       Math.abs(this.targetCamera.zoom - this.camera.zoom) > 0.005;
 
-    if (isCameraMoving && typeof requestAnimationFrame !== 'undefined') {
+    if ((isCameraMoving || this.playingEntityId || this.selectedNodeId) && typeof requestAnimationFrame !== 'undefined') {
       this.animationHandle = requestAnimationFrame(this.renderLoop);
     }
   };
@@ -223,24 +258,122 @@ export class GalaxyCanvasRenderer {
     if (width <= 0 || height <= 0) return;
 
     const ctx = this.ctx;
-
-    // 1. Draw Space Background & Grid
-    ctx.fillStyle = '#08080c';
-    ctx.fillRect(0, 0, width, height);
-
-    // Compute active Viewport Level of Detail (LOD)
-    const currentLod = this.computeLOD(this.camera.zoom);
-
-    // Coordinate transformation setup (Center origin + camera offset + scale)
+    const zoom = this.camera.zoom;
     const centerX = width / 2;
     const centerY = height / 2;
-    const zoom = this.camera.zoom;
 
     const toScreenX = (wx: number) => centerX + (wx - this.camera.x) * zoom;
     const toScreenY = (wy: number) => centerY + (wy - this.camera.y) * zoom;
 
-    // Viewport bounding box in world coordinates (Spatial Culling)
-    const margin = 100 / zoom;
+    // 1. Deep Space Background
+    ctx.fillStyle = '#06060a';
+    ctx.fillRect(0, 0, width, height);
+
+    // 2. Cosmic Nebula Gradients
+    const originScreenX = toScreenX(0);
+    const originScreenY = toScreenY(0);
+
+    // Large ambient purple / blue nebula at origin
+    try {
+      const nebulaRadius = Math.max(120, 1100 * zoom);
+      const nebulaGrad = ctx.createRadialGradient(
+        originScreenX,
+        originScreenY,
+        10,
+        originScreenX,
+        originScreenY,
+        nebulaRadius
+      );
+      nebulaGrad.addColorStop(0, 'rgba(124, 58, 237, 0.28)');
+      nebulaGrad.addColorStop(0.35, 'rgba(56, 189, 248, 0.12)');
+      nebulaGrad.addColorStop(0.7, 'rgba(139, 92, 246, 0.04)');
+      nebulaGrad.addColorStop(1, 'rgba(6, 6, 10, 0)');
+
+      ctx.fillStyle = nebulaGrad;
+      ctx.fillRect(0, 0, width, height);
+    } catch {
+      // Fallback
+    }
+
+    // 3. Cosmic Background Stars
+    for (const star of this.stars) {
+      const sx = toScreenX(star.x);
+      const sy = toScreenY(star.y);
+      if (sx >= -10 && sx <= width + 10 && sy >= -10 && sy <= height + 10) {
+        ctx.beginPath();
+        ctx.arc(sx, sy, star.size * Math.min(1.2, Math.max(0.5, zoom)), 0, Math.PI * 2);
+        ctx.fillStyle = star.color;
+        ctx.globalAlpha = star.opacity;
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1.0;
+
+    // 4. Concentric Orbital Trajectory Rings
+    const orbitRadii = [250, 400, 700, 1100, 1250];
+    ctx.save();
+    ctx.lineWidth = 1;
+    for (let i = 0; i < orbitRadii.length; i++) {
+      const r = orbitRadii[i]! * zoom;
+      ctx.beginPath();
+      ctx.arc(originScreenX, originScreenY, r, 0, Math.PI * 2);
+      ctx.strokeStyle = i === 2 ? 'rgba(168, 85, 247, 0.22)' : 'rgba(255, 255, 255, 0.06)';
+      if (typeof ctx.setLineDash === 'function') {
+        ctx.setLineDash([4, 6]);
+      }
+      ctx.stroke();
+    }
+    if (typeof ctx.setLineDash === 'function') {
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+
+    // 5. Central Glowing Core ("My Music" Cosmic Anchor)
+    const coreRadius = Math.max(16, 44 * zoom);
+    try {
+      const coreGrad = ctx.createRadialGradient(
+        originScreenX,
+        originScreenY,
+        coreRadius * 0.2,
+        originScreenX,
+        originScreenY,
+        coreRadius * 2.2
+      );
+      coreGrad.addColorStop(0, '#ffffff');
+      coreGrad.addColorStop(0.2, '#c084fc');
+      coreGrad.addColorStop(0.5, 'rgba(124, 58, 237, 0.55)');
+      coreGrad.addColorStop(1, 'rgba(124, 58, 237, 0)');
+
+      ctx.beginPath();
+      ctx.arc(originScreenX, originScreenY, coreRadius * 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = coreGrad;
+      ctx.fill();
+    } catch {
+      // Fallback
+    }
+
+    ctx.beginPath();
+    ctx.arc(originScreenX, originScreenY, coreRadius, 0, Math.PI * 2);
+    ctx.fillStyle = '#7c3aed';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#e0e7ff';
+    ctx.stroke();
+
+    // Center Core Text
+    if (zoom >= 0.35) {
+      ctx.font = `700 ${Math.max(10, Math.min(15, 13 * zoom))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('My Music', originScreenX, originScreenY);
+    }
+
+    // Compute active Viewport Level of Detail (LOD)
+    const currentLod = this.computeLOD(zoom);
+
+    // Spatial culling bounds in world space
+    const margin = 120 / zoom;
     const worldMinX = this.camera.x - centerX / zoom - margin;
     const worldMaxX = this.camera.x + centerX / zoom + margin;
     const worldMinY = this.camera.y - centerY / zoom - margin;
@@ -267,8 +400,7 @@ export class GalaxyCanvasRenderer {
       }
     }
 
-    // 2. Draw Edges
-    ctx.lineWidth = 1;
+    // 6. Draw Edges with subtle glowing connections
     for (const edge of this.graph.edges) {
       const source = visibleNodeMap.get(edge.sourceId);
       const target = visibleNodeMap.get(edge.targetId);
@@ -285,8 +417,8 @@ export class GalaxyCanvasRenderer {
         source.id === this.focusedNodeId ||
         target.id === this.focusedNodeId;
 
-      ctx.strokeStyle = isHighlighted ? 'rgba(255, 107, 0, 0.7)' : edge.color;
-      ctx.lineWidth = isHighlighted ? 2 : 0.8;
+      ctx.strokeStyle = isHighlighted ? 'rgba(236, 72, 153, 0.85)' : edge.color;
+      ctx.lineWidth = isHighlighted ? 2.2 : 0.9;
 
       ctx.beginPath();
       ctx.moveTo(sx, sy);
@@ -294,11 +426,11 @@ export class GalaxyCanvasRenderer {
       ctx.stroke();
     }
 
-    // 3. Draw Nodes
+    // 7. Draw Nodes with 3D Spherical Gradients & Saturn-like Rings
     for (const node of visibleNodes) {
       const sx = toScreenX(node.x);
       const sy = toScreenY(node.y);
-      const screenRadius = Math.max(3, node.radius * zoom);
+      const screenRadius = Math.max(4, node.radius * zoom);
 
       const isSelected = node.id === this.selectedNodeId;
       const isFocused = node.id === this.focusedNodeId;
@@ -306,46 +438,99 @@ export class GalaxyCanvasRenderer {
 
       // Glow effect for selected / playing node
       if (isSelected || isPlaying || isFocused) {
+        const pulse = Math.sin(this.pulsePhase) * 3;
         ctx.beginPath();
-        ctx.arc(sx, sy, screenRadius + 6, 0, Math.PI * 2);
-        ctx.fillStyle = isPlaying ? 'rgba(16, 185, 129, 0.35)' : 'rgba(255, 107, 0, 0.35)';
+        ctx.arc(sx, sy, screenRadius + 8 + pulse, 0, Math.PI * 2);
+        ctx.fillStyle = isPlaying ? 'rgba(16, 185, 129, 0.4)' : 'rgba(236, 72, 153, 0.4)';
         ctx.fill();
       }
 
-      // Main Node Disc
-      ctx.beginPath();
-      ctx.arc(sx, sy, screenRadius, 0, Math.PI * 2);
-      ctx.fillStyle = isPlaying ? '#10b981' : node.color;
-      ctx.fill();
+      // Outer atmospheric glow
+      try {
+        const atmoGrad = ctx.createRadialGradient(sx, sy, screenRadius * 0.7, sx, sy, screenRadius * 1.8);
+        atmoGrad.addColorStop(0, isPlaying ? 'rgba(16, 185, 129, 0.6)' : `${node.color}99`);
+        atmoGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.beginPath();
+        ctx.arc(sx, sy, screenRadius * 1.8, 0, Math.PI * 2);
+        ctx.fillStyle = atmoGrad;
+        ctx.fill();
+      } catch {
+        // Fallback
+      }
 
-      // Outline
+      // Saturn-like concentric planetary ring for genre and large artist nodes
+      if ((node.type === 'genre' || (node.type === 'artist' && screenRadius >= 18)) && zoom >= 0.4 && typeof ctx.ellipse === 'function') {
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(sx, sy, screenRadius * 1.9, screenRadius * 0.65, -Math.PI / 8, 0, Math.PI * 2);
+        ctx.strokeStyle = isPlaying ? 'rgba(16, 185, 129, 0.7)' : `${node.color}aa`;
+        ctx.lineWidth = Math.max(1.5, screenRadius * 0.12);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 3D Spherical Sphere Fill
+      try {
+        const sphereGrad = ctx.createRadialGradient(
+          sx - screenRadius * 0.35,
+          sy - screenRadius * 0.35,
+          screenRadius * 0.1,
+          sx,
+          sy,
+          screenRadius
+        );
+        sphereGrad.addColorStop(0, '#ffffff');
+        sphereGrad.addColorStop(0.3, isPlaying ? '#34d399' : node.color);
+        sphereGrad.addColorStop(1, isPlaying ? '#065f46' : '#111827');
+
+        ctx.beginPath();
+        ctx.arc(sx, sy, screenRadius, 0, Math.PI * 2);
+        ctx.fillStyle = sphereGrad;
+        ctx.fill();
+      } catch {
+        ctx.beginPath();
+        ctx.arc(sx, sy, screenRadius, 0, Math.PI * 2);
+        ctx.fillStyle = isPlaying ? '#10b981' : node.color;
+        ctx.fill();
+      }
+
+      // Rim outline
       ctx.lineWidth = isSelected ? 2.5 : 1;
-      ctx.strokeStyle = isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.4)';
+      ctx.strokeStyle = isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.45)';
       ctx.stroke();
 
-      // Node Labels (Render only when zoom level allows or node is selected/focused)
-      if (zoom >= 0.6 || isSelected || isFocused || node.type === 'genre' || node.type === 'artist') {
-        ctx.font = `${Math.max(10, Math.min(14, 11 * zoom))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-        ctx.fillStyle = isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.85)';
+      // Node Labels (Render name + song count below the planet matching Template 10)
+      if (zoom >= 0.55 || isSelected || isFocused || node.type === 'genre' || (node.type === 'artist' && zoom >= 0.4)) {
+        const fontSize = Math.max(10, Math.min(14, 11 * zoom));
+        ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+        ctx.fillStyle = isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.95)';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.fillText(node.label, sx, sy + screenRadius + 4);
+
+        // Subtitle (Track count)
+        const trackCount = node.metadata.trackCount;
+        if (trackCount !== undefined && (zoom >= 0.75 || isSelected || node.type === 'genre')) {
+          ctx.font = `400 ${Math.max(9, fontSize - 2)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+          ctx.fillText(`${trackCount} songs`, sx, sy + screenRadius + fontSize + 6);
+        }
       }
     }
   }
 
   private drawEmptyState(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.font = '15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Audio Galaxy is empty. Scan your music library to build the universe.', width / 2, height / 2);
+    ctx.fillText('Audio Galaxy is empty. Scan your music library to populate your galaxy.', width / 2, height / 2);
   }
 
   private computeLOD(zoom: number): number {
     if (this.focusedNodeId) return 4;
-    if (zoom < 0.5) return 1;
-    if (zoom < 1.2) return 2;
+    if (zoom < 0.45) return 1;
+    if (zoom < 1.1) return 2;
     return 3;
   }
 
@@ -366,7 +551,7 @@ export class GalaxyCanvasRenderer {
       const dx = worldX - node.x;
       const dy = worldY - node.y;
       const distSq = dx * dx + dy * dy;
-      const hitRadius = Math.max(node.radius, 12 / zoom);
+      const hitRadius = Math.max(node.radius, 14 / zoom);
 
       if (distSq <= hitRadius * hitRadius) {
         return node;
@@ -462,3 +647,4 @@ export class GalaxyCanvasRenderer {
     this.setZoomTarget(this.camera.zoom * zoomFactor);
   };
 }
+

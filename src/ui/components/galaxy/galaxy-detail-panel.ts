@@ -65,90 +65,104 @@ export class GalaxyDetailPanel {
         right: var(--space-4);
         width: 320px;
         max-width: calc(100vw - 32px);
-        background: rgba(18, 18, 26, 0.88);
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: var(--radius-xl);
-        padding: var(--space-5);
-        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-        z-index: 10;
+        background: rgba(18, 18, 26, 0.92);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
+        border-radius: var(--radius-2xl, 24px);
+        padding: var(--space-5, 20px);
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(124, 58, 237, 0.15);
+        z-index: 20;
         display: flex;
         flex-direction: column;
-        gap: var(--space-4);
+        gap: var(--space-4, 16px);
+        animation: fadeIn 0.2s ease-out;
       ">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-          <div>
+          <div style="min-width: 0; flex: 1;">
             <span style="
               display: inline-block;
               font-size: 11px;
               font-weight: 700;
               text-transform: uppercase;
-              letter-spacing: 0.06em;
+              letter-spacing: 0.08em;
               color: ${node.color};
-              margin-bottom: var(--space-1);
-            ">${typeBadge}</span>
-            <h3 style="font-size: 18px; font-weight: 700; margin: 0; line-height: 1.3; word-break: break-word;">
+              margin-bottom: var(--space-1, 4px);
+            ">${typeBadge} PLANET</span>
+            <h3 style="font-size: 18px; font-weight: 700; margin: 0; color: var(--color-text-primary, #ffffff); line-height: 1.3; word-break: break-word;">
               ${this.escapeHtml(title)}
             </h3>
-            ${subtext ? `<p style="font-size: 13px; color: var(--color-text-secondary); margin: var(--space-1) 0 0 0;">${this.escapeHtml(subtext)}</p>` : ''}
+            ${subtext ? `<p style="font-size: 13px; color: var(--color-text-secondary, #94a3b8); margin: var(--space-1, 4px) 0 0 0;">${this.escapeHtml(subtext)}</p>` : ''}
           </div>
           <button id="galaxy-detail-close" aria-label="Close Inspector" style="
             background: rgba(255, 255, 255, 0.08);
-            border: none;
-            color: var(--color-text-secondary);
-            width: 28px;
-            height: 28px;
-            border-radius: var(--radius-full);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--color-text-secondary, #94a3b8);
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-full, 9999px);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 14px;
+            flex-shrink: 0;
+            transition: all 0.15s ease;
           ">✕</button>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: var(--space-2); font-size: 13px; color: var(--color-text-muted);">
-          ${meta.albumTitle ? `<div><span style="color: var(--color-text-secondary);">Album:</span> ${this.escapeHtml(meta.albumTitle)}</div>` : ''}
-          ${meta.year ? `<div><span style="color: var(--color-text-secondary);">Year:</span> ${meta.year}</div>` : ''}
-          ${meta.albumCount !== undefined ? `<div><span style="color: var(--color-text-secondary);">Albums:</span> ${meta.albumCount}</div>` : ''}
-          ${meta.trackCount !== undefined && node.type !== 'track' ? `<div><span style="color: var(--color-text-secondary);">Total Tracks:</span> ${meta.trackCount}</div>` : ''}
-          ${meta.durationMs ? `<div><span style="color: var(--color-text-secondary);">Duration:</span> ${this.formatDuration(meta.durationMs)}</div>` : ''}
+        <div style="display: flex; flex-direction: column; gap: var(--space-2, 8px); font-size: 13px; color: var(--color-text-muted, #64748b); background: rgba(0, 0, 0, 0.25); padding: 12px; border-radius: var(--radius-lg, 12px); border: 1px solid rgba(255, 255, 255, 0.05);">
+          ${meta.albumTitle ? `<div><span style="color: var(--color-text-secondary, #94a3b8); font-weight: 500;">Album:</span> ${this.escapeHtml(meta.albumTitle)}</div>` : ''}
+          ${meta.artistName && node.type !== 'artist' ? `<div><span style="color: var(--color-text-secondary, #94a3b8); font-weight: 500;">Artist:</span> ${this.escapeHtml(meta.artistName)}</div>` : ''}
+          ${meta.year ? `<div><span style="color: var(--color-text-secondary, #94a3b8); font-weight: 500;">Year:</span> ${meta.year}</div>` : ''}
+          ${meta.albumCount !== undefined ? `<div><span style="color: var(--color-text-secondary, #94a3b8); font-weight: 500;">Albums:</span> ${meta.albumCount}</div>` : ''}
+          ${meta.trackCount !== undefined && node.type !== 'track' ? `<div><span style="color: var(--color-text-secondary, #94a3b8); font-weight: 500;">Total Songs:</span> ${meta.trackCount}</div>` : ''}
+          ${meta.durationMs ? `<div><span style="color: var(--color-text-secondary, #94a3b8); font-weight: 500;">Duration:</span> ${this.formatDuration(meta.durationMs)}</div>` : ''}
         </div>
 
         <!-- Action Buttons -->
-        <div style="display: flex; gap: var(--space-2); margin-top: var(--space-1);">
+        <div style="display: flex; gap: var(--space-2, 8px); margin-top: var(--space-1, 4px);">
           <button id="galaxy-detail-play" style="
             flex: 1;
-            padding: var(--space-2) var(--space-3);
-            background: var(--color-accent-primary, #ff6b00);
+            padding: 10px 14px;
+            background: linear-gradient(135deg, var(--accent-purple, #7c3aed), #9333ea);
             color: #ffffff;
             border: none;
-            border-radius: var(--radius-md);
+            border-radius: var(--radius-lg, 12px);
             font-weight: 600;
             font-size: 13px;
             cursor: pointer;
-          ">▶ Play</button>
+            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+          "><span>▶</span> Play Planet</button>
 
           <button id="galaxy-detail-focus" style="
-            padding: var(--space-2) var(--space-3);
-            background: rgba(255, 255, 255, 0.1);
-            color: var(--color-text-primary);
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--color-text-primary, #ffffff);
             border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: var(--radius-md);
-            font-weight: 500;
+            border-radius: var(--radius-lg, 12px);
+            font-weight: 600;
             font-size: 13px;
             cursor: pointer;
-          ">Focus</button>
+            transition: all 0.15s ease;
+          ">Center</button>
 
           ${node.type === 'album' || node.type === 'artist' ? `
             <button id="galaxy-detail-open" style="
-              padding: var(--space-2) var(--space-3);
-              background: rgba(255, 255, 255, 0.06);
-              color: var(--color-text-secondary);
+              padding: 10px 14px;
+              background: rgba(255, 255, 255, 0.05);
+              color: var(--color-text-secondary, #94a3b8);
               border: 1px solid rgba(255, 255, 255, 0.1);
-              border-radius: var(--radius-md);
+              border-radius: var(--radius-lg, 12px);
               font-size: 13px;
+              font-weight: 600;
               cursor: pointer;
+              transition: all 0.15s ease;
             ">Library</button>
           ` : ''}
         </div>

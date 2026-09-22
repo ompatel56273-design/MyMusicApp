@@ -122,9 +122,9 @@ export class PlayerControlsComponent {
     this.container.innerHTML = `
       <div class="player-controls-container" style="display: flex; flex-direction: column; gap: var(--space-4); width: 100%;">
         <!-- Scrubber Progress Bar -->
-        <div style="display: flex; flex-direction: column; gap: var(--space-1);">
+        <div style="display: flex; flex-direction: column; gap: var(--space-1); width: 100%;">
           <div style="display: flex; align-items: center; gap: var(--space-3); width: 100%;">
-            <span id="np-time-current" style="font-size: 12px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 40px; text-align: right;">
+            <span id="np-time-current" style="font-size: 12px; font-weight: 600; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 44px; text-align: right;">
               ${this.formatTime(this.currentPositionMs)}
             </span>
             <input
@@ -138,76 +138,76 @@ export class PlayerControlsComponent {
               aria-valuenow="${this.currentPositionMs}"
               aria-valuemin="0"
               aria-valuemax="${this.currentDurationMs || 100}"
-              style="flex: 1; height: 6px; accent-color: var(--color-accent-primary); cursor: pointer;"
+              style="flex: 1; height: 6px; accent-color: var(--color-accent-primary); cursor: pointer; border-radius: var(--radius-full);"
             />
-            <span id="np-time-duration" style="font-size: 12px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 40px;">
+            <span id="np-time-duration" style="font-size: 12px; font-weight: 600; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 44px;">
               ${this.formatTime(this.currentDurationMs)}
             </span>
           </div>
         </div>
 
         <!-- Primary Playback Controls -->
-        <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-6);">
+        <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-5);">
           <button
             id="np-shuffle-btn"
             aria-label="Toggle Shuffle"
-            style="background: transparent; border: none; font-size: 18px; cursor: pointer; color: ${shuffleColor}; transition: transform 0.1s;"
+            style="min-width: 44px; min-height: 44px; background: transparent; border: none; font-size: 18px; cursor: pointer; color: ${shuffleColor}; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: transform 0.1s, color 0.15s;"
           >🔀</button>
 
           <button
             id="np-prev-btn"
             aria-label="Previous Track"
-            style="background: transparent; border: none; color: var(--color-text-primary); font-size: 22px; cursor: pointer; transition: transform 0.1s;"
+            style="min-width: 44px; min-height: 44px; background: transparent; border: none; color: var(--color-text-primary); font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: transform 0.1s;"
           >⏮</button>
 
           <button
             id="np-play-btn"
             aria-label="${this.isPlaying ? 'Pause' : 'Play'}"
             style="
-              width: 56px;
-              height: 56px;
+              width: 58px;
+              height: 58px;
               border-radius: var(--radius-full);
               background: var(--color-accent-gradient);
               border: none;
               color: #ffffff;
-              font-size: 22px;
+              font-size: 24px;
               cursor: pointer;
               display: flex;
               align-items: center;
               justify-content: center;
-              box-shadow: var(--shadow-glow);
-              transition: transform 0.15s ease;
+              box-shadow: var(--shadow-glow-purple);
+              transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
             "
           >${playIcon}</button>
 
           <button
             id="np-next-btn"
             aria-label="Next Track"
-            style="background: transparent; border: none; color: var(--color-text-primary); font-size: 22px; cursor: pointer; transition: transform 0.1s;"
+            style="min-width: 44px; min-height: 44px; background: transparent; border: none; color: var(--color-text-primary); font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: transform 0.1s;"
           >⏭</button>
 
           <button
             id="np-repeat-btn"
             aria-label="Cycle Repeat Mode"
-            style="background: transparent; border: none; font-size: 18px; cursor: pointer; color: ${repeatColor}; transition: transform 0.1s;"
+            style="min-width: 44px; min-height: 44px; background: transparent; border: none; font-size: 18px; cursor: pointer; color: ${repeatColor}; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: transform 0.1s, color 0.15s;"
           >${repeatIcon}</button>
         </div>
 
         <!-- Secondary Controls: Volume & Favorite -->
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-2); padding: 0 var(--space-4);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-1); padding: 0 var(--space-2); width: 100%;">
           <button
             id="np-fav-btn"
             aria-label="${this.isFavorite ? 'Remove from favorites' : 'Add to favorites'}"
-            style="background: transparent; border: none; font-size: 20px; cursor: pointer; color: ${favColor};"
+            style="min-width: 44px; min-height: 44px; background: transparent; border: none; font-size: 22px; cursor: pointer; color: ${favColor}; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: transform 0.1s, color 0.15s;"
           >
             ${this.isFavorite ? '★' : '☆'}
           </button>
 
-          <div style="display: flex; align-items: center; gap: var(--space-2);">
+          <div style="display: flex; align-items: center; gap: var(--space-2); background: var(--glass-surface); padding: 4px 12px; border-radius: var(--radius-full); border: 1px solid var(--glass-border);">
             <button
               id="np-mute-btn"
               aria-label="Toggle Mute"
-              style="background: transparent; border: none; font-size: 16px; cursor: pointer; color: var(--color-text-secondary);"
+              style="min-width: 32px; min-height: 32px; background: transparent; border: none; font-size: 16px; cursor: pointer; color: var(--color-text-secondary); display: flex; align-items: center; justify-content: center;"
             >
               ${this.playbackManager.isMuted ? '🔇' : '🔊'}
             </button>

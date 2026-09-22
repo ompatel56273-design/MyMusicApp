@@ -107,11 +107,8 @@ export class NowPlayingView implements IView {
     if (!this.container) return;
 
     this.container.innerHTML = `
-      <section
-        class="now-playing-fullscreen"
-        role="region"
-        aria-label="Now Playing Fullscreen View"
-        style="
+      <style>
+        .now-playing-fullscreen {
           display: flex;
           flex-direction: column;
           height: 100%;
@@ -120,82 +117,222 @@ export class NowPlayingView implements IView {
           padding: var(--space-4) var(--space-6);
           box-sizing: border-box;
           overflow-y: auto;
-        "
-      >
-        <!-- Top Navigation Header -->
-        <header
-          style="
+          position: relative;
+        }
+
+        .np-ambient-glow {
+          position: absolute;
+          top: 10%;
+          left: 20%;
+          width: 400px;
+          height: 400px;
+          background: radial-gradient(circle, rgba(168, 85, 247, 0.15) 0%, rgba(6, 182, 212, 0.08) 50%, transparent 70%);
+          filter: blur(60px);
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        .np-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: var(--space-4);
+          position: relative;
+          z-index: 1;
+        }
+
+        .np-header-btn {
+          background: var(--glass-surface);
+          border: 1px solid var(--glass-border);
+          color: var(--color-text-primary);
+          min-height: 44px;
+          padding: 8px 18px;
+          border-radius: var(--radius-full);
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          transition: all var(--duration-fast) var(--ease-smooth);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+        }
+
+        .np-header-btn:hover {
+          background: var(--glass-surface-hover);
+          border-color: var(--glass-border-hover);
+          transform: translateY(-1px);
+        }
+
+        .np-header-btn:focus-visible {
+          outline: 2px solid var(--color-accent-primary);
+          outline-offset: 2px;
+        }
+
+        .np-header-title {
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          color: var(--color-text-muted);
+        }
+
+        .np-layout-split {
+          display: grid;
+          grid-template-columns: minmax(320px, 460px) 1fr;
+          gap: var(--space-8);
+          align-items: start;
+          flex: 1;
+          min-height: 0;
+          position: relative;
+          z-index: 1;
+        }
+
+        .np-hero-section {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          width: 100%;
+          background: var(--glass-surface);
+          border: 1px solid var(--glass-border);
+          border-radius: var(--radius-2xl);
+          padding: var(--space-6);
+          box-sizing: border-box;
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .np-meta-container {
+          text-align: center;
+          margin-bottom: var(--space-4);
+          width: 100%;
+        }
+
+        .np-panel-section {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          min-height: 480px;
+          width: 100%;
+          gap: var(--space-3);
+        }
+
+        .np-tab-bar {
+          display: flex;
+          gap: var(--space-2);
+          background: var(--glass-surface);
+          padding: 5px;
+          border-radius: var(--radius-xl);
+          border: 1px solid var(--glass-border);
+          align-self: flex-start;
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+        }
+
+        .np-tab-btn {
+          min-height: 38px;
+          padding: 8px 18px;
+          border-radius: var(--radius-lg);
+          border: none;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all var(--duration-fast) var(--ease-smooth);
+        }
+
+        .np-tab-btn:focus-visible {
+          outline: 2px solid var(--color-accent-primary);
+          outline-offset: 2px;
+        }
+
+        /* Responsive Tablet Breakpoint (768px - 1199px) */
+        @media (max-width: 1199px) and (min-width: 768px) {
+          .np-layout-split {
+            grid-template-columns: minmax(300px, 380px) 1fr;
+            gap: var(--space-6);
+          }
+          .now-playing-fullscreen {
+            padding: var(--space-4);
+          }
+          .np-hero-section {
+            padding: var(--space-5);
+          }
+        }
+
+        /* Responsive Mobile Breakpoint (<768px) */
+        @media (max-width: 767px) {
+          .now-playing-fullscreen {
+            padding: var(--space-3);
+            max-width: 100%;
+          }
+          .np-layout-split {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: var(--space-4);
-          "
-        >
+            flex-direction: column;
+            gap: var(--space-6);
+          }
+          .np-hero-section {
+            padding: var(--space-4);
+            border-radius: var(--radius-xl);
+          }
+          .np-tab-bar {
+            align-self: stretch;
+            justify-content: space-around;
+            overflow-x: auto;
+          }
+          .np-tab-btn {
+            flex: 1;
+            padding: 8px 10px;
+            font-size: 12px;
+            text-align: center;
+          }
+          .np-panel-section {
+            min-height: 380px;
+          }
+        }
+      </style>
+
+      <section
+        class="now-playing-fullscreen"
+        role="region"
+        aria-label="Now Playing Fullscreen View"
+      >
+        <div class="np-ambient-glow" aria-hidden="true"></div>
+
+        <!-- Top Navigation Header -->
+        <header class="np-header">
           <button
             id="np-back-btn"
+            class="np-header-btn"
             aria-label="Back to Library"
-            style="
-              background: var(--color-bg-surface-elevated);
-              border: 1px solid var(--glass-border);
-              color: var(--color-text-primary);
-              padding: 6px 14px;
-              border-radius: var(--radius-full);
-              font-size: 13px;
-              font-weight: 500;
-              cursor: pointer;
-              display: flex;
-              align-items: center;
-              gap: var(--space-2);
-            "
           >
-            <span>◀</span>
+            <span aria-hidden="true">◀</span>
             <span>Back</span>
           </button>
 
-          <span style="font-size: 14px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-text-muted);">
+          <span class="np-header-title">
             Now Playing
           </span>
 
           <button
             id="np-eq-shortcut-btn"
+            class="np-header-btn"
             aria-label="Open Equalizer & Audio Settings"
-            style="
-              background: var(--color-bg-surface-elevated);
-              border: 1px solid var(--glass-border);
-              color: var(--color-text-primary);
-              padding: 6px 14px;
-              border-radius: var(--radius-full);
-              font-size: 13px;
-              font-weight: 500;
-              cursor: pointer;
-              display: flex;
-              align-items: center;
-              gap: var(--space-2);
-            "
           >
-            <span>🎚</span>
+            <span aria-hidden="true">🎚</span>
             <span>EQ</span>
           </button>
         </header>
 
         <!-- Main 2-Column Split -->
-        <div
-          class="np-layout-split"
-          style="
-            display: grid;
-            grid-template-columns: minmax(320px, 460px) 1fr;
-            gap: var(--space-8);
-            align-items: start;
-            flex: 1;
-            min-height: 0;
-          "
-        >
+        <div class="np-layout-split">
           <!-- Left: Hero Player Surface -->
-          <div style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+          <div class="np-hero-section">
             <div id="np-artwork-slot" style="width: 100%;"></div>
 
             <!-- Track Metadata Header -->
-            <div style="text-align: center; margin-bottom: var(--space-4); width: 100%;">
+            <div class="np-meta-container">
               <h2
                 id="np-track-title"
                 style="
@@ -235,54 +372,50 @@ export class NowPlayingView implements IView {
             <div id="np-controls-slot" style="width: 100%;"></div>
           </div>
 
-          <!-- Right: Modular Tabbed Panel (Queue / Lyrics / Audio Info) -->
-          <div style="display: flex; flex-direction: column; height: 100%; min-height: 480px; width: 100%; gap: var(--space-3);">
-            
+          <!-- Right: Modular Tabbed Panel (Queue / Lyrics / Audio Info / Visualizer) -->
+          <div class="np-panel-section">
             <!-- Right Tab Switcher -->
-            <div
-              class="np-tab-bar"
-              style="
-                display: flex;
-                gap: var(--space-2);
-                background: rgba(255, 255, 255, 0.04);
-                padding: 4px;
-                border-radius: var(--radius-lg);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                align-self: flex-start;
-              "
-            >
+            <div class="np-tab-bar" role="tablist" aria-label="Now Playing View Modes">
               <button
                 class="np-tab-btn np-tab-queue"
                 data-tab="queue"
-                style="padding: 6px 16px; border-radius: var(--radius-md); border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;"
+                role="tab"
+                aria-selected="true"
+                aria-controls="np-panel-content-slot"
               >
                 Queue
               </button>
               <button
                 class="np-tab-btn np-tab-lyrics"
                 data-tab="lyrics"
-                style="padding: 6px 16px; border-radius: var(--radius-md); border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;"
+                role="tab"
+                aria-selected="false"
+                aria-controls="np-panel-content-slot"
               >
                 Lyrics
               </button>
               <button
                 class="np-tab-btn np-tab-info"
                 data-tab="info"
-                style="padding: 6px 16px; border-radius: var(--radius-md); border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;"
+                role="tab"
+                aria-selected="false"
+                aria-controls="np-panel-content-slot"
               >
                 Audio Info
               </button>
               <button
                 class="np-tab-btn np-tab-visualizer"
                 data-tab="visualizer"
-                style="padding: 6px 16px; border-radius: var(--radius-md); border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;"
+                role="tab"
+                aria-selected="false"
+                aria-controls="np-panel-content-slot"
               >
                 Visualizer
               </button>
             </div>
 
             <!-- Panel Content Slot -->
-            <div id="np-panel-content-slot" style="flex: 1; min-height: 0; position: relative;"></div>
+            <div id="np-panel-content-slot" role="tabpanel" style="flex: 1; min-height: 0; position: relative;"></div>
           </div>
         </div>
       </section>
@@ -340,13 +473,15 @@ export class NowPlayingView implements IView {
 
     tabButtons.forEach(btn => {
       const tab = btn.getAttribute('data-tab') as NowPlayingTab;
-      if (tab === this.activeTab) {
-        btn.style.background = 'var(--color-accent-primary, #ff6b00)';
+      const isSelected = tab === this.activeTab;
+      btn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      if (isSelected) {
+        btn.style.background = 'var(--color-accent-gradient)';
         btn.style.color = '#ffffff';
-        btn.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
+        btn.style.boxShadow = 'var(--shadow-glow-purple)';
       } else {
         btn.style.background = 'transparent';
-        btn.style.color = 'var(--color-text-secondary, #aaaaaa)';
+        btn.style.color = 'var(--color-text-secondary)';
         btn.style.boxShadow = 'none';
       }
     });
@@ -443,6 +578,50 @@ export class NowPlayingView implements IView {
         if (this.audioInfoComponent) {
           this.audioInfoComponent.setTrack(this.currentTrack);
         }
+        if (this.controlsComponent) {
+          this.controlsComponent.updateFavorite(this.currentTrack?.isFavorite ?? false);
+          this.controlsComponent.updatePlaybackState(this.playbackManager.state === 'playing');
+          this.controlsComponent.updateTime(this.playbackManager.positionMs, this.playbackManager.durationMs);
+        }
+      })
+    );
+
+    // 2. Playback state changed
+    this.subscriptions.push(
+      this.eventBus.subscribe(DomainEvents.PLAYBACK_STATE_CHANGED, (e: any) => {
+        if (this.controlsComponent) {
+          this.controlsComponent.updatePlaybackState(e.state === 'playing');
+        }
+      })
+    );
+
+    // 3. Playback time updated
+    this.subscriptions.push(
+      this.eventBus.subscribe(DomainEvents.PLAYBACK_TIME_UPDATED, (e: any) => {
+        if (this.controlsComponent) {
+          this.controlsComponent.updateTime(e.positionMs, e.durationMs);
+        }
+      })
+    );
+
+    // 4. Playback modes changed
+    this.subscriptions.push(
+      this.eventBus.subscribe(DomainEvents.PLAYBACK_MODES_CHANGED, (e: any) => {
+        if (this.controlsComponent) {
+          this.controlsComponent.updateModes(e.repeat, e.shuffle);
+        }
+      })
+    );
+
+    // 5. Favorite changed
+    this.subscriptions.push(
+      this.eventBus.subscribe(DomainEvents.FAVORITE_CHANGED, (e: any) => {
+        if (this.currentTrack && e.trackId === this.currentTrack.id) {
+          (this.currentTrack as any).isFavorite = e.isFavorite;
+          if (this.controlsComponent) {
+            this.controlsComponent.updateFavorite(e.isFavorite);
+          }
+        }
       })
     );
   }
@@ -478,15 +657,16 @@ export class NowPlayingView implements IView {
           style="
             display: inline-flex;
             align-items: center;
-            padding: 2px 8px;
+            padding: 3px 10px;
             font-size: 11px;
             font-weight: 700;
             letter-spacing: 0.05em;
             text-transform: uppercase;
-            border-radius: var(--radius-sm);
-            background: linear-gradient(135deg, rgba(255, 170, 0, 0.2), rgba(255, 100, 0, 0.1));
-            color: #ffaa00;
-            border: 1px solid rgba(255, 170, 0, 0.3);
+            border-radius: var(--radius-full);
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15));
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
           "
         >
           HI-RES • ${format.bitDepth ? `${format.bitDepth}B/` : ''}${format.sampleRate ? `${format.sampleRate / 1000}kHz` : ''}
@@ -500,15 +680,16 @@ export class NowPlayingView implements IView {
           style="
             display: inline-flex;
             align-items: center;
-            padding: 2px 8px;
+            padding: 3px 10px;
             font-size: 11px;
-            font-weight: 600;
+            font-weight: 700;
             letter-spacing: 0.05em;
             text-transform: uppercase;
-            border-radius: var(--radius-sm);
-            background: rgba(255, 255, 255, 0.08);
-            color: var(--color-text-primary);
-            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: var(--radius-full);
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.25), rgba(168, 85, 247, 0.15));
+            color: var(--color-accent-secondary);
+            border: 1px solid rgba(6, 182, 212, 0.4);
+            box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);
           "
         >
           LOSSLESS • ${format.container.toUpperCase()}
@@ -521,15 +702,15 @@ export class NowPlayingView implements IView {
         style="
           display: inline-flex;
           align-items: center;
-          padding: 2px 8px;
+          padding: 3px 10px;
           font-size: 11px;
-          font-weight: 500;
+          font-weight: 600;
           letter-spacing: 0.05em;
           text-transform: uppercase;
-          border-radius: var(--radius-sm);
-          background: rgba(255, 255, 255, 0.04);
+          border-radius: var(--radius-full);
+          background: var(--glass-surface);
           color: var(--color-text-muted);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          border: 1px solid var(--glass-border);
         "
       >
         ${format.container.toUpperCase()}${format.bitrate ? ` • ${format.bitrate}k` : ''}
