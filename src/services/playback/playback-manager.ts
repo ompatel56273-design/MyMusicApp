@@ -128,6 +128,140 @@ export class PlaybackManager implements IPlaybackManager {
     return this.queueManager.getActiveIndex();
   }
 
+  public getTracks(): readonly Track[] {
+    return this.queueManager.getTracks();
+  }
+
+  public getQueueTracks(): readonly Track[] {
+    return this.queueManager.getTracks();
+  }
+
+  /**
+   * Restore persisted queue and playback context from IndexedDB.
+   * Validates all track IDs against TrackRepository and safely discards missing/corrupted tracks.
+   */
+  public async restoreQueue(): Promise<void> {
+    if (!this.queueRepo) return;
+
+    try {
+      // 1. Fetch raw persisted queue items and metadata
+      const [persistedItems, metadata] = await Promise.all([
+        this.queueRepo.getQueue().catch(() => []),
+        this.queueRepo.getQueueMetadata ? this.queueRepo.getQueueMetadata().catch(() => null) : Promise.resolve(null)
+      ]);
+
+      if (!persistedItems || persistedItems.length === 0) {
+        this.logger.info('No persisted playback queue found.');
+        return;
+      }
+
+      // 2. Fetch and validate tracks from TrackRepository
+      const validatedTracks: Track[] = [];
+      const validatedItems: QueueItem[] = [];
+
+      // Safely filter and sort items by position
+      const validItems = (persistedItems || []).filter((item): item is QueueItem => !!item && typeof item === 'object');
+      const sortedItems = validItems.sort((a, b) => (a.position || 0) - (b.position || 0));
+
+      for (const item of sortedItems) {
+        if (!item || !item.trackId) continue;
+
+        try {
+          const track = await this.trackRepo.getById(item.trackId);
+          if (track && track.availability !== 'missing') {
+            validatedTracks.push(track);
+            validatedItems.push({
+              id: item.id || `queue_${track.id}_${validatedItems.length}`,
+              trackId: track.id,
+              position: validatedItems.length,
+              addedReason: item.addedReason || 'user'
+            });
+          } else {
+            this.logger.warn(`Restored track ${item.trackId} no longer available in library, removing from queue.`);
+          }
+        } catch (err) {
+          this.logger.warn(`Error resolving track ${item.trackId} during queue restore:`, { error: String(err) });
+        }
+      }
+
+      if (validatedTracks.length === 0) {
+        this.logger.info('All persisted queue tracks were invalid or removed.');
+        await this.queueRepo.clearQueue().catch(() => {});
+        return;
+      }
+
+      // 3. Restore activeIndex & modes
+      let targetIndex = metadata?.activeIndex ?? 0;
+
+      if (metadata?.activeTrackId) {
+        const foundIdx = validatedTracks.findIndex(t => t.id === metadata.activeTrackId);
+        if (foundIdx !== -1) {
+          targetIndex = foundIdx;
+        }
+      }
+
+      targetIndex = Math.max(0, Math.min(validatedTracks.length - 1, targetIndex));
+
+      if (metadata?.repeatMode) {
+        this.queueManager.setRepeatMode(metadata.repeatMode);
+      }
+      if (metadata?.shuffleMode) {
+        this.queueManager.setShuffleMode(metadata.shuffleMode);
+      }
+
+      // 4. Set restored queue into QueueManager
+      this.queueManager.restoreQueue(validatedTracks, validatedItems, targetIndex);
+
+      // 5. Restore currentTrackEntity without auto-playing
+      const activeTrack = validatedTracks[targetIndex] || null;
+      if (activeTrack) {
+        this.currentTrackEntity = activeTrack;
+        this.currentDurationMs = activeTrack.durationMs || 0;
+        this.currentPositionMs = 0;
+
+        if (this.historyRepo) {
+          try {
+            const savedPos = await this.historyRepo.getResumePosition(activeTrack.id);
+            if (savedPos && savedPos.positionMs > 0 && savedPos.positionMs < this.currentDurationMs) {
+              this.currentPositionMs = savedPos.positionMs;
+            }
+          } catch {
+            // ignore position restore errors
+          }
+        }
+
+        this.transitionToState('idle');
+
+        this.eventBus.publish(DomainEvents.TRACK_CHANGED, {
+          currentTrack: activeTrack,
+          previousTrack: null,
+          positionMs: this.currentPositionMs
+        });
+      }
+
+      // 6. Broadcast queue changed & modes changed to UI components
+      this.emitQueueChanged();
+
+      if (metadata?.repeatMode || metadata?.shuffleMode) {
+        this.eventBus.publish(DomainEvents.PLAYBACK_MODES_CHANGED, {
+          repeat: this.queueManager.getRepeatMode(),
+          shuffle: this.queueManager.getShuffleMode()
+        });
+      }
+
+      // 7. If any invalid tracks were pruned during restoration, update database
+      if (validatedTracks.length !== persistedItems.length) {
+        void this.syncQueueToRepository();
+      }
+
+      this.logger.info(`Playback queue restored successfully (${validatedTracks.length} tracks, activeIndex: ${targetIndex}).`);
+    } catch (err) {
+      this.logger.error('Failed to restore playback queue from IndexedDB:', { error: String(err) });
+      this.queueManager.clear();
+      this.emitQueueChanged();
+    }
+  }
+
   /**
    * Play a track, optionally providing a full queue context.
    */
@@ -255,6 +389,7 @@ export class PlaybackManager implements IPlaybackManager {
       if (nextTrack) {
         this.queueManager.setActiveIndex(nextIdx);
         this.emitQueueChanged();
+        void this.syncQueueToRepository();
         await this.playTrack(nextTrack);
         return;
       }
@@ -280,6 +415,7 @@ export class PlaybackManager implements IPlaybackManager {
 
         this.queueManager.setActiveIndex(prevIdx);
         this.emitQueueChanged();
+        void this.syncQueueToRepository();
         await this.playTrack(prevTrack);
         return;
       }
@@ -309,6 +445,7 @@ export class PlaybackManager implements IPlaybackManager {
       repeat: this.queueManager.getRepeatMode(),
       shuffle: this.queueManager.getShuffleMode()
     });
+    void this.syncQueueToRepository();
   }
 
   public setShuffleMode(mode: ShuffleMode): void {
@@ -318,6 +455,7 @@ export class PlaybackManager implements IPlaybackManager {
       shuffle: this.queueManager.getShuffleMode()
     });
     this.emitQueueChanged();
+    void this.syncQueueToRepository();
   }
 
   public async addToQueue(tracks: readonly Track[], playNext = false): Promise<void> {
@@ -333,6 +471,7 @@ export class PlaybackManager implements IPlaybackManager {
     if (track) {
       this.queueManager.setActiveIndex(index);
       this.emitQueueChanged();
+      void this.syncQueueToRepository();
       await this.playTrack(track);
     }
   }
@@ -487,10 +626,23 @@ export class PlaybackManager implements IPlaybackManager {
     if (!this.queueRepo) return;
 
     try {
-      await this.queueRepo.clearQueue();
       const items = this.queueManager.getItems();
-      if (items.length > 0) {
+      const activeIndex = this.queueManager.getActiveIndex();
+      const activeTrack = this.queueManager.getActiveTrack();
+
+      if (items.length === 0) {
+        await this.queueRepo.clearQueue();
+      } else {
         await this.queueRepo.saveQueue(items);
+        if (this.queueRepo.saveQueueMetadata) {
+          await this.queueRepo.saveQueueMetadata({
+            activeIndex,
+            activeTrackId: activeTrack?.id,
+            repeatMode: this.queueManager.getRepeatMode(),
+            shuffleMode: this.queueManager.getShuffleMode(),
+            updatedAt: Date.now()
+          });
+        }
       }
     } catch (err) {
       this.logger.warn('Failed to sync queue to repository:', { error: String(err) });

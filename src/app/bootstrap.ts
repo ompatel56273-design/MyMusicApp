@@ -237,7 +237,14 @@ export class AppBootstrap {
       this.logger.warn('Could not restore saved music directory handle:', { error: String(handleErr) });
     }
 
-    // 6. Mount AppShell
+    // 6. Restore Persistent Playback Queue from IndexedDB
+    try {
+      await playbackManager.restoreQueue();
+    } catch (restoreErr) {
+      this.logger.warn('Could not restore persistent playback queue:', { error: String(restoreErr) });
+    }
+
+    // 7. Mount AppShell
     this.appShell = new AppShell({
       playbackManager,
       libraryService,

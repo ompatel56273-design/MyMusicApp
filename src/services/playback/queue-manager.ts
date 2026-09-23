@@ -76,6 +76,30 @@ export class QueueManager {
   }
 
   /**
+   * Restore queue state from persistence with validated tracks and preserved items/indices.
+   */
+  public restoreQueue(tracks: readonly Track[], items?: readonly QueueItem[], activeIndex = -1): void {
+    this.tracks = [...tracks];
+    if (items && items.length === tracks.length) {
+      this.items = [...items];
+    } else {
+      this.rebuildQueueItems();
+    }
+
+    if (this.tracks.length === 0) {
+      this.activeIndex = -1;
+    } else if (activeIndex >= 0 && activeIndex < this.tracks.length) {
+      this.activeIndex = activeIndex;
+    } else {
+      this.activeIndex = 0;
+    }
+
+    if (this.shuffleModeValue === 'on') {
+      this.generateShuffleIndices();
+    }
+  }
+
+  /**
    * Add tracks to the current queue.
    */
   public addTracks(newTracks: readonly Track[], playNext = false): void {

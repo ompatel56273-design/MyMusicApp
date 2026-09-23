@@ -1399,7 +1399,8 @@ export class HomeView implements IView {
     if (!queueContainer) return;
 
     const pm = this.playbackManager;
-    const queue = pm?.queue && pm.queue.length > 0 ? pm.queue : this.recentTracks.slice(0, 5);
+    const pmTracks = pm?.getTracks ? pm.getTracks() : [];
+    const queue = pmTracks.length > 0 ? pmTracks : this.recentTracks.slice(0, 5);
     const currentIndex = pm?.currentQueueIndex ?? -1;
 
     if (queue.length === 0) {

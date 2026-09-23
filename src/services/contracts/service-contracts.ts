@@ -38,7 +38,9 @@ export interface IPlaybackManager {
   readonly shuffleMode: ShuffleMode;
   readonly queue: readonly QueueItem[];
   readonly currentQueueIndex: number;
-
+  getTracks?(): readonly Track[];
+  getQueueTracks?(): readonly Track[];
+  restoreQueue?(): Promise<void>;
   playTrack(track: Track, queueContext?: readonly Track[]): Promise<void>;
   pause(): Promise<void>;
   resume(): Promise<void>;
