@@ -1,4 +1,13 @@
-export type VisualizerMode = 'bars' | 'waveform' | 'circular' | 'spectrum' | 'particles' | 'minimal';
+export type VisualizerMode =
+  | 'bars'
+  | 'waveform'
+  | 'circular'
+  | 'spectrum'
+  | 'particles'
+  | 'pulse'
+  | 'album-reactive'
+  | 'minimal';
+
 export type VisualizerColorTheme = 'accent' | 'rainbow' | 'monochrome';
 
 export interface VisualizerSettings {

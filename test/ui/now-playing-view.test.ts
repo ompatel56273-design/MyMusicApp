@@ -170,4 +170,13 @@ describe('NowPlayingView (Fullscreen Experience)', () => {
     expect(titleEl?.textContent?.trim()).toBe('Desperado');
     expect(artistEl?.textContent?.trim()).toBe('Eagles');
   });
+
+  it('should switch to visualizer tab when visualizer tab button is clicked', () => {
+    const vizTabBtn = container.querySelector<HTMLButtonElement>('button[data-tab="visualizer"]');
+    expect(vizTabBtn).not.toBeNull();
+    vizTabBtn?.click();
+
+    const activeTabBtn = container.querySelector<HTMLButtonElement>('button[data-tab="visualizer"]');
+    expect(activeTabBtn?.getAttribute('aria-selected')).toBe('true');
+  });
 });

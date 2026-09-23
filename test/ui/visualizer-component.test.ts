@@ -90,7 +90,7 @@ describe('VisualizerComponent', () => {
     expect(canvas).not.toBeNull();
 
     const modeButtons = container.querySelectorAll('.vis-mode-btn');
-    expect(modeButtons.length).toBe(6);
+    expect(modeButtons.length).toBe(8);
 
     const toggleCheckbox = container.querySelector<HTMLInputElement>('#vis-enabled-toggle');
     expect(toggleCheckbox).not.toBeNull();

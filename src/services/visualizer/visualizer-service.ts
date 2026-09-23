@@ -90,7 +90,16 @@ export class VisualizerService implements IVisualizerService {
   }
 
   private sanitizeMode(mode: any): VisualizerMode {
-    const validModes: VisualizerMode[] = ['bars', 'waveform', 'circular', 'spectrum', 'particles', 'minimal'];
+    const validModes: VisualizerMode[] = [
+      'bars',
+      'waveform',
+      'circular',
+      'spectrum',
+      'particles',
+      'pulse',
+      'album-reactive',
+      'minimal'
+    ];
     if (validModes.includes(mode)) {
       return mode;
     }
