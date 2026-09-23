@@ -8,6 +8,8 @@ import { PlaylistsView } from '../views/playlists-view';
 import { GalaxyView } from '../views/galaxy-view';
 import { SettingsView } from '../views/settings-view';
 import { NowPlayingView } from '../views/now-playing-view';
+import { StatsView } from '../views/stats-view';
+import { StatsService } from '../../services/stats/stats-service';
 import { HeaderComponent } from './header-component';
 import { SidebarComponent } from './sidebar-component';
 import { MiniPlayerComponent } from './mini-player-component';
@@ -44,6 +46,7 @@ export interface AppShellDependencies {
   visualizerService?: IVisualizerService | undefined;
   galaxyService?: IGalaxyService | undefined;
   scannerService?: IScannerService | undefined;
+  statsService?: StatsService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   dbAdapter?: IDatabaseAdapter | undefined;
   eventBus: EventBus;
@@ -172,6 +175,29 @@ export class AppShell {
           lyricsService: deps.lyricsService,
           audioEngine: deps.audioEngine,
           visualizerService: deps.visualizerService,
+          router: this.router,
+          eventBus: deps.eventBus
+        })
+      ],
+      [
+        'stats',
+        new StatsView({
+          statsService: deps.statsService ?? new StatsService({
+            trackRepo: (deps.libraryService as any)?.trackRepo ?? {
+              getById: async () => null,
+              getByFileId: async () => null,
+              list: async () => ({ items: [], total: 0, offset: 0, limit: 50 }),
+              save: async () => {},
+              saveBatch: async () => {},
+              delete: async () => {},
+              setFavorite: async () => {},
+              incrementPlayCount: async () => {},
+              count: async () => 0
+            },
+            dbAdapter: deps.dbAdapter
+          }),
+          playbackManager: deps.playbackManager,
+          artworkService: deps.artworkService,
           router: this.router,
           eventBus: deps.eventBus
         })

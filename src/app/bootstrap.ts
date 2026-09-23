@@ -42,6 +42,7 @@ import { LyricsService } from '../services/lyrics/lyrics-service';
 import { AudioSettingsService } from '../services/audio/audio-settings-service';
 import { VisualizerService } from '../services/visualizer/visualizer-service';
 import { GalaxyService } from '../services/galaxy/galaxy-service';
+import { StatsService } from '../services/stats/stats-service';
 import { FileAccessCapabilityService } from '../services/scanner/file-access-capability';
 import { LocalMusicOnboardingModal } from '../ui/components/onboarding/local-music-onboarding-modal';
 
@@ -200,6 +201,14 @@ export class AppBootstrap {
       playlistService,
       database: adapter
     });
+    const statsService = new StatsService({
+      trackRepo,
+      artistRepo,
+      albumRepo,
+      genreRepo,
+      historyRepo,
+      dbAdapter: adapter
+    });
 
     // 5. Check Persistent Directory Handle
     const capabilityService = FileAccessCapabilityService.getInstance();
@@ -234,6 +243,7 @@ export class AppBootstrap {
       visualizerService,
       galaxyService,
       scannerService,
+      statsService,
       fsAdapter,
       dbAdapter: adapter,
       eventBus: this.eventBus
