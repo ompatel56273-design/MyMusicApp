@@ -25,12 +25,18 @@ export class AudioEngine implements IAudioEngine {
   private audioElementA: HTMLAudioElement | null = null;
   private audioElementB: HTMLAudioElement | null = null;
   private activeElement: HTMLAudioElement | null = null;
+  private activeChannel: 'A' | 'B' = 'A';
   private sourceNodeA: MediaElementAudioSourceNode | null = null;
   private sourceNodeB: MediaElementAudioSourceNode | null = null;
   private gainNodeA: GainNode | null = null;
   private gainNodeB: GainNode | null = null;
 
   private currentObjectUrl: string | null = null;
+  private standbyObjectUrl: string | null = null;
+  private standbyOptions: { replayGain?: ReplayGainData | undefined } | null = null;
+  private standbyGeneration = 0;
+  private isStandbyPrepared = false;
+
   private callbacks: AudioEngineCallbacks = {};
   private currentGeneration = 0;
   private isDisposed = false;
@@ -76,7 +82,7 @@ export class AudioEngine implements IAudioEngine {
     this.audioElementA.preload = 'auto';
     this.audioElementA.crossOrigin = 'anonymous';
 
-    // Channel B (for crossfading)
+    // Channel B (for gapless / crossfading)
     this.audioElementB = document.createElement('audio');
     this.audioElementB.preload = 'auto';
     this.audioElementB.crossOrigin = 'anonymous';
@@ -98,11 +104,13 @@ export class AudioEngine implements IAudioEngine {
       this.gainNodeB.connect(this.dspPipeline.getInputNode());
 
       this.activeElement = this.audioElementA;
+      this.activeChannel = 'A';
       this.bindElementEvents(this.audioElementA, 'A');
       this.bindElementEvents(this.audioElementB, 'B');
     } catch (err) {
       this.logger.warn('Direct createMediaElementSource failed or already connected:', { error: String(err) });
       this.activeElement = this.audioElementA;
+      this.activeChannel = 'A';
     }
   }
 
@@ -174,6 +182,9 @@ export class AudioEngine implements IAudioEngine {
     const generation = ++this.currentGeneration;
     this.ensureContext();
 
+    // Cancel any pending/prepared standby preload
+    this.cancelPreload();
+
     // Revoke previous blob Object URL
     if (this.currentObjectUrl) {
       URL.revokeObjectURL(this.currentObjectUrl);
@@ -190,6 +201,20 @@ export class AudioEngine implements IAudioEngine {
 
     if (!this.activeElement) {
       throw new AudioEngineError('No active audio element available.', 'NO_AUDIO_ELEMENT');
+    }
+
+    // Ensure active channel gain is 1.0 and standby channel gain is 0.0
+    const activeGain = this.activeChannel === 'A' ? this.gainNodeA : this.gainNodeB;
+    const standbyGain = this.activeChannel === 'A' ? this.gainNodeB : this.gainNodeA;
+    if (activeGain && this.context) {
+      activeGain.gain.setValueAtTime(1.0, this.context.currentTime);
+    } else if (activeGain) {
+      activeGain.gain.value = 1.0;
+    }
+    if (standbyGain && this.context) {
+      standbyGain.gain.setValueAtTime(0.0, this.context.currentTime);
+    } else if (standbyGain) {
+      standbyGain.gain.value = 0.0;
     }
 
     if (this.dspPipeline) {
@@ -223,6 +248,173 @@ export class AudioEngine implements IAudioEngine {
       element.addEventListener('error', onError);
       element.load();
     });
+  }
+
+  /**
+   * Pre-buffers the next track in the standby channel without playing it.
+   */
+  public async prepareNext(urlOrBlob: string | Blob, options?: { replayGain?: ReplayGainData | undefined }): Promise<void> {
+    const generation = ++this.standbyGeneration;
+    this.ensureContext();
+
+    if (this.standbyObjectUrl) {
+      URL.revokeObjectURL(this.standbyObjectUrl);
+      this.standbyObjectUrl = null;
+    }
+
+    const standbyElement = this.activeChannel === 'A' ? this.audioElementB : this.audioElementA;
+    const standbyGain = this.activeChannel === 'A' ? this.gainNodeB : this.gainNodeA;
+
+    if (!standbyElement) {
+      throw new AudioEngineError('Standby audio element unavailable for preload.', 'NO_AUDIO_ELEMENT');
+    }
+
+    // Ensure standby channel is silent during preparation
+    if (standbyGain && this.context) {
+      standbyGain.gain.setValueAtTime(0.0, this.context.currentTime);
+    } else if (standbyGain) {
+      standbyGain.gain.value = 0.0;
+    }
+
+    let targetUrl: string;
+    if (urlOrBlob instanceof Blob) {
+      this.standbyObjectUrl = URL.createObjectURL(urlOrBlob);
+      targetUrl = this.standbyObjectUrl;
+    } else {
+      targetUrl = urlOrBlob;
+    }
+
+    this.standbyOptions = options ?? null;
+    this.isStandbyPrepared = false;
+    standbyElement.src = targetUrl;
+
+    return new Promise<void>((resolve, reject) => {
+      const onCanPlay = () => {
+        cleanup();
+        if (generation === this.standbyGeneration) {
+          this.isStandbyPrepared = true;
+          this.logger.debug('Standby track prepared for gapless playback.');
+          resolve();
+        }
+      };
+
+      const onError = () => {
+        cleanup();
+        if (generation === this.standbyGeneration) {
+          this.isStandbyPrepared = false;
+          if (this.standbyObjectUrl) {
+            URL.revokeObjectURL(this.standbyObjectUrl);
+            this.standbyObjectUrl = null;
+          }
+          reject(new AudioEngineError('Failed to preload next audio stream.', 'PRELOAD_FAILED'));
+        }
+      };
+
+      const cleanup = () => {
+        standbyElement.removeEventListener('canplay', onCanPlay);
+        standbyElement.removeEventListener('error', onError);
+      };
+
+      standbyElement.addEventListener('canplay', onCanPlay);
+      standbyElement.addEventListener('error', onError);
+      standbyElement.load();
+    });
+  }
+
+  /**
+   * Checks whether a standby track is prepared and ready for instantaneous playback.
+   */
+  public hasPreparedNext(): boolean {
+    return this.isStandbyPrepared && !this.isDisposed;
+  }
+
+  /**
+   * Cancels in-flight preloading and cleans up standby resources.
+   */
+  public cancelPreload(): void {
+    this.standbyGeneration++;
+    this.isStandbyPrepared = false;
+    this.standbyOptions = null;
+
+    if (this.standbyObjectUrl) {
+      URL.revokeObjectURL(this.standbyObjectUrl);
+      this.standbyObjectUrl = null;
+    }
+
+    const standbyElement = this.activeChannel === 'A' ? this.audioElementB : this.audioElementA;
+    if (standbyElement) {
+      standbyElement.pause();
+      standbyElement.src = '';
+    }
+  }
+
+  /**
+   * Atomically transitions playback to the pre-buffered standby channel.
+   */
+  public async transitionToNext(): Promise<void> {
+    if (!this.isStandbyPrepared || !this.context) {
+      throw new AudioEngineError('No prepared track to transition to.', 'NO_PREPARED_TRACK');
+    }
+
+    const oldActiveElement = this.activeElement;
+    const oldObjectUrl = this.currentObjectUrl;
+    const oldChannel = this.activeChannel;
+
+    const newChannel: 'A' | 'B' = oldChannel === 'A' ? 'B' : 'A';
+    const newActiveElement = newChannel === 'A' ? this.audioElementA : this.audioElementB;
+    const oldGain = oldChannel === 'A' ? this.gainNodeA : this.gainNodeB;
+    const newGain = newChannel === 'A' ? this.gainNodeA : this.gainNodeB;
+
+    if (!newActiveElement) {
+      throw new AudioEngineError('Standby audio element unavailable.', 'NO_AUDIO_ELEMENT');
+    }
+
+    // Apply ReplayGain to DSP pipeline for the incoming track
+    if (this.dspPipeline) {
+      this.dspPipeline.setReplayGainData(this.standbyOptions?.replayGain ?? null);
+    }
+
+    // Set Web Audio gain parameters seamlessly
+    const now = this.context.currentTime;
+    if (oldGain) {
+      oldGain.gain.setValueAtTime(0.0, now);
+    }
+    if (newGain) {
+      newGain.gain.setValueAtTime(1.0, now);
+    }
+
+    // Flip active element and channel
+    this.activeElement = newActiveElement;
+    this.activeChannel = newChannel;
+    this.currentObjectUrl = this.standbyObjectUrl;
+    this.standbyObjectUrl = null;
+    this.isStandbyPrepared = false;
+    this.standbyOptions = null;
+
+    if (this.context.state === 'suspended') {
+      try {
+        await this.context.resume();
+      } catch (err) {
+        this.logger.warn('AudioContext resume failed during transition:', { error: String(err) });
+      }
+    }
+
+    try {
+      await this.activeElement.play();
+    } catch (err) {
+      throw new AudioEngineError('Gapless transition playback failed.', 'PLAY_FAILED', undefined, err as Error);
+    }
+
+    // Clean up old active element & object URL
+    if (oldActiveElement) {
+      oldActiveElement.pause();
+      oldActiveElement.src = '';
+    }
+    if (oldObjectUrl) {
+      URL.revokeObjectURL(oldObjectUrl);
+    }
+
+    this.logger.debug(`Seamlessly transitioned playback to Channel ${newChannel}.`);
   }
 
   public async play(): Promise<void> {
@@ -359,6 +551,7 @@ export class AudioEngine implements IAudioEngine {
   public dispose(): void {
     this.isDisposed = true;
     this.currentGeneration++;
+    this.cancelPreload();
 
     if (this.currentObjectUrl) {
       URL.revokeObjectURL(this.currentObjectUrl);

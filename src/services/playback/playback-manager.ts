@@ -52,6 +52,9 @@ export class PlaybackManager implements IPlaybackManager {
 
   // Stale async operation guard
   private operationToken = 0;
+  private preloadToken = 0;
+  private preloadedTrack: Track | null = null;
+  private preloadPromise: Promise<void> | null = null;
 
   // Position persistence & history tracking
   private lastPositionPersistTime = 0;
@@ -328,6 +331,7 @@ export class PlaybackManager implements IPlaybackManager {
 
       if (token !== this.operationToken) return;
 
+      this.cancelPreload();
       await this.audioEngine.loadBuffer(blob, { replayGain: track.replayGain });
 
       if (token !== this.operationToken) return;
@@ -335,8 +339,12 @@ export class PlaybackManager implements IPlaybackManager {
       this.transitionToState('ready');
       await this.audioEngine.play();
       this.transitionToState('playing');
+
+      // Preload next track in queue in the background for gapless transition
+      this.preloadPromise = this.preloadNextTrack();
     } catch (err) {
       if (token !== this.operationToken) return;
+      this.cancelPreload();
       this.transitionToState('error');
       const audioErr = err instanceof AudioEngineError ? err : new AudioEngineError('Playback initialization failed', 'PLAY_INIT_ERROR', undefined, err as Error);
       this.logger.error('Failed to play track:', { trackId: track.id, error: audioErr.message });
@@ -358,10 +366,15 @@ export class PlaybackManager implements IPlaybackManager {
       this.sessionListenStartMs = Date.now();
       await this.audioEngine.play();
       this.transitionToState('playing');
+
+      if (!this.preloadedTrack) {
+        this.preloadPromise = this.preloadNextTrack();
+      }
     }
   }
 
   public async stop(): Promise<void> {
+    this.cancelPreload();
     this.audioEngine.stop();
     await this.persistCurrentPosition();
     this.currentPositionMs = 0;
@@ -371,6 +384,7 @@ export class PlaybackManager implements IPlaybackManager {
   public async seek(positionMs: number): Promise<void> {
     const clamped = Math.max(0, Math.min(this.currentDurationMs || Infinity, positionMs));
     this.currentPositionMs = clamped;
+    this.cancelPreload();
     this.audioEngine.seek(clamped / 1000.0);
 
     this.eventBus.publish(DomainEvents.PLAYBACK_TIME_UPDATED, {
@@ -379,9 +393,14 @@ export class PlaybackManager implements IPlaybackManager {
     });
 
     await this.persistCurrentPosition();
+
+    if (this.currentState === 'playing' || this.currentState === 'ready') {
+      this.preloadPromise = this.preloadNextTrack();
+    }
   }
 
   public async next(): Promise<void> {
+    this.cancelPreload();
     const nextIdx = this.queueManager.getNextIndex();
     if (nextIdx !== null) {
       const tracks = this.queueManager.getTracks();
@@ -400,6 +419,7 @@ export class PlaybackManager implements IPlaybackManager {
   }
 
   public async previous(): Promise<void> {
+    this.cancelPreload();
     const currentSec = this.currentPositionMs / 1000.0;
     const prevIdx = this.queueManager.getPreviousIndex(currentSec, 3.0);
 
@@ -446,6 +466,11 @@ export class PlaybackManager implements IPlaybackManager {
       shuffle: this.queueManager.getShuffleMode()
     });
     void this.syncQueueToRepository();
+
+    this.cancelPreload();
+    if (this.currentState === 'playing' || this.currentState === 'ready') {
+      this.preloadPromise = this.preloadNextTrack();
+    }
   }
 
   public setShuffleMode(mode: ShuffleMode): void {
@@ -456,15 +481,26 @@ export class PlaybackManager implements IPlaybackManager {
     });
     this.emitQueueChanged();
     void this.syncQueueToRepository();
+
+    this.cancelPreload();
+    if (this.currentState === 'playing' || this.currentState === 'ready') {
+      this.preloadPromise = this.preloadNextTrack();
+    }
   }
 
   public async addToQueue(tracks: readonly Track[], playNext = false): Promise<void> {
     this.queueManager.addTracks(tracks, playNext);
     this.emitQueueChanged();
     await this.syncQueueToRepository();
+
+    this.cancelPreload();
+    if (this.currentState === 'playing' || this.currentState === 'ready') {
+      this.preloadPromise = this.preloadNextTrack();
+    }
   }
 
   public async playQueueIndex(index: number): Promise<void> {
+    this.cancelPreload();
     const tracks = this.queueManager.getTracks();
     if (index < 0 || index >= tracks.length) return;
     const track = tracks[index];
@@ -480,18 +516,107 @@ export class PlaybackManager implements IPlaybackManager {
     this.queueManager.removeTrack(index);
     this.emitQueueChanged();
     await this.syncQueueToRepository();
+
+    this.cancelPreload();
+    if (this.currentState === 'playing' || this.currentState === 'ready') {
+      this.preloadPromise = this.preloadNextTrack();
+    }
   }
 
   public async reorderQueue(fromIndex: number, toIndex: number): Promise<void> {
     this.queueManager.reorder(fromIndex, toIndex);
     this.emitQueueChanged();
     await this.syncQueueToRepository();
+
+    this.cancelPreload();
+    if (this.currentState === 'playing' || this.currentState === 'ready') {
+      this.preloadPromise = this.preloadNextTrack();
+    }
   }
 
   public async clearQueue(): Promise<void> {
+    this.cancelPreload();
     this.queueManager.clear();
     this.emitQueueChanged();
     await this.syncQueueToRepository();
+  }
+
+  /**
+   * Returns in-flight preload Promise for testing/synchronization.
+   */
+  public getPreloadPromise(): Promise<void> | null {
+    return this.preloadPromise;
+  }
+
+  /**
+   * Preloads the next upcoming track in the queue for seamless gapless playback.
+   */
+  private async preloadNextTrack(): Promise<void> {
+    if (this.currentState !== 'playing' && this.currentState !== 'ready') return;
+    if (!this.audioEngine.prepareNext) return;
+
+    const nextIdx = this.queueManager.getNextIndex();
+    if (nextIdx === null) {
+      this.cancelPreload();
+      return;
+    }
+
+    const tracks = this.queueManager.getTracks();
+    const nextTrack = tracks[nextIdx];
+    if (!nextTrack || nextTrack.availability === 'missing') {
+      this.cancelPreload();
+      return;
+    }
+
+    // If already preloaded and engine still has it prepared, skip redundant load
+    if (this.preloadedTrack?.id === nextTrack.id && this.audioEngine.hasPreparedNext?.()) {
+      return;
+    }
+
+    const token = ++this.preloadToken;
+
+    try {
+      const audioFile = await this.audioFileRepo.getById(nextTrack.fileId);
+      if (!audioFile || audioFile.availability === 'missing') {
+        if (token === this.preloadToken) {
+          this.cancelPreload();
+        }
+        return;
+      }
+
+      const fileBuffer = await this.filesystem.readFile(audioFile.path);
+      if (token !== this.preloadToken) return;
+
+      const blob = new Blob([fileBuffer.buffer as ArrayBuffer], {
+        type: nextTrack.format.container ? `audio/${nextTrack.format.container}` : 'audio/mpeg'
+      });
+
+      await this.audioEngine.prepareNext(blob, { replayGain: nextTrack.replayGain });
+      if (token !== this.preloadToken) return;
+
+      this.preloadedTrack = nextTrack;
+      this.logger.debug(`Preloaded next track "${nextTrack.title}" for gapless playback.`);
+    } catch (err) {
+      if (token === this.preloadToken) {
+        this.preloadedTrack = null;
+        if (this.audioEngine.cancelPreload) {
+          this.audioEngine.cancelPreload();
+        }
+        this.logger.warn(`Gapless preload failed for track "${nextTrack.title}":`, { error: String(err) });
+      }
+    }
+  }
+
+  /**
+   * Cancels in-flight preloading and resets prepared standby track.
+   */
+  private cancelPreload(): void {
+    this.preloadToken++;
+    this.preloadedTrack = null;
+    this.preloadPromise = null;
+    if (this.audioEngine.cancelPreload) {
+      this.audioEngine.cancelPreload();
+    }
   }
 
   private handleTimeUpdate(sec: number, durSec: number): void {
@@ -540,6 +665,50 @@ export class PlaybackManager implements IPlaybackManager {
       this.hasCountedPlay = true;
       await this.recordPlaybackHistory(true);
     }
+
+    // Attempt seamless gapless transition if next track is prepared
+    if (
+      this.preloadedTrack &&
+      this.audioEngine.hasPreparedNext?.() &&
+      this.audioEngine.transitionToNext
+    ) {
+      const nextIdx = this.queueManager.getNextIndex();
+      if (nextIdx !== null) {
+        const tracks = this.queueManager.getTracks();
+        const nextTrack = tracks[nextIdx];
+        if (nextTrack && nextTrack.id === this.preloadedTrack.id) {
+          try {
+            await this.audioEngine.transitionToNext();
+
+            const previousTrack = this.currentTrackEntity;
+            this.queueManager.setActiveIndex(nextIdx);
+            this.emitQueueChanged();
+            void this.syncQueueToRepository();
+
+            this.currentTrackEntity = nextTrack;
+            this.currentDurationMs = nextTrack.durationMs || 0;
+            this.currentPositionMs = 0;
+            this.sessionListenStartMs = Date.now();
+            this.sessionListenedMs = 0;
+            this.hasCountedPlay = false;
+
+            this.transitionToState('playing');
+            this.eventBus.publish(DomainEvents.TRACK_CHANGED, {
+              currentTrack: nextTrack,
+              previousTrack,
+              positionMs: 0
+            });
+            this.preloadedTrack = null;
+            this.preloadPromise = this.preloadNextTrack();
+            return;
+          } catch (err) {
+            this.logger.warn('Gapless transition failed, falling back to sequential play:', { error: String(err) });
+          }
+        }
+      }
+    }
+
+    // Fallback to sequential next
     await this.next();
   }
 

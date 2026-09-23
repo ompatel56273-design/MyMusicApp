@@ -214,4 +214,10 @@ export interface IAudioEngine {
   setBalance(balance: number): void;
   setLimiterEnabled(enabled: boolean): void;
   getDspOptions(): DspPipelineOptions;
+
+  // Gapless Playback
+  prepareNext?(urlOrBlob: string | Blob, options?: { replayGain?: ReplayGainData | undefined }): Promise<void>;
+  hasPreparedNext?(): boolean;
+  transitionToNext?(): Promise<void>;
+  cancelPreload?(): void;
 }
