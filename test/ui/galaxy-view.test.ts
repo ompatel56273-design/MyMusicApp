@@ -158,4 +158,74 @@ describe('GalaxyView', () => {
     await new Promise(r => setTimeout(r, 10));
     expect(mockSearchService.search).toHaveBeenCalledWith('Discovery', 1);
   });
+
+  it('renders listening history planets from StatsService in explore sidebar', async () => {
+    const mockStatsService: any = {
+      getRecentHistory: vi.fn().mockResolvedValue([
+        {
+          track: { id: 't1', title: 'Cosmic Journey', artistName: 'Space Artist' },
+          playedAt: Date.now() - 10000
+        }
+      ]),
+      getTopSongs: vi.fn().mockResolvedValue([])
+    };
+
+    const historyView = new GalaxyView({
+      galaxyService: mockGalaxyService,
+      playbackManager: mockPlaybackManager,
+      libraryService: mockLibraryService,
+      statsService: mockStatsService,
+      eventBus
+    });
+
+    await historyView.mount(container);
+    const sidebarItems = container.querySelectorAll('.galaxy-sidebar-item');
+    expect(sidebarItems.length).toBeGreaterThan(0);
+    expect(mockStatsService.getRecentHistory).toHaveBeenCalled();
+
+    historyView.unmount();
+  });
+
+  it('handles keyboard navigation and shortcut actions', async () => {
+    await view.mount(container);
+
+    const eventTarget = container.querySelector<HTMLElement>('#galaxy-canvas-container');
+    expect(eventTarget).not.toBeNull();
+
+    if (eventTarget) {
+      // Test Tab navigation
+      const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true });
+      eventTarget.dispatchEvent(tabEvent);
+
+      // Test P (play) shortcut
+      const playEvent = new KeyboardEvent('keydown', { key: 'p', bubbles: true });
+      eventTarget.dispatchEvent(playEvent);
+
+      // Test Escape (close/unselect)
+      const escEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+      eventTarget.dispatchEvent(escEvent);
+    }
+  });
+
+  it('reacts to EventBus favorite and playback state change events', async () => {
+    await view.mount(container);
+
+    // Favorite change
+    eventBus.publish('library:favorite-changed', { trackId: 'al1', isFavorite: true });
+
+    // Track change
+    eventBus.publish('playback:track-changed', {
+      currentTrack: { id: 'al1', title: 'Discovery', artistName: 'Daft Punk' },
+      previousTrack: null,
+      positionMs: 0
+    });
+
+    // Playback state change
+    eventBus.publish('playback:state-changed', {
+      state: 'playing',
+      track: { id: 'al1', title: 'Discovery', artistName: 'Daft Punk' },
+      positionMs: 0,
+      durationMs: 300000
+    });
+  });
 });

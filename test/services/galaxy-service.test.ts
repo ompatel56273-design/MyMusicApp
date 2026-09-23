@@ -180,6 +180,43 @@ describe('GalaxyService', () => {
     expect(emptyGraph.totalEdges).toBe(0);
   });
 
+  it('incorporates listening stats, dynamic sizing, and relational lists', async () => {
+    const mockStatsService: any = {
+      getTopSongs: vi.fn().mockResolvedValue([
+        { song: { id: 'track_1', title: 'Paranoid Android' }, playCount: 25, durationMs: 383000 }
+      ]),
+      getRecentHistory: vi.fn().mockResolvedValue([
+        { track: { id: 'track_1', title: 'Paranoid Android' }, playedAt: Date.now() - 5000 }
+      ])
+    };
+
+    const serviceWithStats = new GalaxyService({
+      libraryService: mockLibraryService,
+      playlistService: mockPlaylistService,
+      statsService: mockStatsService,
+      database: mockDatabase
+    });
+
+    const graph = await serviceWithStats.getGraph();
+    expect(graph.totalNodes).toBeGreaterThan(0);
+
+    const trackNode = graph.nodes.find(n => n.id === 'track:track_1');
+    expect(trackNode).toBeDefined();
+    expect(trackNode?.metadata.playCount).toBe(15);
+    expect(trackNode?.metadata.isFavorite).toBe(true);
+    expect(trackNode?.metadata.recentPlayOrder).toBe(1);
+
+    const artistNode = graph.nodes.find(n => n.id === 'artist:artist_1');
+    expect(artistNode).toBeDefined();
+    expect(artistNode?.metadata.albumList).toBeDefined();
+    expect(artistNode?.metadata.albumList?.length).toBe(1);
+    expect(artistNode?.metadata.trackList).toBeDefined();
+
+    const genreNode = graph.nodes.find(n => n.id === 'genre:genre_1');
+    expect(genreNode).toBeDefined();
+    expect(genreNode?.radius).toBeGreaterThanOrEqual(28);
+  });
+
   it('saves and sanitizes galaxy settings', async () => {
     const defaults = await galaxyService.getSettings();
     expect(defaults).toEqual(DEFAULT_GALAXY_SETTINGS);

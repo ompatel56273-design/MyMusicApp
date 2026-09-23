@@ -5,13 +5,16 @@ import type {
   IPlaybackManager,
   ILibraryService,
   IPlaylistService,
-  ISearchService
+  ISearchService,
+  IArtworkService
 } from '../../services/contracts/service-contracts';
+import type { StatsService } from '../../services/stats/stats-service';
 import type { GalaxyGraph, GalaxyNode } from '../../domain/entities/galaxy-types';
 import { GalaxyCanvasRenderer } from '../components/galaxy/galaxy-canvas-renderer';
 import { GalaxyDetailPanel } from '../components/galaxy/galaxy-detail-panel';
 import { RouterService } from '../navigation/router-service';
 import { EventBus } from '../../core/events/event-bus';
+import { DomainEvents } from '../../domain/events/domain-events';
 import type { Disposable } from '../../core/types/common';
 import { getIconSvg } from '../icons/icon-registry';
 
@@ -21,6 +24,8 @@ export interface GalaxyViewDependencies {
   libraryService: ILibraryService;
   playlistService?: IPlaylistService | undefined;
   searchService?: ISearchService | undefined;
+  statsService?: StatsService | undefined;
+  artworkService?: IArtworkService | undefined;
   router?: RouterService | undefined;
   eventBus?: EventBus | undefined;
 }
@@ -33,7 +38,7 @@ export interface GalaxyViewDependencies {
  * - Floating Camera Controls (Zoom In, Zoom Out, Reset Center)
  * - Right Explore Sidebar: "Explore Genres" & "Recently Played Planets" (Desktop / Tablet)
  * - Bottom Discover Banner ("Discover More Music" with Explore Now)
- * - Contextual Glassmorphic Node Detail Panel
+ * - Contextual Glassmorphic Node Detail Panel with Real Artwork & Relational Tracks
  * - Full Keyboard & Accessible Outline Navigation
  */
 export class GalaxyView implements IView {
@@ -42,11 +47,13 @@ export class GalaxyView implements IView {
   private detailPanel: GalaxyDetailPanel | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private subscriptions: Disposable[] = [];
+  private visibilityHandler: (() => void) | null = null;
 
   private readonly deps?: GalaxyViewDependencies | undefined;
   private currentGraph: GalaxyGraph | null = null;
   private selectedNode: GalaxyNode | null = null;
   private isAccessibleViewOpen = false;
+  private keyboardFocusIndex = 0;
 
   public getSelectedNode(): GalaxyNode | null {
     return this.selectedNode;
@@ -82,6 +89,11 @@ export class GalaxyView implements IView {
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
+    }
+
+    if (this.visibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      this.visibilityHandler = null;
     }
 
     this.subscriptions.forEach(sub => sub.dispose());
@@ -478,7 +490,7 @@ export class GalaxyView implements IView {
       onNodeClick: node => {
         this.selectedNode = node;
         this.canvasRenderer?.setSelectedNode(node.id);
-        this.detailPanel?.setNode(node);
+        void this.detailPanel?.setNode(node);
       },
       onNodeDoubleClick: node => {
         this.canvasRenderer?.setFocusedNode(node.id);
@@ -487,7 +499,7 @@ export class GalaxyView implements IView {
         this.selectedNode = null;
         this.canvasRenderer?.setSelectedNode(null);
         this.canvasRenderer?.setFocusedNode(null);
-        this.detailPanel?.setNode(null);
+        void this.detailPanel?.setNode(null);
       }
     });
 
@@ -500,13 +512,24 @@ export class GalaxyView implements IView {
         playbackManager: this.deps.playbackManager,
         libraryService: this.deps.libraryService,
         playlistService: this.deps.playlistService,
+        artworkService: this.deps.artworkService,
         router: this.deps.router,
+        eventBus: this.deps.eventBus,
         onClose: () => {
           this.selectedNode = null;
           this.canvasRenderer?.setSelectedNode(null);
         },
         onFocus: node => {
           this.canvasRenderer?.setFocusedNode(node.id);
+        },
+        onFavoriteToggled: (node, isFav) => {
+          if (this.currentGraph) {
+            const match = this.currentGraph.nodes.find(n => n.id === node.id);
+            if (match) {
+              match.metadata.isFavorite = isFav;
+              this.canvasRenderer?.requestRedraw();
+            }
+          }
         }
       });
       this.detailPanel.mount(detailSlot);
@@ -522,7 +545,7 @@ export class GalaxyView implements IView {
     });
     this.canvasRenderer.setGraph(this.currentGraph);
     this.renderAccessibleList();
-    this.renderExplorePanels();
+    await this.renderExplorePanels();
 
     // Render empty state overlay if no graph nodes exist
     if (this.currentGraph.nodes.length === 0) {
@@ -571,7 +594,7 @@ export class GalaxyView implements IView {
     this.attachUiControls();
   }
 
-  private renderExplorePanels(): void {
+  private async renderExplorePanels(): Promise<void> {
     if (!this.container || !this.currentGraph) return;
 
     const genresList = this.container.querySelector<HTMLElement>('#galaxy-genres-list');
@@ -623,7 +646,7 @@ export class GalaxyView implements IView {
                 this.selectedNode = node;
                 this.canvasRenderer?.setSelectedNode(node.id);
                 this.canvasRenderer?.setFocusedNode(node.id);
-                this.detailPanel?.setNode(node);
+                void this.detailPanel?.setNode(node);
               }
             }
           });
@@ -631,36 +654,68 @@ export class GalaxyView implements IView {
       }
     }
 
-    // 2. Render Recently Played Planets / Highlights (Albums & Top Artists)
-    const highlights = [...albums, ...artists].slice(0, 5);
+    // 2. Render Recently Played Planets / Real Listening History
     if (planetsList) {
-      if (highlights.length === 0) {
+      let recentItems: Array<{ id: string; label: string; subtext: string; color: string; nodeId?: string }> = [];
+
+      if (this.deps?.statsService) {
+        try {
+          const history = await this.deps.statsService.getRecentHistory(6);
+          recentItems = history.map(h => {
+            const matchingNode = this.currentGraph?.nodes.find(n => n.entityId === h.track.id);
+            return {
+              id: h.track.id,
+              label: h.track.title,
+              subtext: h.track.artistName || 'Unknown Artist',
+              color: '#10b981',
+              nodeId: matchingNode?.id || `track:${h.track.id}`
+            };
+          });
+        } catch {
+          recentItems = [];
+        }
+      }
+
+      if (recentItems.length === 0) {
+        // Fallback to top library items
+        const fallback = [...albums, ...artists].slice(0, 5);
+        recentItems = fallback.map(item => ({
+          id: item.entityId,
+          label: item.label,
+          subtext: `${item.metadata.trackCount ?? 0} songs`,
+          color: item.color,
+          nodeId: item.id
+        }));
+      }
+
+      if (recentItems.length === 0) {
         planetsList.innerHTML = `<div style="font-size: 13px; color: var(--color-text-muted);">Explore the galaxy to discover music.</div>`;
       } else {
-        planetsList.innerHTML = highlights
+        planetsList.innerHTML = recentItems
           .map(h => `
-            <div class="galaxy-sidebar-item" data-node-id="${this.escapeHtml(h.id)}">
-              <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="galaxy-sidebar-item" data-node-id="${this.escapeHtml(h.nodeId || '')}">
+              <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;">
                 <div style="
                   width: 32px;
                   height: 32px;
                   border-radius: 8px;
-                  background: linear-gradient(135deg, ${h.color}, #1e1b4b);
+                  background: linear-gradient(135deg, ${h.color}88, #1e1b4b);
                   display: flex;
                   align-items: center;
                   justify-content: center;
                   font-size: 12px;
                   font-weight: 700;
                   color: #ffffff;
+                  flex-shrink: 0;
                 ">🪐</div>
-                <div>
-                  <div style="font-size: 13px; font-weight: 600; color: #ffffff; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <div style="min-width: 0; flex: 1;">
+                  <div style="font-size: 13px; font-weight: 600; color: #ffffff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                     ${this.escapeHtml(h.label)}
                   </div>
-                  <div style="font-size: 11px; color: var(--color-text-muted);">${h.metadata.trackCount ?? 0} songs</div>
+                  <div style="font-size: 11px; color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.escapeHtml(h.subtext)}</div>
                 </div>
               </div>
-              <span style="color: var(--color-text-muted); font-size: 14px;">›</span>
+              <span style="color: var(--color-text-muted); font-size: 14px; margin-left: 8px;">›</span>
             </div>
           `)
           .join('');
@@ -674,7 +729,7 @@ export class GalaxyView implements IView {
                 this.selectedNode = node;
                 this.canvasRenderer?.setSelectedNode(node.id);
                 this.canvasRenderer?.setFocusedNode(node.id);
-                this.detailPanel?.setNode(node);
+                void this.detailPanel?.setNode(node);
               }
             }
           });
@@ -684,7 +739,7 @@ export class GalaxyView implements IView {
 
     // 3. Render Mobile Horizontal Planets Card Row
     if (mobilePlanetsList) {
-      const mobileNodes = [...genres, ...highlights].slice(0, 8);
+      const mobileNodes = [...genres, ...albums, ...artists].slice(0, 8);
       mobilePlanetsList.innerHTML = mobileNodes
         .map(n => `
           <div class="glass-panel" data-node-id="${this.escapeHtml(n.id)}" style="
@@ -713,7 +768,7 @@ export class GalaxyView implements IView {
               this.selectedNode = node;
               this.canvasRenderer?.setSelectedNode(node.id);
               this.canvasRenderer?.setFocusedNode(node.id);
-              this.detailPanel?.setNode(node);
+              void this.detailPanel?.setNode(node);
             }
           }
         });
@@ -740,18 +795,17 @@ export class GalaxyView implements IView {
       this.canvasRenderer?.setSelectedNode(null);
       this.canvasRenderer?.setFocusedNode(null);
       this.canvasRenderer?.resetCamera();
-      this.detailPanel?.setNode(null);
+      void this.detailPanel?.setNode(null);
     });
 
     exploreNowBtn?.addEventListener('click', () => {
       if (this.currentGraph && this.currentGraph.nodes.length > 0) {
-        // Pick a random planet in universe to focus
         const randomNode = this.currentGraph.nodes[Math.floor(Math.random() * this.currentGraph.nodes.length)];
         if (randomNode) {
           this.selectedNode = randomNode;
           this.canvasRenderer?.setSelectedNode(randomNode.id);
           this.canvasRenderer?.setFocusedNode(randomNode.id);
-          this.detailPanel?.setNode(randomNode);
+          void this.detailPanel?.setNode(randomNode);
         }
       } else if (this.deps?.router) {
         this.deps.router.navigate('library');
@@ -771,7 +825,7 @@ export class GalaxyView implements IView {
           this.selectedNode = node;
           this.canvasRenderer?.setSelectedNode(node.id);
           this.canvasRenderer?.setFocusedNode(node.id);
-          this.detailPanel?.setNode(node);
+          void this.detailPanel?.setNode(node);
         }
       }
     });
@@ -790,19 +844,75 @@ export class GalaxyView implements IView {
 
     // Keyboard navigation
     canvas?.addEventListener('keydown', e => {
+      if (!this.currentGraph || this.currentGraph.nodes.length === 0) return;
+
+      const cam = this.canvasRenderer?.getCamera() || { x: 0, y: 0, zoom: 1 };
+      const panStep = 60 / cam.zoom;
+
       if (e.key === 'Escape') {
         this.selectedNode = null;
         this.canvasRenderer?.setSelectedNode(null);
         this.canvasRenderer?.setFocusedNode(null);
-        this.detailPanel?.setNode(null);
+        void this.detailPanel?.setNode(null);
       } else if (e.key === '+' || e.key === '=') {
         this.canvasRenderer?.zoomIn();
       } else if (e.key === '-' || e.key === '_') {
         this.canvasRenderer?.zoomOut();
       } else if (e.key === 'r' || e.key === 'R') {
         this.canvasRenderer?.resetCamera();
+      } else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        this.canvasRenderer?.centerOnCoordinates(cam.x, cam.y - panStep);
+      } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        this.canvasRenderer?.centerOnCoordinates(cam.x, cam.y + panStep);
+      } else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        this.canvasRenderer?.centerOnCoordinates(cam.x - panStep, cam.y);
+      } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        this.canvasRenderer?.centerOnCoordinates(cam.x + panStep, cam.y);
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        const total = this.currentGraph.nodes.length;
+        if (e.shiftKey) {
+          this.keyboardFocusIndex = (this.keyboardFocusIndex - 1 + total) % total;
+        } else {
+          this.keyboardFocusIndex = (this.keyboardFocusIndex + 1) % total;
+        }
+        const focusedNode = this.currentGraph.nodes[this.keyboardFocusIndex];
+        if (focusedNode) {
+          this.canvasRenderer?.setFocusedNode(focusedNode.id);
+        }
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        const focusedNode = this.currentGraph.nodes[this.keyboardFocusIndex];
+        if (focusedNode) {
+          this.selectedNode = focusedNode;
+          this.canvasRenderer?.setSelectedNode(focusedNode.id);
+          void this.detailPanel?.setNode(focusedNode);
+        }
+      } else if (e.key === 'p' || e.key === 'P') {
+        const nodeToPlay = this.selectedNode || this.currentGraph.nodes[this.keyboardFocusIndex];
+        if (nodeToPlay) {
+          void this.handleQuickPlay(nodeToPlay);
+        }
       }
     });
+  }
+
+  private async handleQuickPlay(node: GalaxyNode): Promise<void> {
+    if (!this.deps) return;
+    const pm = this.deps.playbackManager;
+
+    if (node.type === 'track') {
+      const track = await this.deps.libraryService.getTrack(node.entityId);
+      if (track) await pm.playTrack(track);
+    } else if (node.type === 'album') {
+      const res = await this.deps.libraryService.listTracks({ limit: 100 }, { albumId: node.entityId });
+      if (res.items.length > 0) await pm.playTrack(res.items[0]!, res.items);
+    } else if (node.type === 'artist') {
+      const res = await this.deps.libraryService.listTracks({ limit: 100 }, { artistId: node.entityId });
+      if (res.items.length > 0) await pm.playTrack(res.items[0]!, res.items);
+    } else if (node.type === 'genre') {
+      const res = await this.deps.libraryService.listTracks({ limit: 100 }, { genreId: node.entityId });
+      if (res.items.length > 0) await pm.playTrack(res.items[0]!, res.items);
+    }
   }
 
   private renderAccessibleList(): void {
@@ -819,23 +929,41 @@ export class GalaxyView implements IView {
         <li>
           <h4 style="color: var(--accent-purple, #a855f7); font-size: 16px; margin-bottom: 8px;">Genres (${genres.length})</h4>
           <ul style="padding-left: 20px;">
-            ${genres.map(g => `<li style="margin-bottom: 4px;"><strong>${this.escapeHtml(g.label)}</strong> (${g.metadata.trackCount ?? 0} tracks)</li>`).join('')}
+            ${genres.map(g => `<li style="margin-bottom: 4px;"><button class="galaxy-accessible-item-btn" data-node-id="${this.escapeHtml(g.id)}" style="background: none; border: none; color: inherit; font: inherit; cursor: pointer; text-decoration: underline;"><strong>${this.escapeHtml(g.label)}</strong></button> (${g.metadata.trackCount ?? 0} tracks)</li>`).join('')}
           </ul>
         </li>
         <li>
           <h4 style="color: #38bdf8; font-size: 16px; margin-bottom: 8px;">Artists (${artists.length})</h4>
           <ul style="padding-left: 20px;">
-            ${artists.map(a => `<li style="margin-bottom: 4px;"><strong>${this.escapeHtml(a.label)}</strong> (${a.metadata.albumCount ?? 0} albums, ${a.metadata.trackCount ?? 0} tracks)</li>`).join('')}
+            ${artists.map(a => `<li style="margin-bottom: 4px;"><button class="galaxy-accessible-item-btn" data-node-id="${this.escapeHtml(a.id)}" style="background: none; border: none; color: inherit; font: inherit; cursor: pointer; text-decoration: underline;"><strong>${this.escapeHtml(a.label)}</strong></button> (${a.metadata.albumCount ?? 0} albums, ${a.metadata.trackCount ?? 0} tracks)</li>`).join('')}
           </ul>
         </li>
         <li>
           <h4 style="color: #ff6b00; font-size: 16px; margin-bottom: 8px;">Albums (${albums.length})</h4>
           <ul style="padding-left: 20px;">
-            ${albums.map(al => `<li style="margin-bottom: 4px;"><strong>${this.escapeHtml(al.label)}</strong> — ${this.escapeHtml(al.metadata.artistName ?? 'Unknown')} (${al.metadata.trackCount ?? 0} tracks)</li>`).join('')}
+            ${albums.map(al => `<li style="margin-bottom: 4px;"><button class="galaxy-accessible-item-btn" data-node-id="${this.escapeHtml(al.id)}" style="background: none; border: none; color: inherit; font: inherit; cursor: pointer; text-decoration: underline;"><strong>${this.escapeHtml(al.label)}</strong></button> — ${this.escapeHtml(al.metadata.artistName ?? 'Unknown')} (${al.metadata.trackCount ?? 0} tracks)</li>`).join('')}
           </ul>
         </li>
       </ul>
     `;
+
+    listEl.querySelectorAll<HTMLButtonElement>('.galaxy-accessible-item-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const nodeId = btn.getAttribute('data-node-id');
+        if (nodeId && this.currentGraph) {
+          const node = this.currentGraph.nodes.find(n => n.id === nodeId);
+          if (node) {
+            this.selectedNode = node;
+            this.canvasRenderer?.setSelectedNode(node.id);
+            this.canvasRenderer?.setFocusedNode(node.id);
+            void this.detailPanel?.setNode(node);
+            this.isAccessibleViewOpen = false;
+            const navEl = this.container?.querySelector<HTMLElement>('#galaxy-accessible-nav');
+            if (navEl) navEl.style.display = 'none';
+          }
+        }
+      });
+    });
   }
 
   private subscribeEvents(): void {
@@ -843,7 +971,7 @@ export class GalaxyView implements IView {
 
     // Track/Playback state change updates current glowing node
     this.subscriptions.push(
-      this.deps.eventBus.subscribe('playback:state-changed', (event: any) => {
+      this.deps.eventBus.subscribe(DomainEvents.PLAYBACK_STATE_CHANGED, (event: any) => {
         if (event && event.track) {
           this.canvasRenderer?.setPlayingEntity(event.track.id);
         } else {
@@ -852,18 +980,54 @@ export class GalaxyView implements IView {
       })
     );
 
-    // Library scan invalidates graph cache
     this.subscriptions.push(
-      this.deps.eventBus.subscribe('library:scanned', async () => {
-        if (this.deps?.galaxyService) {
-          this.deps.galaxyService.invalidateCache();
-          this.currentGraph = await this.deps.galaxyService.getGraph();
-          this.canvasRenderer?.setGraph(this.currentGraph);
-          this.renderAccessibleList();
-          this.renderExplorePanels();
+      this.deps.eventBus.subscribe(DomainEvents.TRACK_CHANGED, (event: any) => {
+        if (event && event.currentTrack) {
+          this.canvasRenderer?.setPlayingEntity(event.currentTrack.id);
+        } else {
+          this.canvasRenderer?.setPlayingEntity(null);
         }
       })
     );
+
+    // Favorite state change
+    this.subscriptions.push(
+      this.deps.eventBus.subscribe(DomainEvents.FAVORITE_CHANGED, (event: any) => {
+        if (event && event.trackId && this.currentGraph) {
+          const node = this.currentGraph.nodes.find(n => n.entityId === event.trackId);
+          if (node) {
+            node.metadata.isFavorite = event.isFavorite;
+            this.canvasRenderer?.requestRedraw();
+          }
+        }
+      })
+    );
+
+    // Library scan invalidates graph cache
+    const onLibraryRefresh = async () => {
+      if (this.deps?.galaxyService) {
+        this.deps.galaxyService.invalidateCache();
+        this.currentGraph = await this.deps.galaxyService.getGraph();
+        this.canvasRenderer?.setGraph(this.currentGraph);
+        this.renderAccessibleList();
+        await this.renderExplorePanels();
+      }
+    };
+
+    this.subscriptions.push(this.deps.eventBus.subscribe('library:scanned', onLibraryRefresh));
+    this.subscriptions.push(this.deps.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, onLibraryRefresh));
+
+    // Tab visibility handling (pause animation when tab hidden)
+    if (typeof document !== 'undefined') {
+      this.visibilityHandler = () => {
+        if (document.hidden) {
+          this.canvasRenderer?.setSelectedNode(null);
+        } else {
+          this.canvasRenderer?.requestRedraw();
+        }
+      };
+      document.addEventListener('visibilitychange', this.visibilityHandler);
+    }
   }
 
   private escapeHtml(str: string): string {

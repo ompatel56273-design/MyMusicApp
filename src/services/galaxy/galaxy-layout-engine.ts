@@ -84,8 +84,8 @@ export class GalaxyLayoutEngine {
       const angle = (idx / genreCount) * Math.PI * 2;
       genre.x = originX + Math.cos(angle) * genreOrbitRadius;
       genre.y = originY + Math.sin(angle) * genreOrbitRadius;
-      genre.radius = GalaxyLayoutEngine.RADIUS_MAP.genre;
-      genre.color = GalaxyLayoutEngine.COLOR_MAP.genre;
+      genre.radius = genre.radius || GalaxyLayoutEngine.RADIUS_MAP.genre;
+      genre.color = genre.color || GalaxyLayoutEngine.COLOR_MAP.genre;
     });
 
     // Fallback genre anchor for unattached artists
@@ -103,8 +103,8 @@ export class GalaxyLayoutEngine {
         const angle = (aIdx / aCount) * Math.PI * 2 + (parentGenre ? (parentGenre.x * 0.001) : 0);
         artist.x = center.x + Math.cos(angle) * artistOrbit;
         artist.y = center.y + Math.sin(angle) * artistOrbit;
-        artist.radius = GalaxyLayoutEngine.RADIUS_MAP.artist;
-        artist.color = GalaxyLayoutEngine.COLOR_MAP.artist;
+        artist.radius = artist.radius || GalaxyLayoutEngine.RADIUS_MAP.artist;
+        artist.color = artist.color || GalaxyLayoutEngine.COLOR_MAP.artist;
 
         const uIdx = unparentedArtists.indexOf(artist);
         if (uIdx !== -1) unparentedArtists.splice(uIdx, 1);
@@ -116,8 +116,8 @@ export class GalaxyLayoutEngine {
       const angle = (idx / (unparentedArtists.length || 1)) * Math.PI * 2;
       artist.x = originX + Math.cos(angle) * 400;
       artist.y = originY + Math.sin(angle) * 400;
-      artist.radius = GalaxyLayoutEngine.RADIUS_MAP.artist;
-      artist.color = GalaxyLayoutEngine.COLOR_MAP.artist;
+      artist.radius = artist.radius || GalaxyLayoutEngine.RADIUS_MAP.artist;
+      artist.color = artist.color || GalaxyLayoutEngine.COLOR_MAP.artist;
     });
 
     // 3. Position Albums around their parent Artist
@@ -132,8 +132,8 @@ export class GalaxyLayoutEngine {
         const angle = (albIdx / albCount) * Math.PI * 2;
         album.x = center.x + Math.cos(angle) * albumOrbit;
         album.y = center.y + Math.sin(angle) * albumOrbit;
-        album.radius = GalaxyLayoutEngine.RADIUS_MAP.album;
-        album.color = GalaxyLayoutEngine.COLOR_MAP.album;
+        album.radius = album.radius || GalaxyLayoutEngine.RADIUS_MAP.album;
+        album.color = album.color || GalaxyLayoutEngine.COLOR_MAP.album;
 
         const uIdx = unparentedAlbums.indexOf(album);
         if (uIdx !== -1) unparentedAlbums.splice(uIdx, 1);
@@ -144,8 +144,8 @@ export class GalaxyLayoutEngine {
       const angle = (idx / (unparentedAlbums.length || 1)) * Math.PI * 2;
       album.x = originX + Math.cos(angle) * 300;
       album.y = originY + Math.sin(angle) * 300;
-      album.radius = GalaxyLayoutEngine.RADIUS_MAP.album;
-      album.color = GalaxyLayoutEngine.COLOR_MAP.album;
+      album.radius = album.radius || GalaxyLayoutEngine.RADIUS_MAP.album;
+      album.color = album.color || GalaxyLayoutEngine.COLOR_MAP.album;
     });
 
     // 4. Position Tracks in satellite cluster around their parent Album
@@ -160,8 +160,8 @@ export class GalaxyLayoutEngine {
         const angle = (tIdx / tCount) * Math.PI * 2;
         track.x = center.x + Math.cos(angle) * trackOrbit;
         track.y = center.y + Math.sin(angle) * trackOrbit;
-        track.radius = GalaxyLayoutEngine.RADIUS_MAP.track;
-        track.color = GalaxyLayoutEngine.COLOR_MAP.track;
+        track.radius = track.radius || GalaxyLayoutEngine.RADIUS_MAP.track;
+        track.color = track.color || GalaxyLayoutEngine.COLOR_MAP.track;
 
         const uIdx = unparentedTracks.indexOf(track);
         if (uIdx !== -1) unparentedTracks.splice(uIdx, 1);
@@ -172,8 +172,8 @@ export class GalaxyLayoutEngine {
       const angle = (idx / (unparentedTracks.length || 1)) * Math.PI * 2;
       track.x = originX + Math.cos(angle) * 200;
       track.y = originY + Math.sin(angle) * 200;
-      track.radius = GalaxyLayoutEngine.RADIUS_MAP.track;
-      track.color = GalaxyLayoutEngine.COLOR_MAP.track;
+      track.radius = track.radius || GalaxyLayoutEngine.RADIUS_MAP.track;
+      track.color = track.color || GalaxyLayoutEngine.COLOR_MAP.track;
     });
 
     // 5. Outer Orbits for Playlists & Folders
@@ -181,16 +181,16 @@ export class GalaxyLayoutEngine {
       const angle = (idx / (playlists.length || 1)) * Math.PI * 2 + 0.5;
       pl.x = originX + Math.cos(angle) * 1100;
       pl.y = originY + Math.sin(angle) * 1100;
-      pl.radius = GalaxyLayoutEngine.RADIUS_MAP.playlist;
-      pl.color = GalaxyLayoutEngine.COLOR_MAP.playlist;
+      pl.radius = pl.radius || GalaxyLayoutEngine.RADIUS_MAP.playlist;
+      pl.color = pl.color || GalaxyLayoutEngine.COLOR_MAP.playlist;
     });
 
     folders.forEach((f, idx) => {
       const angle = (idx / (folders.length || 1)) * Math.PI * 2 + 1.0;
       f.x = originX + Math.cos(angle) * 1250;
       f.y = originY + Math.sin(angle) * 1250;
-      f.radius = GalaxyLayoutEngine.RADIUS_MAP.folder;
-      f.color = GalaxyLayoutEngine.COLOR_MAP.folder;
+      f.radius = f.radius || GalaxyLayoutEngine.RADIUS_MAP.folder;
+      f.color = f.color || GalaxyLayoutEngine.COLOR_MAP.folder;
     });
 
     // 6. Optional bounded relaxation pass (capped at max 50 iterations)

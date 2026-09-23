@@ -15,11 +15,17 @@ export interface GalaxyNodeMetadata {
   albumTitle?: string | undefined;
   trackCount?: number | undefined;
   albumCount?: number | undefined;
+  artistCount?: number | undefined;
   durationMs?: number | undefined;
   year?: number | undefined;
   genreName?: string | undefined;
   isFavorite?: boolean | undefined;
   isCompilation?: boolean | undefined;
+  playCount?: number | undefined;
+  lastPlayedAt?: number | undefined;
+  recentPlayOrder?: number | undefined;
+  albumList?: Array<{ id: EntityId; title: string; year?: number | undefined; trackCount?: number | undefined }> | undefined;
+  trackList?: Array<{ id: EntityId; title: string; durationMs?: number | undefined; isFavorite?: boolean | undefined; playCount?: number | undefined }> | undefined;
 }
 
 export interface GalaxyNode {

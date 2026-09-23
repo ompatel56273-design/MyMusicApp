@@ -70,6 +70,51 @@ describe('GalaxyCanvasRenderer', () => {
     expect(() => renderer.draw()).not.toThrow();
   });
 
+  it('renders favorite nodes, focused nodes, and constellation history trails without error', () => {
+    const richGraph: GalaxyGraph = {
+      nodes: [
+        {
+          id: 'track:t1',
+          type: 'track',
+          entityId: 't1',
+          label: 'Track 1',
+          x: 50,
+          y: 50,
+          radius: 12,
+          color: '#10b981',
+          lodMin: 3,
+          lodMax: 4,
+          metadata: { isFavorite: true, recentPlayOrder: 1 }
+        },
+        {
+          id: 'track:t2',
+          type: 'track',
+          entityId: 't2',
+          label: 'Track 2',
+          x: 150,
+          y: 150,
+          radius: 12,
+          color: '#10b981',
+          lodMin: 3,
+          lodMax: 4,
+          metadata: { isFavorite: false, recentPlayOrder: 2 }
+        }
+      ],
+      edges: [],
+      totalNodes: 2,
+      totalEdges: 0,
+      createdAt: Date.now()
+    };
+
+    renderer.setGraph(richGraph);
+    renderer.setFocusedNode('track:t1');
+    renderer.setReducedMotion(true);
+    expect(() => renderer.draw()).not.toThrow();
+
+    renderer.setReducedMotion(false);
+    expect(() => renderer.draw()).not.toThrow();
+  });
+
   it('detaches canvas cleanly', () => {
     expect(() => renderer.detachCanvas()).not.toThrow();
   });
