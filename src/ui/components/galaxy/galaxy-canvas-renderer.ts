@@ -426,6 +426,38 @@ export class GalaxyCanvasRenderer {
       ctx.stroke();
     }
 
+    // 6b. Draw Recent History Constellation Trail
+    const recentNodes = visibleNodes
+      .filter(n => n.metadata.recentPlayOrder !== undefined)
+      .sort((a, b) => (a.metadata.recentPlayOrder || 0) - (b.metadata.recentPlayOrder || 0));
+
+    if (recentNodes.length > 1) {
+      ctx.save();
+      for (let i = 0; i < recentNodes.length - 1; i++) {
+        const n1 = recentNodes[i]!;
+        const n2 = recentNodes[i + 1]!;
+        const sx1 = toScreenX(n1.x);
+        const sy1 = toScreenY(n1.y);
+        const sx2 = toScreenX(n2.x);
+        const sy2 = toScreenY(n2.y);
+
+        const progress = 1 - i / recentNodes.length;
+        ctx.strokeStyle = `rgba(56, 189, 248, ${(0.4 * progress).toFixed(2)})`;
+        ctx.lineWidth = 1.5;
+        if (typeof ctx.setLineDash === 'function') {
+          ctx.setLineDash([3, 5]);
+        }
+        ctx.beginPath();
+        ctx.moveTo(sx1, sy1);
+        ctx.lineTo(sx2, sy2);
+        ctx.stroke();
+      }
+      if (typeof ctx.setLineDash === 'function') {
+        ctx.setLineDash([]);
+      }
+      ctx.restore();
+    }
+
     // 7. Draw Nodes with 3D Spherical Gradients & Saturn-like Rings
     for (const node of visibleNodes) {
       const sx = toScreenX(node.x);
@@ -435,20 +467,30 @@ export class GalaxyCanvasRenderer {
       const isSelected = node.id === this.selectedNodeId;
       const isFocused = node.id === this.focusedNodeId;
       const isPlaying = node.entityId === this.playingEntityId;
+      const isFavorite = node.metadata.isFavorite;
 
       // Glow effect for selected / playing node
       if (isSelected || isPlaying || isFocused) {
         const pulse = Math.sin(this.pulsePhase) * 3;
         ctx.beginPath();
         ctx.arc(sx, sy, screenRadius + 8 + pulse, 0, Math.PI * 2);
-        ctx.fillStyle = isPlaying ? 'rgba(16, 185, 129, 0.4)' : 'rgba(236, 72, 153, 0.4)';
+        ctx.fillStyle = isPlaying ? 'rgba(16, 185, 129, 0.4)' : isFocused ? 'rgba(56, 189, 248, 0.4)' : 'rgba(236, 72, 153, 0.4)';
         ctx.fill();
+      }
+
+      // Golden aura for Favorites
+      if (isFavorite && !isSelected && !isPlaying) {
+        ctx.beginPath();
+        ctx.arc(sx, sy, screenRadius + 4, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(251, 191, 36, 0.7)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
       }
 
       // Outer atmospheric glow
       try {
         const atmoGrad = ctx.createRadialGradient(sx, sy, screenRadius * 0.7, sx, sy, screenRadius * 1.8);
-        atmoGrad.addColorStop(0, isPlaying ? 'rgba(16, 185, 129, 0.6)' : `${node.color}99`);
+        atmoGrad.addColorStop(0, isPlaying ? 'rgba(16, 185, 129, 0.6)' : isFavorite ? 'rgba(251, 191, 36, 0.5)' : `${node.color}99`);
         atmoGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.beginPath();
         ctx.arc(sx, sy, screenRadius * 1.8, 0, Math.PI * 2);
@@ -480,8 +522,8 @@ export class GalaxyCanvasRenderer {
           screenRadius
         );
         sphereGrad.addColorStop(0, '#ffffff');
-        sphereGrad.addColorStop(0.3, isPlaying ? '#34d399' : node.color);
-        sphereGrad.addColorStop(1, isPlaying ? '#065f46' : '#111827');
+        sphereGrad.addColorStop(0.3, isPlaying ? '#34d399' : isFavorite ? '#fbbf24' : node.color);
+        sphereGrad.addColorStop(1, isPlaying ? '#065f46' : isFavorite ? '#78350f' : '#111827');
 
         ctx.beginPath();
         ctx.arc(sx, sy, screenRadius, 0, Math.PI * 2);
@@ -490,30 +532,30 @@ export class GalaxyCanvasRenderer {
       } catch {
         ctx.beginPath();
         ctx.arc(sx, sy, screenRadius, 0, Math.PI * 2);
-        ctx.fillStyle = isPlaying ? '#10b981' : node.color;
+        ctx.fillStyle = isPlaying ? '#10b981' : isFavorite ? '#fbbf24' : node.color;
         ctx.fill();
       }
 
       // Rim outline
-      ctx.lineWidth = isSelected ? 2.5 : 1;
-      ctx.strokeStyle = isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.45)';
+      ctx.lineWidth = isSelected ? 2.5 : isFocused ? 2 : 1;
+      ctx.strokeStyle = isSelected ? '#ffffff' : isFocused ? '#38bdf8' : isFavorite ? '#fbbf24' : 'rgba(255, 255, 255, 0.45)';
       ctx.stroke();
 
       // Node Labels (Render name + song count below the planet matching Template 10)
       if (zoom >= 0.55 || isSelected || isFocused || node.type === 'genre' || (node.type === 'artist' && zoom >= 0.4)) {
         const fontSize = Math.max(10, Math.min(14, 11 * zoom));
         ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-        ctx.fillStyle = isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.95)';
+        ctx.fillStyle = isSelected ? '#ffffff' : isFocused ? '#38bdf8' : 'rgba(255, 255, 255, 0.95)';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.fillText(node.label, sx, sy + screenRadius + 4);
 
-        // Subtitle (Track count)
+        // Subtitle (Track count or Favorite Star)
         const trackCount = node.metadata.trackCount;
         if (trackCount !== undefined && (zoom >= 0.75 || isSelected || node.type === 'genre')) {
           ctx.font = `400 ${Math.max(9, fontSize - 2)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-          ctx.fillText(`${trackCount} songs`, sx, sy + screenRadius + fontSize + 6);
+          ctx.fillStyle = isFavorite ? '#fbbf24' : 'rgba(255, 255, 255, 0.6)';
+          ctx.fillText(isFavorite ? `★ ${trackCount} songs` : `${trackCount} songs`, sx, sy + screenRadius + fontSize + 6);
         }
       }
     }

@@ -117,6 +117,8 @@ export class AppShell {
           libraryService: deps.libraryService,
           playlistService: deps.playlistService,
           searchService: deps.searchService,
+          statsService: deps.statsService,
+          artworkService: deps.artworkService,
           router: this.router,
           eventBus: deps.eventBus
         })

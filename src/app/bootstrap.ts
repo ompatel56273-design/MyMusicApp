@@ -197,11 +197,6 @@ export class AppBootstrap {
     });
     const audioSettingsService = new AudioSettingsService(adapter);
     const visualizerService = new VisualizerService(adapter);
-    const galaxyService = new GalaxyService({
-      libraryService,
-      playlistService,
-      database: adapter
-    });
     const statsService = new StatsService({
       trackRepo,
       artistRepo,
@@ -209,6 +204,12 @@ export class AppBootstrap {
       genreRepo,
       historyRepo,
       dbAdapter: adapter
+    });
+    const galaxyService = new GalaxyService({
+      libraryService,
+      playlistService,
+      statsService,
+      database: adapter
     });
     const sleepTimerService = new SleepTimerService({
       playbackManager,
