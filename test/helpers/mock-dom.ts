@@ -19,6 +19,10 @@ export class MockElement {
     this.tagName = tagName.toUpperCase();
   }
 
+  public get parentElement(): MockElement | null {
+    return this.parent;
+  }
+
   public get innerHTML(): string {
     return this._innerHTML;
   }
@@ -395,6 +399,7 @@ function parseHtmlToTree(html: string, root: MockElement): void {
 
 export function setupMockDomEnvironment(): void {
   if (typeof (globalThis as any).document === 'undefined') {
+    const docListeners = new Map<string, Array<(e: any) => void>>();
     const doc = {
       createElement: (tagName: string) => new MockElement(tagName),
       createDocumentFragment: () => new MockElement('fragment'),
@@ -407,9 +412,26 @@ export function setupMockDomEnvironment(): void {
       querySelectorAll: (sel: string) => {
         return (globalThis as any).document.body.querySelectorAll(sel);
       },
-      addEventListener: () => {},
-      removeEventListener: () => {},
+      addEventListener: (evt: string, fn: (e: any) => void) => {
+        if (!docListeners.has(evt)) docListeners.set(evt, []);
+        docListeners.get(evt)!.push(fn);
+      },
+      removeEventListener: (evt: string, fn: (e: any) => void) => {
+        const list = docListeners.get(evt);
+        if (list) {
+          const idx = list.indexOf(fn);
+          if (idx !== -1) list.splice(idx, 1);
+        }
+      },
+      dispatchEvent: (evt: any) => {
+        const list = docListeners.get(evt.type);
+        if (list) {
+          for (const fn of list) fn(evt);
+        }
+        return true;
+      },
       hidden: false,
+      visibilityState: 'visible',
       body: new MockElement('body'),
       documentElement: new MockElement('html')
     };

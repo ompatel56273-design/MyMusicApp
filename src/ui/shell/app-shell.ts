@@ -10,6 +10,7 @@ import { SettingsView } from '../views/settings-view';
 import { NowPlayingView } from '../views/now-playing-view';
 import { StatsView } from '../views/stats-view';
 import { StatsService } from '../../services/stats/stats-service';
+import { SleepTimerService } from '../../services/playback/sleep-timer-service';
 import { HeaderComponent } from './header-component';
 import { SidebarComponent } from './sidebar-component';
 import { MiniPlayerComponent } from './mini-player-component';
@@ -47,6 +48,7 @@ export interface AppShellDependencies {
   galaxyService?: IGalaxyService | undefined;
   scannerService?: IScannerService | undefined;
   statsService?: StatsService | undefined;
+  sleepTimerService?: SleepTimerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   dbAdapter?: IDatabaseAdapter | undefined;
   eventBus: EventBus;
@@ -90,7 +92,8 @@ export class AppShell {
       playbackManager: deps.playbackManager,
       artworkService: deps.artworkService,
       router: this.router,
-      eventBus: deps.eventBus
+      eventBus: deps.eventBus,
+      sleepTimerService: deps.sleepTimerService
     });
     this.keyboardManager = new KeyboardManager({
       playbackManager: deps.playbackManager,
@@ -163,7 +166,8 @@ export class AppShell {
           dbAdapter: deps.dbAdapter,
           eventBus: deps.eventBus,
           router: this.router,
-          playbackManager: deps.playbackManager
+          playbackManager: deps.playbackManager,
+          sleepTimerService: deps.sleepTimerService
         })
       ],
       [
@@ -176,7 +180,8 @@ export class AppShell {
           audioEngine: deps.audioEngine,
           visualizerService: deps.visualizerService,
           router: this.router,
-          eventBus: deps.eventBus
+          eventBus: deps.eventBus,
+          sleepTimerService: deps.sleepTimerService
         })
       ],
       [

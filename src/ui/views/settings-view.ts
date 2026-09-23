@@ -23,6 +23,8 @@ import { DomainEvents } from '../../domain/events/domain-events';
 import type { ScanProgressReport } from '../../services/scanner/scanner-types';
 import type { Disposable } from '../../core/types/common';
 import type { RouterService } from '../navigation/router-service';
+import { SleepTimerService } from '../../services/playback/sleep-timer-service';
+import { SleepTimerModalComponent } from '../components/player/sleep-timer-modal';
 import { getIconSvg } from '../icons/icon-registry';
 
 export interface SettingsViewDependencies {
@@ -33,6 +35,7 @@ export interface SettingsViewDependencies {
   scannerService?: IScannerService | undefined;
   libraryService?: ILibraryService | undefined;
   playbackManager?: IPlaybackManager | undefined;
+  sleepTimerService?: SleepTimerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   dbAdapter?: IDatabaseAdapter | undefined;
   eventBus?: EventBus | undefined;
@@ -71,6 +74,7 @@ export class SettingsView implements IView {
   private readonly scannerService?: IScannerService | undefined;
   private readonly libraryService?: ILibraryService | undefined;
   private readonly playbackManager?: IPlaybackManager | undefined;
+  private readonly sleepTimerService?: SleepTimerService | undefined;
   private readonly fsAdapter?: BrowserFilesystemAdapter | undefined;
   private readonly dbAdapter?: IDatabaseAdapter | undefined;
   private readonly eventBus?: EventBus | undefined;
@@ -105,6 +109,7 @@ export class SettingsView implements IView {
     this.scannerService = deps?.scannerService;
     this.libraryService = deps?.libraryService;
     this.playbackManager = deps?.playbackManager;
+    this.sleepTimerService = deps?.sleepTimerService;
     this.fsAdapter = deps?.fsAdapter;
     this.dbAdapter = deps?.dbAdapter;
     this.eventBus = deps?.eventBus;
@@ -770,6 +775,23 @@ export class SettingsView implements IView {
                   <span>Open Audio & EQ View</span>
                 </button>
               </div>
+
+              <div class="settings-form-row" style="border-top: 1px solid var(--glass-border); padding-top: var(--space-4); margin-top: var(--space-2);">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Sleep Timer</span>
+                  <span id="settings-sleep-timer-status" class="settings-form-row-desc">
+                    ${this.sleepTimerService?.getState().isActive
+                      ? `Active: Pausing playback in ${Math.ceil(this.sleepTimerService.getState().remainingMs / 60000)} minutes.`
+                      : 'Automatically pause playback after a set duration. (Currently Inactive)'}
+                  </span>
+                </div>
+                <button id="settings-btn-sleep-timer" class="settings-action-btn">
+                  <span>🌙</span>
+                  <span id="settings-btn-sleep-timer-text">
+                    ${this.sleepTimerService?.getState().isActive ? 'Manage Sleep Timer' : 'Set Sleep Timer'}
+                  </span>
+                </button>
+              </div>
             </section>
 
             <!-- 3. Audio DSP & Equalizer Section -->
@@ -1209,6 +1231,16 @@ export class SettingsView implements IView {
         this.playbackManager.setShuffleMode(shuffleSelect.value as ShuffleMode);
       }
     });
+
+    const sleepTimerBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-sleep-timer');
+    sleepTimerBtn?.addEventListener('click', () => {
+      if (this.sleepTimerService && this.eventBus) {
+        SleepTimerModalComponent.show({
+          sleepTimerService: this.sleepTimerService,
+          eventBus: this.eventBus
+        });
+      }
+    });
   }
 
   private attachVisualizerSettingsListeners(): void {
@@ -1469,6 +1501,24 @@ export class SettingsView implements IView {
       this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, () => {
         this.hideScanProgress('Library scan completed successfully!');
         this.refreshAllStats();
+      })
+    );
+
+    this.eventBusSubs.push(
+      this.eventBus.subscribe(DomainEvents.SLEEP_TIMER_CHANGED, () => {
+        if (!this.container || !this.sleepTimerService) return;
+        const statusEl = this.container.querySelector<HTMLElement>('#settings-sleep-timer-status');
+        const btnTextEl = this.container.querySelector<HTMLElement>('#settings-btn-sleep-timer-text');
+        const state = this.sleepTimerService.getState();
+
+        if (statusEl) {
+          statusEl.textContent = state.isActive
+            ? `Active: Pausing playback in ${Math.ceil(state.remainingMs / 60000)} minutes.`
+            : 'Automatically pause playback after a set duration. (Currently Inactive)';
+        }
+        if (btnTextEl) {
+          btnTextEl.textContent = state.isActive ? 'Manage Sleep Timer' : 'Set Sleep Timer';
+        }
       })
     );
   }
