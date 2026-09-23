@@ -43,6 +43,7 @@ import { AudioSettingsService } from '../services/audio/audio-settings-service';
 import { VisualizerService } from '../services/visualizer/visualizer-service';
 import { GalaxyService } from '../services/galaxy/galaxy-service';
 import { StatsService } from '../services/stats/stats-service';
+import { SleepTimerService } from '../services/playback/sleep-timer-service';
 import { FileAccessCapabilityService } from '../services/scanner/file-access-capability';
 import { LocalMusicOnboardingModal } from '../ui/components/onboarding/local-music-onboarding-modal';
 
@@ -209,6 +210,11 @@ export class AppBootstrap {
       historyRepo,
       dbAdapter: adapter
     });
+    const sleepTimerService = new SleepTimerService({
+      playbackManager,
+      eventBus: this.eventBus,
+      logger: this.logger
+    });
 
     // 5. Check Persistent Directory Handle
     const capabilityService = FileAccessCapabilityService.getInstance();
@@ -244,6 +250,7 @@ export class AppBootstrap {
       galaxyService,
       scannerService,
       statsService,
+      sleepTimerService,
       fsAdapter,
       dbAdapter: adapter,
       eventBus: this.eventBus
@@ -284,6 +291,7 @@ export class AppBootstrap {
     visualizerService?: IVisualizerService;
     galaxyService?: IGalaxyService;
     scannerService?: IScannerService;
+    sleepTimerService?: SleepTimerService;
   }): void {
     const root = document.getElementById('app');
     if (!root) {
@@ -302,6 +310,7 @@ export class AppBootstrap {
       visualizerService: services.visualizerService,
       galaxyService: services.galaxyService,
       scannerService: services.scannerService,
+      sleepTimerService: services.sleepTimerService,
       eventBus: this.eventBus
     });
     this.appShell.mount(root);

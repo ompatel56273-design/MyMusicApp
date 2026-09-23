@@ -26,6 +26,8 @@ import { PlayerControlsComponent } from '../components/player/player-controls-co
 import { QueuePanelComponent } from '../components/player/queue-panel-component';
 import { LyricsViewComponent } from '../components/player/lyrics-view-component';
 import { AudioInfoPanelComponent } from '../components/player/audio-info-panel-component';
+import { SleepTimerService } from '../../services/playback/sleep-timer-service';
+import { SleepTimerModalComponent } from '../components/player/sleep-timer-modal';
 import { escapeHtml } from '../../core/security/html-sanitizer';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
@@ -40,6 +42,7 @@ export interface NowPlayingViewDependencies {
   visualizerService?: IVisualizerService | undefined;
   router?: RouterService | undefined;
   eventBus: EventBus;
+  sleepTimerService?: SleepTimerService | undefined;
 }
 
 /**
@@ -61,6 +64,7 @@ export class NowPlayingView implements IView {
   private readonly visualizerService?: IVisualizerService | undefined;
   private readonly router?: RouterService | undefined;
   private readonly eventBus: EventBus;
+  private readonly sleepTimerService?: SleepTimerService | undefined;
 
   private artworkComponent: ArtworkViewComponent | null = null;
   private controlsComponent: PlayerControlsComponent | null = null;
@@ -81,6 +85,7 @@ export class NowPlayingView implements IView {
     this.visualizerService = deps.visualizerService;
     this.router = deps.router;
     this.eventBus = deps.eventBus;
+    this.sleepTimerService = deps.sleepTimerService;
     void this.audioEngine;
     void this.visualizerService;
   }
@@ -299,7 +304,33 @@ export class NowPlayingView implements IView {
             </span>
           </div>
 
-          <div style="width: 72px;"></div>
+          <!-- Sleep Timer Button -->
+          <button
+            id="np-sleep-timer-btn"
+            aria-label="Sleep Timer"
+            title="Sleep Timer"
+            style="
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+              padding: 8px 14px;
+              border-radius: var(--radius-full);
+              background: ${this.sleepTimerService?.getState().isActive ? 'rgba(168, 85, 247, 0.2)' : 'var(--glass-bg-subtle)'};
+              border: 1px solid ${this.sleepTimerService?.getState().isActive ? 'rgba(168, 85, 247, 0.5)' : 'var(--glass-border)'};
+              color: ${this.sleepTimerService?.getState().isActive ? 'var(--color-accent-purple-glow)' : 'var(--color-text-secondary)'};
+              font-size: var(--font-size-xs);
+              font-weight: var(--font-weight-semibold);
+              cursor: pointer;
+              transition: all var(--duration-fast) var(--ease-smooth);
+            "
+          >
+            <span style="display: flex;">${getIconSvg('moon', { size: 16 })}</span>
+            <span id="np-sleep-timer-label">
+              ${this.sleepTimerService?.getState().isActive
+                ? `${Math.ceil(this.sleepTimerService.getState().remainingMs / 60000)}m`
+                : 'Sleep'}
+            </span>
+          </button>
         </div>
 
         <!-- 2-Column Responsive Layout (Templates 6 & 7) -->
@@ -403,11 +434,47 @@ export class NowPlayingView implements IView {
 
     this.mountChildComponents();
     this.bindTabEvents();
+    this.bindHeaderEvents();
 
     // Back button
     this.container.querySelector<HTMLButtonElement>('#np-back-btn')?.addEventListener('click', () => {
       this.router?.navigate('library');
     });
+  }
+
+  private bindHeaderEvents(): void {
+    if (!this.container) return;
+
+    this.container.querySelector<HTMLButtonElement>('#np-sleep-timer-btn')?.addEventListener('click', () => {
+      if (this.sleepTimerService) {
+        SleepTimerModalComponent.show({
+          sleepTimerService: this.sleepTimerService,
+          eventBus: this.eventBus
+        });
+      }
+    });
+  }
+
+  private updateSleepTimerDisplay(): void {
+    if (!this.container || !this.sleepTimerService) return;
+
+    const btn = this.container.querySelector<HTMLButtonElement>('#np-sleep-timer-btn');
+    const label = this.container.querySelector<HTMLElement>('#np-sleep-timer-label');
+    if (!btn || !label) return;
+
+    const state = this.sleepTimerService.getState();
+    if (state.isActive) {
+      const remainingMins = Math.ceil(state.remainingMs / 60000);
+      label.textContent = `${remainingMins}m`;
+      btn.style.background = 'rgba(168, 85, 247, 0.2)';
+      btn.style.borderColor = 'rgba(168, 85, 247, 0.5)';
+      btn.style.color = 'var(--color-accent-purple-glow)';
+    } else {
+      label.textContent = 'Sleep';
+      btn.style.background = 'var(--glass-bg-subtle)';
+      btn.style.borderColor = 'var(--glass-border)';
+      btn.style.color = 'var(--color-text-secondary)';
+    }
   }
 
   private renderEmptyState(): void {
@@ -577,6 +644,13 @@ export class NowPlayingView implements IView {
           (this.currentTrack as any).isFavorite = e.isFavorite;
           this.controlsComponent?.updateFavorite(e.isFavorite);
         }
+      })
+    );
+
+    // 7. Sleep Timer Changed
+    this.subscriptions.push(
+      this.eventBus.subscribe(DomainEvents.SLEEP_TIMER_CHANGED, () => {
+        this.updateSleepTimerDisplay();
       })
     );
   }

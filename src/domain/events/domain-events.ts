@@ -58,6 +58,19 @@ export interface PlaylistUpdatedEvent {
   readonly action: 'created' | 'updated' | 'deleted';
 }
 
+export interface SleepTimerChangedEvent {
+  readonly isActive: boolean;
+  readonly startedAt: number | null;
+  readonly durationMs: number;
+  readonly endsAt: number | null;
+  readonly remainingMs: number;
+}
+
+export interface SleepTimerExpiredEvent {
+  readonly timestamp: number;
+  readonly durationMs: number;
+}
+
 /**
  * Event string constants
  */
@@ -70,5 +83,7 @@ export const DomainEvents = {
   FAVORITE_CHANGED: 'library:favorite-changed',
   SCAN_PROGRESS: 'scanner:progress',
   LIBRARY_UPDATED: 'library:updated',
-  PLAYLIST_UPDATED: 'playlist:updated'
+  PLAYLIST_UPDATED: 'playlist:updated',
+  SLEEP_TIMER_CHANGED: 'playback:sleep-timer-changed',
+  SLEEP_TIMER_EXPIRED: 'playback:sleep-timer-expired'
 } as const;

@@ -5,6 +5,8 @@ import { DomainEvents } from '../../domain/events/domain-events';
 import type { Disposable } from '../../core/types/common';
 import type { Track } from '../../domain/entities/models';
 import type { ShuffleMode, RepeatMode } from '../../domain/value-objects/audio-types';
+import { SleepTimerService } from '../../services/playback/sleep-timer-service';
+import { SleepTimerModalComponent } from '../components/player/sleep-timer-modal';
 import { getIconSvg } from '../icons/icon-registry';
 
 export interface MiniPlayerDependencies {
@@ -12,6 +14,7 @@ export interface MiniPlayerDependencies {
   artworkService?: IArtworkService | undefined;
   router?: RouterService | undefined;
   eventBus: EventBus;
+  sleepTimerService?: SleepTimerService | undefined;
 }
 
 export class MiniPlayerComponent {
@@ -20,6 +23,7 @@ export class MiniPlayerComponent {
   private readonly artworkService?: IArtworkService | undefined;
   private readonly router?: RouterService | undefined;
   private readonly eventBus: EventBus;
+  private readonly sleepTimerService?: SleepTimerService | undefined;
 
   private subscriptions: Disposable[] = [];
   private currentTrack: Track | null = null;
@@ -34,6 +38,7 @@ export class MiniPlayerComponent {
     this.artworkService = deps.artworkService;
     this.router = deps.router;
     this.eventBus = deps.eventBus;
+    this.sleepTimerService = deps.sleepTimerService;
   }
 
   public mount(container: HTMLElement): void {
@@ -409,6 +414,27 @@ export class MiniPlayerComponent {
             />
           </div>
 
+          <!-- Sleep Timer Trigger -->
+          <button
+            id="mini-sleep-timer-btn"
+            aria-label="Sleep Timer"
+            title="${this.sleepTimerService?.getState().isActive ? `Sleep Timer Active (${Math.ceil(this.sleepTimerService.getState().remainingMs / 60000)}m remaining)` : 'Sleep Timer'}"
+            style="
+              background: transparent;
+              border: none;
+              color: ${this.sleepTimerService?.getState().isActive ? 'var(--color-accent-purple-glow)' : 'var(--color-text-secondary)'};
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 6px;
+              border-radius: var(--radius-full);
+              transition: all var(--duration-fast) var(--ease-smooth);
+            "
+          >
+            ${getIconSvg('moon', { size: 16 })}
+          </button>
+
           <!-- Queue Toggle / View -->
           <button
             id="mini-queue-btn"
@@ -560,12 +586,38 @@ export class MiniPlayerComponent {
       }
     });
 
+    // Sleep Timer Trigger
+    this.container.querySelector('#mini-sleep-timer-btn')?.addEventListener('click', () => {
+      if (this.sleepTimerService) {
+        SleepTimerModalComponent.show({
+          sleepTimerService: this.sleepTimerService,
+          eventBus: this.eventBus
+        });
+      }
+    });
+
     // Expand to Now Playing
     this.container.querySelector('#mini-expand-btn')?.addEventListener('click', () => {
       if (this.router) {
         this.router.navigate('nowplaying');
       }
     });
+  }
+
+  private updateSleepTimerState(): void {
+    if (!this.container || !this.sleepTimerService) return;
+    const btn = this.container.querySelector<HTMLButtonElement>('#mini-sleep-timer-btn');
+    if (!btn) return;
+
+    const state = this.sleepTimerService.getState();
+    if (state.isActive) {
+      const remainingMins = Math.ceil(state.remainingMs / 60000);
+      btn.style.color = 'var(--color-accent-purple-glow)';
+      btn.title = `Sleep Timer Active (${remainingMins}m remaining)`;
+    } else {
+      btn.style.color = 'var(--color-text-secondary)';
+      btn.title = 'Sleep Timer';
+    }
   }
 
   private subscribeToDomainEvents(): void {
@@ -603,6 +655,13 @@ export class MiniPlayerComponent {
         this.currentPositionMs = payload.positionMs;
         this.currentDurationMs = payload.durationMs;
         this.updateProgress();
+      })
+    );
+
+    // Sleep Timer Changed
+    this.subscriptions.push(
+      this.eventBus.subscribe(DomainEvents.SLEEP_TIMER_CHANGED, () => {
+        this.updateSleepTimerState();
       })
     );
   }
