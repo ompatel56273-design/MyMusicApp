@@ -3,6 +3,8 @@ import type { Track, Lyrics, LyricLine } from '../../../domain/entities/models';
 import type { EventBus } from '../../../core/events/event-bus';
 import { DomainEvents, type PlaybackTimeUpdatedEvent, type TrackChangedEvent } from '../../../domain/events/domain-events';
 import type { Disposable } from '../../../core/types/common';
+import { getIconSvg } from '../../icons/icon-registry';
+import { escapeHtml } from '../../../core/security/html-sanitizer';
 
 export interface LyricsViewDependencies {
   lyricsService?: ILyricsService | undefined;
@@ -10,6 +12,15 @@ export interface LyricsViewDependencies {
   eventBus: EventBus;
 }
 
+/**
+ * Phase 8 Synced Lyrics View Component (Template 7).
+ * Features:
+ * - Real-time synchronization to playback time
+ * - Glowing active lyric cue highlighting
+ * - Auto-scroll to current lyric line
+ * - Click-to-seek on any synced lyric line
+ * - Graceful plain lyrics and empty states
+ */
 export class LyricsViewComponent {
   private container: HTMLElement | null = null;
   private readonly lyricsService?: ILyricsService | undefined;
@@ -96,244 +107,240 @@ export class LyricsViewComponent {
     this.renderLoadingState();
 
     if (!this.lyricsService) {
-      this.renderEmptyState('No Lyrics Available', 'Lyrics service is not available.');
+      this.renderEmptyState('No Lyrics Available', `No lyrics found for "${this.currentTrack.title}".`);
       return;
     }
 
-    const lyrics = await this.lyricsService.getLyrics(this.currentTrack.id);
-    if (!this.container) return;
+    try {
+      const lyrics = await this.lyricsService.getLyrics(this.currentTrack.id);
+      this.currentLyrics = lyrics;
 
-    this.currentLyrics = lyrics;
+      if (!lyrics) {
+        this.renderEmptyState('No Lyrics Available', `No lyrics found for "${this.currentTrack.title}".`);
+        return;
+      }
 
-    if (!lyrics || (!lyrics.plainText.trim() && lyrics.lines.length === 0)) {
-      this.renderEmptyState(
-        'No Lyrics Available',
-        `No lyrics found for "${this.currentTrack.title}".`
-      );
-      return;
-    }
-
-    if (lyrics.type === 'synced' && lyrics.lines.length > 0) {
-      this.renderSyncedLyrics(lyrics);
+      this.renderLyrics(lyrics);
       this.syncToTime(this.playbackManager.positionMs);
-    } else {
-      this.renderPlainLyrics(lyrics);
+    } catch (_err) {
+      this.renderEmptyState('Unable to Load Lyrics', 'An error occurred while fetching lyrics.');
     }
   }
 
   private renderLoadingState(): void {
     if (!this.container) return;
     this.container.innerHTML = `
-      <div class="glass-panel" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-8); border-radius: var(--radius-xl); color: var(--color-text-muted); box-sizing: border-box;">
-        <div style="font-size: 32px; margin-bottom: var(--space-3); animation: pulse 1.5s infinite;">♫</div>
-        <p style="font-size: 14px; margin: 0;">Loading lyrics...</p>
+      <div class="glass-panel" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 380px; padding: var(--space-8); border-radius: var(--radius-2xl); text-align: center; color: var(--color-text-muted); background: var(--glass-bg-subtle); border: 1px solid var(--glass-border); box-sizing: border-box;">
+        <span style="color: var(--color-accent-purple-glow); display: flex; margin-bottom: 12px;">
+          ${getIconSvg('sound-wave', { size: 36 })}
+        </span>
+        <p style="font-size: var(--font-size-sm); color: #ffffff; font-weight: var(--font-weight-bold); margin: 0 0 4px 0;">Loading Lyrics...</p>
       </div>
     `;
   }
 
-  private renderEmptyState(title: string, message: string): void {
+  private renderEmptyState(title: string, msg: string): void {
     if (!this.container) return;
     this.container.innerHTML = `
-      <div class="glass-panel lyrics-empty-state" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-8); border-radius: var(--radius-xl); text-align: center; color: var(--color-text-muted); box-sizing: border-box;">
-        <div style="font-size: 40px; margin-bottom: var(--space-3); opacity: 0.4;">📜</div>
-        <h3 style="font-size: 16px; font-weight: 600; color: var(--color-text-primary); margin: 0 0 var(--space-1) 0;">
-          ${title}
-        </h3>
-        <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 var(--space-4) 0; max-width: 320px;">
-          ${message}
-        </p>
-        <button
-          class="add-lyrics-btn"
-          style="display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-4); background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--radius-full); color: var(--color-text-primary); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s ease;"
+      <div class="glass-panel" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 380px; padding: var(--space-8); border-radius: var(--radius-2xl); text-align: center; color: var(--color-text-muted); background: var(--glass-bg-subtle); border: 1px solid var(--glass-border); box-sizing: border-box;">
+        <span style="color: var(--color-text-muted); display: flex; margin-bottom: 12px; opacity: 0.6;">
+          ${getIconSvg('mic', { size: 36 })}
+        </span>
+        <h3 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-bold); color: #ffffff; margin: 0 0 4px 0;">${title}</h3>
+        <p style="font-size: var(--font-size-xs); color: var(--color-text-secondary); margin: 0; max-width: 320px; line-height: 1.5;">${msg}</p>
+      </div>
+    `;
+  }
+
+  private renderLyrics(lyrics: Lyrics): void {
+    if (!this.container) return;
+
+    const isSynced = lyrics.type === 'synced' && lyrics.lines && lyrics.lines.length > 0;
+
+    this.container.innerHTML = `
+      <div
+        class="glass-panel lyrics-container"
+        style="
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          min-height: 380px;
+          border-radius: var(--radius-2xl);
+          padding: var(--space-6) var(--space-5);
+          box-sizing: border-box;
+          background: var(--glass-bg-subtle);
+          border: 1px solid var(--glass-border);
+          backdrop-filter: blur(16px);
+          position: relative;
+          overflow: hidden;
+          width: 100%;
+        "
+      >
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: var(--space-3); margin-bottom: var(--space-4);">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: var(--color-accent-purple-glow); display: flex;">
+              ${getIconSvg('mic', { size: 16 })}
+            </span>
+            <span style="font-size: 11px; font-weight: var(--font-weight-bold); text-transform: uppercase; letter-spacing: 0.08em; color: #ffffff;">
+              ${isSynced ? 'Synchronized Lyrics' : 'Lyrics'}
+            </span>
+          </div>
+          ${
+            isSynced
+              ? `<span style="font-size: 10px; font-weight: var(--font-weight-extrabold); letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: var(--radius-full); background: rgba(124, 58, 237, 0.2); color: var(--color-accent-cyan); border: 1px solid var(--glass-border-interactive);">LIVE SYNC</span>`
+              : ''
+          }
+        </div>
+
+        <!-- Lyrics Scroll Content -->
+        <div
+          id="lyrics-scroll-body"
+          style="
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-3);
+            padding: var(--space-4) 0;
+            scrollbar-width: none;
+            text-align: center;
+            position: relative;
+          "
         >
-          + Add Lyrics (LRC)
+          ${
+            isSynced
+              ? lyrics.lines
+                  .map(
+                    (line: LyricLine, idx: number) =>
+                      `<p class="lyric-cue lyric-cue-line" tabindex="0" role="button" aria-label="Seek to lyric: ${escapeHtml(line.text || 'line')}" data-cue-index="${idx}" data-start-time="${line.timeMs}" style="font-size: clamp(15px, 2vw, 19px); font-weight: var(--font-weight-bold); color: rgba(255, 255, 255, 0.4); margin: 0; padding: 10px 16px; border-radius: var(--radius-lg); cursor: pointer; transition: all 0.25s var(--ease-smooth); line-height: 1.45; user-select: none; outline: none;">${escapeHtml(line.text || '•••')}</p>`
+                  )
+                  .join('')
+              : `
+              <div class="plain-lyrics-content" style="font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.8; white-space: pre-wrap; text-align: left; padding: 0 var(--space-3);">
+                ${escapeHtml(lyrics.plainText || '')}
+              </div>
+            `
+          }
+        </div>
+
+        <!-- Resume Auto-Sync Floating Pill (shown on manual scroll) -->
+        <button
+          id="lyrics-resume-sync-btn"
+          aria-label="Resume auto-scrolling to active lyric"
+          style="
+            display: none;
+            position: absolute;
+            bottom: var(--space-4);
+            left: 50%;
+            transform: translateX(-50%);
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            background: linear-gradient(135deg, var(--color-accent-purple) 0%, #9333ea 100%);
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: var(--font-weight-bold);
+            border-radius: var(--radius-full);
+            border: 1px solid var(--glass-border-interactive);
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(124, 58, 237, 0.5);
+            z-index: 10;
+            transition: all var(--duration-fast) var(--ease-smooth);
+          "
+        >
+          <span style="display: flex;">${getIconSvg('sound-wave', { size: 12, color: '#ffffff' })}</span>
+          <span>Resume Sync</span>
         </button>
       </div>
     `;
 
-    const addBtn = this.container.querySelector('.add-lyrics-btn');
-    addBtn?.addEventListener('click', () => {
-      this.promptAddLyrics();
-    });
-  }
+    const scrollBody = this.container.querySelector<HTMLElement>('#lyrics-scroll-body');
+    const resumeBtn = this.container.querySelector<HTMLButtonElement>('#lyrics-resume-sync-btn');
 
-  private renderPlainLyrics(lyrics: Lyrics): void {
-    if (!this.container) return;
-
-    this.container.innerHTML = `
-      <div class="glass-panel lyrics-plain-container" style="height: 100%; overflow-y: auto; padding: var(--space-8) var(--space-6); border-radius: var(--radius-xl); box-sizing: border-box;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-6); border-bottom: 1px solid rgba(255, 255, 255, 0.06); padding-bottom: var(--space-3);">
-          <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted);">
-            Plain Text Lyrics
-          </span>
-          <button class="edit-lyrics-btn" style="background: transparent; border: none; font-size: 12px; color: var(--color-accent-primary); cursor: pointer;">
-            Edit
-          </button>
-        </div>
-        <div class="plain-lyrics-content" style="font-size: 16px; line-height: 2; color: var(--color-text-primary); white-space: pre-wrap; font-family: var(--font-family-base, sans-serif); text-align: center;"></div>
-      </div>
-    `;
-
-    const contentEl = this.container.querySelector<HTMLElement>('.plain-lyrics-content');
-    if (contentEl) {
-      // Safe text rendering to prevent XSS
-      contentEl.textContent = lyrics.plainText;
-    }
-
-    this.container.querySelector('.edit-lyrics-btn')?.addEventListener('click', () => {
-      this.promptAddLyrics(lyrics.plainText);
-    });
-  }
-
-  private renderSyncedLyrics(lyrics: Lyrics): void {
-    if (!this.container) return;
-
-    this.container.innerHTML = `
-      <div class="glass-panel lyrics-synced-container" style="height: 100%; overflow-y: auto; padding: var(--space-6) var(--space-5); border-radius: var(--radius-xl); box-sizing: border-box; scroll-behavior: smooth; position: relative; background: var(--glass-surface); border: 1px solid var(--glass-border); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); border-bottom: 1px solid var(--glass-border); padding-bottom: var(--space-3);">
-          <div style="display: flex; align-items: center; gap: var(--space-2);">
-            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-accent-primary); background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); padding: 2px 10px; border-radius: var(--radius-full);">
-              Synchronized Lyrics
-            </span>
-          </div>
-          <button class="edit-lyrics-btn" style="background: var(--glass-surface); border: 1px solid var(--glass-border); font-size: 12px; font-weight: 600; color: var(--color-text-secondary); padding: 4px 12px; border-radius: var(--radius-full); cursor: pointer; transition: all var(--duration-fast) var(--ease-smooth);">
-            Edit LRC
-          </button>
-        </div>
-        <div class="cues-list" style="display: flex; flex-direction: column; gap: var(--space-3); padding: 40px 0; text-align: center;"></div>
-      </div>
-    `;
-
-    const cuesList = this.container.querySelector<HTMLElement>('.cues-list');
-    const scrollContainer = this.container.querySelector<HTMLElement>('.lyrics-synced-container');
-
-    if (scrollContainer) {
-      scrollContainer.addEventListener('wheel', () => this.handleUserScroll(), { passive: true });
-      scrollContainer.addEventListener('touchstart', () => this.handleUserScroll(), { passive: true });
-    }
-
-    if (cuesList) {
-      lyrics.lines.forEach((cue: LyricLine, index: number) => {
-        const cueEl = document.createElement('div');
-        cueEl.className = `lyric-cue lyric-cue-${index}`;
-        cueEl.setAttribute('data-cue-index', index.toString());
-        cueEl.setAttribute('role', 'button');
-        cueEl.setAttribute('tabindex', '0');
-        cueEl.setAttribute('aria-label', `Jump to ${cue.text || 'instrumental'}`);
-
-        cueEl.style.fontSize = '18px';
-        cueEl.style.fontWeight = '500';
-        cueEl.style.lineHeight = '1.6';
-        cueEl.style.color = 'var(--color-text-muted)';
-        cueEl.style.opacity = '0.4';
-        cueEl.style.cursor = 'pointer';
-        cueEl.style.transition = 'all var(--duration-normal) var(--ease-smooth)';
-        cueEl.style.padding = 'var(--space-2) var(--space-4)';
-        cueEl.style.borderRadius = 'var(--radius-lg)';
-
-        // Safe text rendering
-        cueEl.textContent = cue.text || '♫';
-
-        // Hover effect
-        cueEl.addEventListener('mouseenter', () => {
-          if (this.activeCueIndex !== index) {
-            cueEl.style.opacity = '0.75';
-            cueEl.style.background = 'rgba(255, 255, 255, 0.03)';
-          }
-        });
-        cueEl.addEventListener('mouseleave', () => {
-          if (this.activeCueIndex !== index) {
-            cueEl.style.opacity = '0.4';
-            cueEl.style.background = 'transparent';
-          }
-        });
-
-        // Click to seek
-        cueEl.addEventListener('click', () => {
-          void this.playbackManager.seek(cue.timeMs);
-        });
-
-        cuesList.appendChild(cueEl);
+    if (resumeBtn) {
+      resumeBtn.addEventListener('click', () => {
+        this.isUserScrolling = false;
+        resumeBtn.style.display = 'none';
+        const activeEl = this.container?.querySelector<HTMLElement>('.active-cue');
+        activeEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
     }
 
-    this.container.querySelector('.edit-lyrics-btn')?.addEventListener('click', () => {
-      this.promptAddLyrics(lyrics.plainText);
-    });
-  }
+    if (scrollBody) {
+      const handleUserScroll = () => {
+        this.isUserScrolling = true;
+        if (resumeBtn && isSynced) {
+          resumeBtn.style.display = 'inline-flex';
+        }
+        if (this.userScrollTimeout) clearTimeout(this.userScrollTimeout);
+        this.userScrollTimeout = setTimeout(() => {
+          this.isUserScrolling = false;
+          if (resumeBtn) resumeBtn.style.display = 'none';
+        }, 5000);
+      };
 
-  private handleUserScroll(): void {
-    this.isUserScrolling = true;
-    if (this.userScrollTimeout) clearTimeout(this.userScrollTimeout);
-    this.userScrollTimeout = setTimeout(() => {
-      this.isUserScrolling = false;
-    }, 3000);
+      scrollBody.addEventListener('wheel', handleUserScroll, { passive: true });
+      scrollBody.addEventListener('touchmove', handleUserScroll, { passive: true });
+
+      // Click & Keyboard to seek
+      scrollBody.querySelectorAll<HTMLElement>('.lyric-cue-line').forEach(lineEl => {
+        const seekAction = () => {
+          const timeMs = Number(lineEl.getAttribute('data-start-time'));
+          if (!isNaN(timeMs)) {
+            void this.playbackManager.seek(timeMs);
+          }
+        };
+
+        lineEl.addEventListener('click', seekAction);
+        lineEl.addEventListener('keydown', e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            seekAction();
+          }
+        });
+      });
+    }
   }
 
   private syncToTime(positionMs: number): void {
-    if (!this.container || !this.currentLyrics || this.currentLyrics.type !== 'synced') return;
+    if (!this.container || this.currentLyrics?.type !== 'synced' || !this.currentLyrics.lines) return;
 
     const lines = this.currentLyrics.lines;
-    if (lines.length === 0) return;
+    let activeIdx = -1;
 
-    // Find active cue: highest index where line.timeMs <= positionMs
-    let newActiveIndex = -1;
     for (let i = 0; i < lines.length; i++) {
-      if (lines[i]!.timeMs <= positionMs) {
-        newActiveIndex = i;
+      if (positionMs >= lines[i]!.timeMs) {
+        activeIdx = i;
       } else {
         break;
       }
     }
 
-    if (newActiveIndex === this.activeCueIndex) return;
-    this.activeCueIndex = newActiveIndex;
+    if (activeIdx === this.activeCueIndex) return;
+    this.activeCueIndex = activeIdx;
 
-    // Update DOM cue elements
-    const allCues = this.container.querySelectorAll<HTMLElement>('.lyric-cue');
-    allCues.forEach((el, index) => {
-      if (index === this.activeCueIndex) {
+    const cueElements = this.container.querySelectorAll<HTMLElement>('.lyric-cue-line');
+    cueElements.forEach((el, idx) => {
+      if (idx === activeIdx) {
         el.classList.add('active-cue');
         el.style.color = '#ffffff';
-        el.style.opacity = '1';
-        el.style.fontWeight = '700';
-        el.style.fontSize = '22px';
         el.style.transform = 'scale(1.04)';
-        el.style.textShadow = '0 0 20px rgba(168, 85, 247, 0.6), 0 0 35px rgba(168, 85, 247, 0.3)';
-        el.style.background = 'rgba(168, 85, 247, 0.14)';
-        el.style.border = '1px solid rgba(168, 85, 247, 0.3)';
+        el.style.textShadow = '0 0 16px rgba(124, 58, 237, 0.8), 0 0 8px rgba(6, 182, 212, 0.6)';
+        el.style.background = 'rgba(255, 255, 255, 0.06)';
+        el.style.border = '1px solid var(--glass-border-interactive)';
 
-        // Auto-scroll into center if user is not actively manually scrolling
         if (!this.isUserScrolling) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       } else {
         el.classList.remove('active-cue');
-        el.style.color = 'var(--color-text-muted)';
-        el.style.opacity = '0.4';
-        el.style.fontWeight = '500';
-        el.style.fontSize = '18px';
-        el.style.transform = 'scale(1)';
+        el.style.color = 'rgba(255, 255, 255, 0.35)';
+        el.style.transform = 'none';
         el.style.textShadow = 'none';
         el.style.background = 'transparent';
         el.style.border = '1px solid transparent';
       }
     });
-  }
-
-  private promptAddLyrics(existingContent = ''): void {
-    if (!this.currentTrack || !this.lyricsService) return;
-
-    const input = window.prompt(
-      `Paste LRC or Plain Lyrics for "${this.currentTrack.title}":`,
-      existingContent
-    );
-
-    if (input !== null && input.trim()) {
-      const parsed = this.lyricsService.parseLrc(input, this.currentTrack.id);
-      void this.lyricsService.saveLyrics(parsed).then(() => {
-        void this.loadAndRenderLyrics();
-      });
-    }
   }
 }

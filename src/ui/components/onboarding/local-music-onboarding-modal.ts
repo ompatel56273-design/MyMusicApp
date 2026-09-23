@@ -1,5 +1,5 @@
 import { FileAccessCapabilityService, type PermissionAccessStatus } from '../../../services/scanner/file-access-capability';
-import type { IScannerService } from '../../../services/contracts/service-contracts';
+import type { IScannerService, ILibraryService } from '../../../services/contracts/service-contracts';
 import type { BrowserFilesystemAdapter } from '../../../services/scanner/browser-filesystem-adapter';
 import type { IDatabaseAdapter } from '../../../data/db/database-adapter';
 import { STORES } from '../../../data/db/schema';
@@ -7,18 +7,27 @@ import { EventBus } from '../../../core/events/event-bus';
 import { DomainEvents } from '../../../domain/events/domain-events';
 import type { Disposable } from '../../../core/types/common';
 import type { ScanProgressReport } from '../../../services/scanner/scanner-types';
+import type { RouterService } from '../../navigation/router-service';
 
 export interface OnboardingModalOptions {
   scannerService: IScannerService;
   fsAdapter: BrowserFilesystemAdapter;
   dbAdapter?: IDatabaseAdapter | undefined;
+  libraryService?: ILibraryService | undefined;
+  router?: RouterService | undefined;
   eventBus: EventBus;
   onComplete?: (() => void) | undefined;
 }
 
+export type OnboardingStep = 1 | 2 | 3 | 4 | 5;
+
 /**
- * Local Music Access Onboarding Modal.
- * Explains privacy, local-only audio access, and lets users pick a music folder or audio files.
+ * LocalMusicOnboardingModal - 5-Step First-Launch Wizard.
+ * Step 1: Welcome & Overview
+ * Step 2: Privacy & Local Access Explanation
+ * Step 3: Choose Folder / File Selection
+ * Step 4: Real-time Scanner Progress
+ * Step 5: Library Ready & Stats Summary
  */
 export class LocalMusicOnboardingModal {
   private overlay: HTMLElement | null = null;
@@ -26,25 +35,37 @@ export class LocalMusicOnboardingModal {
   private readonly scannerService: IScannerService;
   private readonly fsAdapter: BrowserFilesystemAdapter;
   private readonly dbAdapter?: IDatabaseAdapter | undefined;
+  private readonly libraryService?: ILibraryService | undefined;
+  private readonly router?: RouterService | undefined;
   private readonly eventBus: EventBus;
   private readonly onComplete?: (() => void) | undefined;
-  private progressSub: Disposable | null = null;
 
+  private progressSub: Disposable | null = null;
+  private updateSub: Disposable | null = null;
+
+  private currentStep: OnboardingStep = 1;
   private permissionStatus: PermissionAccessStatus = 'NOT_REQUESTED';
-  private isProcessing = false;
   private statusMessage = '';
   private progressReport: ScanProgressReport | null = null;
+  private libraryStats = { trackCount: 0, albumCount: 0, artistCount: 0 };
 
   constructor(options: OnboardingModalOptions) {
     this.scannerService = options.scannerService;
     this.fsAdapter = options.fsAdapter;
     this.dbAdapter = options.dbAdapter;
+    this.libraryService = options.libraryService;
+    this.router = options.router;
     this.eventBus = options.eventBus;
     this.onComplete = options.onComplete;
   }
 
-  public show(): void {
+  public getStep(): OnboardingStep {
+    return this.currentStep;
+  }
+
+  public show(initialStep: OnboardingStep = 1): void {
     if (this.overlay) return;
+    this.currentStep = initialStep;
 
     this.overlay = document.createElement('div');
     this.overlay.id = 'onboarding-modal-overlay';
@@ -56,7 +77,7 @@ export class LocalMusicOnboardingModal {
     this.render();
     document.body.appendChild(this.overlay);
 
-    this.subscribeProgress();
+    this.subscribeEvents();
   }
 
   public close(): void {
@@ -64,15 +85,30 @@ export class LocalMusicOnboardingModal {
       this.progressSub.dispose();
       this.progressSub = null;
     }
+    if (this.updateSub) {
+      this.updateSub.dispose();
+      this.updateSub = null;
+    }
     if (this.overlay && this.overlay.parentNode) {
       this.overlay.parentNode.removeChild(this.overlay);
     }
     this.overlay = null;
 
     try {
-      localStorage.setItem('mymusic_onboarding_dismissed', 'true');
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('mymusic_onboarding_dismissed', 'true');
+        localStorage.setItem('mymusic_onboarding_completed', 'true');
+      }
     } catch {
       // Ignore
+    }
+
+    if (this.dbAdapter) {
+      void this.dbAdapter.put(STORES.SETTINGS, {
+        key: 'onboarding_state',
+        completed: true,
+        updatedAt: Date.now()
+      });
     }
 
     if (this.onComplete) {
@@ -80,15 +116,26 @@ export class LocalMusicOnboardingModal {
     }
   }
 
-  private subscribeProgress(): void {
+  public setStep(step: OnboardingStep): void {
+    this.currentStep = step;
+    this.render();
+  }
+
+  private subscribeEvents(): void {
     this.progressSub = this.eventBus.subscribe(DomainEvents.SCAN_PROGRESS, (report: unknown) => {
       this.progressReport = report as ScanProgressReport;
-      this.updateProgressDisplay();
-      if (this.progressReport?.isComplete && this.isProcessing) {
-        this.isProcessing = false;
-        this.statusMessage = `Success! Added ${this.progressReport.filesAdded} songs to your library.`;
+      if (this.currentStep === 4) {
+        this.updateProgressDisplay();
+      }
+    });
+
+    this.updateSub = this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, async () => {
+      if (this.libraryService) {
+        this.libraryStats = await this.libraryService.getLibraryStats();
+      }
+      if (this.currentStep === 4) {
+        this.currentStep = 5;
         this.render();
-        setTimeout(() => this.close(), 1200);
       }
     });
   }
@@ -106,14 +153,14 @@ export class LocalMusicOnboardingModal {
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(4, 7, 18, 0.85);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
+          background: rgba(4, 7, 18, 0.88);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
           display: flex;
           align-items: center;
           justify-content: center;
           z-index: 99999;
-          padding: 16px;
+          padding: var(--space-4, 16px);
           box-sizing: border-box;
           animation: fadeInModal 0.25s ease-out;
         }
@@ -125,17 +172,40 @@ export class LocalMusicOnboardingModal {
 
         .onboarding-card {
           width: 100%;
-          max-width: 520px;
-          background: var(--glass-surface-modal, rgba(17, 24, 39, 0.95));
+          max-width: 560px;
+          background: var(--color-bg-surface-elevated, rgba(17, 24, 39, 0.95));
           border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
           border-radius: var(--radius-2xl, 24px);
           padding: 32px 28px;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(99, 102, 241, 0.15);
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(168, 85, 247, 0.18);
           box-sizing: border-box;
           display: flex;
           flex-direction: column;
-          gap: 20px;
+          gap: 18px;
           text-align: center;
+          position: relative;
+        }
+
+        .onboarding-step-indicator {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          margin-bottom: 4px;
+        }
+
+        .onboarding-step-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.15);
+          transition: all 0.25s ease;
+        }
+
+        .onboarding-step-dot.active {
+          width: 24px;
+          background: var(--color-accent-primary, #a855f7);
+          box-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
         }
 
         .onboarding-icon-wrap {
@@ -143,13 +213,14 @@ export class LocalMusicOnboardingModal {
           height: 64px;
           margin: 0 auto;
           border-radius: 20px;
-          background: linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(168, 85, 247, 0.25) 100%);
-          border: 1px solid rgba(168, 85, 247, 0.3);
+          background: linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(6, 182, 212, 0.25) 100%);
+          border: 1px solid rgba(168, 85, 247, 0.35);
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 32px;
-          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
+          font-size: 28px;
+          color: #ffffff;
+          box-shadow: 0 8px 24px rgba(168, 85, 247, 0.25);
         }
 
         .onboarding-title {
@@ -161,10 +232,10 @@ export class LocalMusicOnboardingModal {
         }
 
         .onboarding-subtitle {
-          font-size: 15px;
+          font-size: 14px;
           font-weight: 600;
-          color: var(--color-primary-light, #818cf8);
-          margin: 0;
+          color: var(--color-accent-secondary, #06b6d4);
+          margin: 4px 0 0 0;
         }
 
         .onboarding-description {
@@ -174,27 +245,15 @@ export class LocalMusicOnboardingModal {
           margin: 0;
         }
 
-        .onboarding-privacy-box {
+        .onboarding-feature-box {
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: var(--radius-lg, 14px);
+          border-radius: var(--radius-xl, 16px);
           padding: 14px 16px;
           display: flex;
           align-items: center;
           gap: 12px;
           text-align: left;
-        }
-
-        .onboarding-privacy-box span.priv-icon {
-          font-size: 20px;
-          flex-shrink: 0;
-        }
-
-        .onboarding-privacy-box p {
-          margin: 0;
-          font-size: 12px;
-          color: var(--color-text-muted, #94a3b8);
-          line-height: 1.4;
         }
 
         .onboarding-actions {
@@ -218,22 +277,22 @@ export class LocalMusicOnboardingModal {
           gap: 8px;
           transition: all 0.2s ease;
           box-sizing: border-box;
-          border: none;
+          border: 1px solid transparent;
         }
 
         .onboarding-btn-primary {
-          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+          background: var(--color-accent-gradient, linear-gradient(135deg, #a855f7 0%, #06b6d4 100%));
           color: #ffffff;
-          box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+          box-shadow: 0 4px 16px rgba(168, 85, 247, 0.35);
         }
         .onboarding-btn-primary:hover:not(:disabled) {
-          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
           transform: translateY(-1px);
+          box-shadow: 0 6px 20px rgba(168, 85, 247, 0.45);
         }
 
         .onboarding-btn-secondary {
           background: rgba(255, 255, 255, 0.07);
-          border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
+          border-color: rgba(255, 255, 255, 0.12);
           color: #ffffff;
         }
         .onboarding-btn-secondary:hover:not(:disabled) {
@@ -245,34 +304,41 @@ export class LocalMusicOnboardingModal {
           color: var(--color-text-muted, #94a3b8);
           font-weight: 500;
           padding: 8px;
-          min-height: 36px;
+          min-height: 38px;
         }
         .onboarding-btn-tertiary:hover {
           color: #ffffff;
         }
 
-        .onboarding-progress-wrap {
+        .onboarding-stats-row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+          margin: 6px 0;
+        }
+
+        .onboarding-stat-chip {
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: var(--radius-lg, 12px);
+          padding: 10px;
           display: flex;
           flex-direction: column;
-          gap: 8px;
-          background: rgba(0, 0, 0, 0.3);
-          border-radius: 12px;
-          padding: 14px;
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          gap: 2px;
         }
 
-        .onboarding-progress-bar-bg {
-          height: 8px;
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 999px;
-          overflow: hidden;
+        .onboarding-stat-val {
+          font-size: 20px;
+          font-weight: 800;
+          color: #ffffff;
         }
 
-        .onboarding-progress-bar-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #6366f1, #a855f7);
-          border-radius: 999px;
-          transition: width 0.15s ease;
+        .onboarding-stat-lbl {
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--color-text-secondary, #94a3b8);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
         }
 
         @media (max-width: 480px) {
@@ -287,42 +353,104 @@ export class LocalMusicOnboardingModal {
       </style>
 
       <div class="onboarding-card">
-        <div class="onboarding-icon-wrap">🎵</div>
-        
-        <div>
-          <h2 id="onboarding-modal-title" class="onboarding-title">Welcome to MyMusicApp</h2>
-          <p class="onboarding-subtitle" style="margin-top: 4px;">Your Personal Audio Operating System</p>
+        <!-- Step Progress Dots -->
+        <div class="onboarding-step-indicator" aria-label="Onboarding Progress">
+          <div class="onboarding-step-dot ${this.currentStep === 1 ? 'active' : ''}"></div>
+          <div class="onboarding-step-dot ${this.currentStep === 2 ? 'active' : ''}"></div>
+          <div class="onboarding-step-dot ${this.currentStep === 3 ? 'active' : ''}"></div>
+          <div class="onboarding-step-dot ${this.currentStep === 4 ? 'active' : ''}"></div>
+          <div class="onboarding-step-dot ${this.currentStep === 5 ? 'active' : ''}"></div>
         </div>
 
-        <p class="onboarding-description">
-          Give MyMusicApp access to your music so it can build your local library.
-        </p>
+        ${this.renderStepContent(caps)}
+      </div>
+    `;
 
-        <div class="onboarding-privacy-box">
-          <span class="priv-icon">🔒</span>
-          <p>
-            <strong>Your music stays on your device.</strong><br>
-            No music is uploaded to any server. No cloud storage is required.
+    this.bindEvents();
+  }
+
+  private renderStepContent(caps: { hasDirectoryPicker: boolean; summary: string }): string {
+    switch (this.currentStep) {
+      case 1:
+        return `
+          <div class="onboarding-icon-wrap">🎵</div>
+          <div>
+            <h2 id="onboarding-modal-title" class="onboarding-title">Welcome to MyMusicApp</h2>
+            <p class="onboarding-subtitle">Your Personal Audio Operating System</p>
+          </div>
+          <p class="onboarding-description">
+            A high-fidelity, local-first audio player designed for music collectors. Enjoy pristine lossless playback, 10-band DSP equalization, and celestial music exploration.
           </p>
-        </div>
-
-        ${this.statusMessage ? `
-          <div style="font-size: 13px; color: ${this.permissionStatus === 'DENIED' ? '#f87171' : '#34d399'}; padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.2);">
-            ${this.escapeHtml(this.statusMessage)}
-          </div>
-        ` : ''}
-
-        ${this.isProcessing ? `
-          <div class="onboarding-progress-wrap">
-            <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--color-text-secondary, #cbd5e1);">
-              <span id="onboarding-status-text">Scanning audio files...</span>
-              <span id="onboarding-count-text">0 found</span>
-            </div>
-            <div class="onboarding-progress-bar-bg">
-              <div id="onboarding-bar-fill" class="onboarding-progress-bar-fill" style="width: 30%;"></div>
+          <div class="onboarding-feature-box">
+            <span style="font-size: 22px;">🌌</span>
+            <div>
+              <strong style="font-size: 13px; color: #ffffff;">Audio Galaxy & EQ Studio</strong>
+              <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--color-text-secondary);">
+                Interactive music visualization, real-time waveform spectrums, and dynamic ReplayGain normalization.
+              </p>
             </div>
           </div>
-        ` : `
+          <div class="onboarding-actions">
+            <button id="btn-onboarding-next" class="onboarding-btn onboarding-btn-primary">
+              <span>Get Started</span>
+              <span>→</span>
+            </button>
+            <button id="btn-onboarding-skip" class="onboarding-btn onboarding-btn-tertiary">
+              Skip Tour
+            </button>
+          </div>
+        `;
+
+      case 2:
+        return `
+          <div class="onboarding-icon-wrap">🔒</div>
+          <div>
+            <h2 id="onboarding-modal-title" class="onboarding-title">Local-First Architecture</h2>
+            <p class="onboarding-subtitle">100% On-Device Privacy</p>
+          </div>
+          <p class="onboarding-description">
+            MyMusicApp connects directly to your device's audio files without uploading your music to any server or cloud database.
+          </p>
+          <div class="onboarding-feature-box">
+            <span style="font-size: 22px;">🛡</span>
+            <div>
+              <strong style="font-size: 13px; color: #ffffff;">Zero Remote Telemetry</strong>
+              <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--color-text-secondary);">
+                Your library index, playlists, listening history, and EQ presets remain entirely inside your browser IndexedDB.
+              </p>
+            </div>
+          </div>
+          <div style="font-size: 12px; color: var(--color-accent-secondary); background: rgba(6, 182, 212, 0.1); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(6, 182, 212, 0.25);">
+            Browser Capability: ${this.escapeHtml(caps.summary)}
+          </div>
+          <div class="onboarding-actions">
+            <button id="btn-onboarding-next" class="onboarding-btn onboarding-btn-primary">
+              <span>Connect Local Music</span>
+              <span>→</span>
+            </button>
+            <button id="btn-onboarding-back" class="onboarding-btn onboarding-btn-tertiary">
+              Back
+            </button>
+          </div>
+        `;
+
+      case 3:
+        return `
+          <div class="onboarding-icon-wrap">📁</div>
+          <div>
+            <h2 id="onboarding-modal-title" class="onboarding-title">Select Your Music Folder</h2>
+            <p class="onboarding-subtitle">Import Your Audio Library</p>
+          </div>
+          <p class="onboarding-description">
+            Choose a folder containing your MP3, FLAC, AAC, WAV, or ALAC audio files to build your local collection.
+          </p>
+
+          ${this.statusMessage ? `
+            <div style="font-size: 13px; color: ${this.permissionStatus === 'DENIED' ? '#f87171' : '#34d399'}; padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08);">
+              ${this.escapeHtml(this.statusMessage)}
+            </div>
+          ` : ''}
+
           <div class="onboarding-actions">
             ${caps.hasDirectoryPicker ? `
               <button id="btn-choose-folder" class="onboarding-btn onboarding-btn-primary">
@@ -336,32 +464,100 @@ export class LocalMusicOnboardingModal {
               <span>Choose Audio Files</span>
             </button>
 
-            ${!caps.hasDirectoryPicker ? `
-              <p style="font-size: 11px; color: var(--color-text-muted, #64748b); margin: 2px 0 0 0;">
-                Folder access isn't supported by this browser. Select your music files instead.
-              </p>
-            ` : ''}
-
-            <button id="btn-skip-onboarding" class="onboarding-btn onboarding-btn-tertiary">
+            <button id="btn-onboarding-skip" class="onboarding-btn onboarding-btn-tertiary">
               Continue Without Music
             </button>
           </div>
-        `}
 
-        <input type="file" id="onboarding-file-input" multiple accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.webm,.aiff,.aif,.alac" style="display: none;" />
-      </div>
-    `;
+          <input type="file" id="onboarding-file-input" multiple accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.webm,.aiff,.aif,.alac" style="display: none;" />
+        `;
 
-    this.bindEvents();
+      case 4:
+        return `
+          <div class="onboarding-icon-wrap">🔄</div>
+          <div>
+            <h2 id="onboarding-modal-title" class="onboarding-title">Scanning Music Library</h2>
+            <p class="onboarding-subtitle">Extracting ID3 / FLAC Metadata & Artwork</p>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 14px; padding: 16px; border: 1px solid rgba(255, 255, 255, 0.08);">
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: #ffffff; font-weight: 600;">
+              <span id="onboarding-status-text">Processing audio files...</span>
+              <span id="onboarding-count-text">0 files</span>
+            </div>
+            <div style="width: 100%; height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 999px; overflow: hidden;">
+              <div id="onboarding-bar-fill" style="width: 30%; height: 100%; background: var(--color-accent-gradient); border-radius: 999px; transition: width 0.2s ease;"></div>
+            </div>
+            <span id="onboarding-file-text" style="font-size: 11px; color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;">
+              Indexing tracks...
+            </span>
+          </div>
+
+          <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0;">
+            Extracting sample rates, bitrates, embedded album art, and artist links.
+          </p>
+        `;
+
+      case 5:
+        return `
+          <div class="onboarding-icon-wrap" style="background: linear-gradient(135deg, rgba(52, 211, 153, 0.25), rgba(6, 182, 212, 0.25)); border-color: rgba(52, 211, 153, 0.4);">✓</div>
+          <div>
+            <h2 id="onboarding-modal-title" class="onboarding-title">Library is Ready!</h2>
+            <p class="onboarding-subtitle" style="color: #34d399;">Local Indexing Completed</p>
+          </div>
+
+          <div class="onboarding-stats-row">
+            <div class="onboarding-stat-chip">
+              <span class="onboarding-stat-val">${this.libraryStats.trackCount}</span>
+              <span class="onboarding-stat-lbl">Tracks</span>
+            </div>
+            <div class="onboarding-stat-chip">
+              <span class="onboarding-stat-val">${this.libraryStats.albumCount}</span>
+              <span class="onboarding-stat-lbl">Albums</span>
+            </div>
+            <div class="onboarding-stat-chip">
+              <span class="onboarding-stat-val">${this.libraryStats.artistCount}</span>
+              <span class="onboarding-stat-lbl">Artists</span>
+            </div>
+          </div>
+
+          <p class="onboarding-description">
+            Your local audio files are ready for playback, custom playlist curation, and Audio Galaxy exploration.
+          </p>
+
+          <div class="onboarding-actions">
+            <button id="btn-ready-library" class="onboarding-btn onboarding-btn-primary">
+              <span>Open Library</span>
+              <span>→</span>
+            </button>
+            <button id="btn-ready-home" class="onboarding-btn onboarding-btn-secondary">
+              Go to Home
+            </button>
+          </div>
+        `;
+    }
   }
 
   private bindEvents(): void {
     if (!this.overlay) return;
 
+    const nextBtn = this.overlay.querySelector<HTMLButtonElement>('#btn-onboarding-next');
+    nextBtn?.addEventListener('click', () => {
+      this.currentStep = (this.currentStep + 1) as OnboardingStep;
+      this.render();
+    });
+
+    const backBtn = this.overlay.querySelector<HTMLButtonElement>('#btn-onboarding-back');
+    backBtn?.addEventListener('click', () => {
+      this.currentStep = (this.currentStep - 1) as OnboardingStep;
+      this.render();
+    });
+
+    const skipBtns = this.overlay.querySelectorAll<HTMLButtonElement>('#btn-onboarding-skip');
+    skipBtns.forEach(btn => btn.addEventListener('click', () => this.close()));
+
     const chooseFolderBtn = this.overlay.querySelector<HTMLButtonElement>('#btn-choose-folder');
-    if (chooseFolderBtn) {
-      chooseFolderBtn.addEventListener('click', () => void this.handleChooseFolder());
-    }
+    chooseFolderBtn?.addEventListener('click', () => void this.handleChooseFolder());
 
     const chooseFilesBtn = this.overlay.querySelector<HTMLButtonElement>('#btn-choose-files');
     const fileInput = this.overlay.querySelector<HTMLInputElement>('#onboarding-file-input');
@@ -374,10 +570,17 @@ export class LocalMusicOnboardingModal {
       });
     }
 
-    const skipBtn = this.overlay.querySelector<HTMLButtonElement>('#btn-skip-onboarding');
-    if (skipBtn) {
-      skipBtn.addEventListener('click', () => this.close());
-    }
+    const readyLibBtn = this.overlay.querySelector<HTMLButtonElement>('#btn-ready-library');
+    readyLibBtn?.addEventListener('click', () => {
+      this.close();
+      this.router?.navigate('library');
+    });
+
+    const readyHomeBtn = this.overlay.querySelector<HTMLButtonElement>('#btn-ready-home');
+    readyHomeBtn?.addEventListener('click', () => {
+      this.close();
+      this.router?.navigate('home');
+    });
   }
 
   private async handleChooseFolder(): Promise<void> {
@@ -399,15 +602,12 @@ export class LocalMusicOnboardingModal {
       }
 
       this.permissionStatus = 'GRANTED';
-      this.isProcessing = true;
-      this.statusMessage = 'Scanning folder and building library...';
+      this.currentStep = 4;
       this.render();
 
-      // Register directory handle in adapter
       const rootPath = `folder://${handle.name}`;
       this.fsAdapter.registerDirectoryHandle(rootPath, handle);
 
-      // Save handle in IndexedDB if adapter available
       if (this.dbAdapter) {
         try {
           await this.dbAdapter.put(STORES.SETTINGS, {
@@ -417,25 +617,23 @@ export class LocalMusicOnboardingModal {
             name: handle.name,
             updatedAt: Date.now()
           });
-        } catch (e) {
-          // Non-fatal if handle persistence is unsupported
+        } catch {
+          // Non-fatal
         }
       }
 
-      // Execute scan
       await this.scannerService.scanDirectory(rootPath);
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        // User cancelled folder picker
         this.permissionStatus = 'NOT_REQUESTED';
-        this.isProcessing = false;
+        this.currentStep = 3;
         this.render();
         return;
       }
 
       this.permissionStatus = 'DENIED';
-      this.isProcessing = false;
-      this.statusMessage = 'Music access was not granted or folder could not be read.';
+      this.currentStep = 3;
+      this.statusMessage = 'Folder permission was not granted. Please retry or choose audio files.';
       this.render();
     }
   }
@@ -444,22 +642,19 @@ export class LocalMusicOnboardingModal {
     if (files.length === 0) return;
 
     try {
-      this.isProcessing = true;
-      this.statusMessage = `Importing ${files.length} audio files...`;
+      this.currentStep = 4;
       this.render();
 
       if (this.scannerService.importFiles) {
-        const result = await this.scannerService.importFiles(files);
-        this.isProcessing = false;
-        this.statusMessage = `Success! Added ${result.filesAdded} songs to your library.`;
-        this.render();
-        setTimeout(() => this.close(), 1200);
-      } else {
-        this.isProcessing = false;
-        this.close();
+        await this.scannerService.importFiles(files);
       }
+      if (this.libraryService) {
+        this.libraryStats = await this.libraryService.getLibraryStats();
+      }
+      this.currentStep = 5;
+      this.render();
     } catch (err: any) {
-      this.isProcessing = false;
+      this.currentStep = 3;
       this.statusMessage = `Failed to import files: ${err?.message || 'Unknown error'}`;
       this.render();
     }
@@ -470,17 +665,23 @@ export class LocalMusicOnboardingModal {
     const statusText = this.overlay.querySelector<HTMLElement>('#onboarding-status-text');
     const countText = this.overlay.querySelector<HTMLElement>('#onboarding-count-text');
     const barFill = this.overlay.querySelector<HTMLElement>('#onboarding-bar-fill');
+    const fileText = this.overlay.querySelector<HTMLElement>('#onboarding-file-text');
 
-    if (statusText && this.progressReport.currentFile) {
-      const fileName = this.progressReport.currentFile.split('/').pop() || '';
-      statusText.textContent = `Reading ${fileName.length > 25 ? fileName.substring(0, 22) + '...' : fileName}`;
+    if (statusText) {
+      statusText.textContent = this.progressReport.isComplete ? 'Scan Complete!' : 'Indexing Audio Files...';
     }
     if (countText) {
-      countText.textContent = `${this.progressReport.filesDiscovered} discovered (${this.progressReport.filesAdded} added)`;
+      countText.textContent = `${this.progressReport.filesProcessed} / ${this.progressReport.filesDiscovered} files`;
+    }
+    if (fileText && this.progressReport.currentFile) {
+      const name = this.progressReport.currentFile.split('/').pop() || this.progressReport.currentFile;
+      fileText.textContent = `Reading: ${name}`;
     }
     if (barFill) {
-      const percent = this.progressReport.isComplete ? 100 : Math.min(95, Math.max(10, (this.progressReport.filesProcessed / Math.max(1, this.progressReport.filesDiscovered)) * 100));
-      barFill.style.width = `${percent}%`;
+      const pct = this.progressReport.filesDiscovered > 0
+        ? Math.min(100, Math.round((this.progressReport.filesProcessed / this.progressReport.filesDiscovered) * 100))
+        : 35;
+      barFill.style.width = `${pct}%`;
     }
   }
 

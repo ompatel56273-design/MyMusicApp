@@ -4,6 +4,8 @@ import { EventBus } from '../../core/events/event-bus';
 import { DomainEvents } from '../../domain/events/domain-events';
 import type { Disposable } from '../../core/types/common';
 import type { Track } from '../../domain/entities/models';
+import type { ShuffleMode, RepeatMode } from '../../domain/value-objects/audio-types';
+import { getIconSvg } from '../icons/icon-registry';
 
 export interface MiniPlayerDependencies {
   playbackManager: IPlaybackManager;
@@ -75,7 +77,7 @@ export class MiniPlayerComponent {
           justify-content: space-between;
           padding: 0 var(--space-6);
           border-top: 1px solid var(--glass-border);
-          z-index: 20;
+          z-index: var(--z-player);
           gap: var(--space-4);
           position: relative;
           width: 100%;
@@ -117,14 +119,14 @@ export class MiniPlayerComponent {
         @media (max-width: 767px) {
           .mini-player-bar {
             height: 60px;
-            padding: 0 10px;
-            gap: 6px;
+            padding: 0 12px;
+            gap: 8px;
           }
 
           .mini-info-col {
             width: auto;
             flex: 1;
-            gap: 8px;
+            gap: 10px;
           }
 
           #mini-artwork-box {
@@ -134,12 +136,12 @@ export class MiniPlayerComponent {
 
           #mini-track-title {
             font-size: 13px !important;
-            max-width: 130px;
+            max-width: 140px;
           }
 
           #mini-track-artist {
             font-size: 11px !important;
-            max-width: 130px;
+            max-width: 140px;
           }
 
           .mini-controls-col {
@@ -148,25 +150,20 @@ export class MiniPlayerComponent {
           }
 
           .mini-controls-col > div:last-child {
-            display: none !important; /* Hide progress bar text row on mobile */
-          }
-
-          #mini-shuffle-btn, #mini-repeat-btn {
             display: none !important;
           }
 
-          #mini-prev-btn, #mini-next-btn {
-            min-width: 36px !important;
-            min-height: 36px !important;
-            font-size: 15px !important;
+          .mini-controls-col > div:first-child {
+            gap: 10px !important;
+          }
+
+          #mini-shuffle-btn, #mini-repeat-btn, #mini-prev-btn {
+            display: none !important;
           }
 
           #mini-play-btn {
-            width: 40px !important;
-            height: 40px !important;
-            min-width: 40px !important;
-            min-height: 40px !important;
-            font-size: 14px !important;
+            width: 38px !important;
+            height: 38px !important;
           }
 
           .mini-aux-col {
@@ -175,89 +172,94 @@ export class MiniPlayerComponent {
         }
       </style>
 
-      <footer
-        id="app-mini-player"
+      <div
         class="glass-panel-elevated mini-player-bar"
         role="region"
-        aria-label="Now Playing Mini Player"
+        aria-label="Audio Playback Controls"
       >
         <!-- Left: Track Info & Artwork -->
-        <div id="mini-track-info" class="mini-info-col">
+        <div class="mini-info-col" id="mini-track-info">
           <div
             id="mini-artwork-box"
             style="
-              width: 52px;
-              height: 52px;
-              border-radius: var(--radius-md);
+              width: 48px;
+              height: 48px;
+              border-radius: var(--radius-sm);
+              overflow: hidden;
               background: var(--color-bg-surface-elevated);
               border: 1px solid var(--glass-border);
+              flex-shrink: 0;
               display: flex;
               align-items: center;
               justify-content: center;
-              overflow: hidden;
-              flex-shrink: 0;
-              box-shadow: var(--shadow-sm);
-              transition: all var(--duration-fast) var(--ease-smooth);
+              color: var(--color-text-muted);
             "
           >
-            <span style="font-size: 22px; color: var(--color-text-muted);" aria-hidden="true">♫</span>
+            ${getIconSvg('disc', { size: 22 })}
           </div>
 
-          <div style="display: flex; flex-direction: column; overflow: hidden; gap: 2px; min-width: 0;">
-            <span id="mini-track-title" title="${title}" style="font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--color-text-primary); letter-spacing: -0.01em;">
+          <div style="display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
+            <span
+              id="mini-track-title"
+              class="text-truncate"
+              style="font-size: 14px; font-weight: 600; color: var(--color-text-primary); line-height: 1.3;"
+            >
               ${title}
             </span>
-            <span id="mini-track-artist" title="${artist}" style="font-size: 12px; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            <span
+              id="mini-track-artist"
+              class="text-truncate"
+              style="font-size: 12px; color: var(--color-text-muted);"
+            >
               ${artist}
             </span>
           </div>
 
-          <!-- Heart / Favorite Button -->
           <button
             id="mini-fav-btn"
             aria-label="${this.isFavorite ? 'Remove from favorites' : 'Add to favorites'}"
-            aria-pressed="${this.isFavorite}"
             style="
               background: transparent;
               border: none;
               color: ${this.isFavorite ? 'var(--color-accent-pink)' : 'var(--color-text-muted)'};
-              font-size: 16px;
               cursor: pointer;
-              min-width: 44px;
-              min-height: 44px;
-              display: inline-flex;
+              display: flex;
               align-items: center;
               justify-content: center;
-              transition: transform var(--duration-fast) var(--ease-spring);
+              padding: 6px;
+              border-radius: var(--radius-full);
               flex-shrink: 0;
+              margin-left: 2px;
+              transition: all var(--duration-fast) var(--ease-smooth);
             "
           >
-            ${this.isFavorite ? '♥' : '♡'}
+            ${getIconSvg(this.isFavorite ? 'heart-filled' : 'heart', { size: 18 })}
           </button>
         </div>
 
-        <!-- Center: Controls & Timeline -->
+        <!-- Center: Primary Controls & Scrub Bar -->
         <div class="mini-controls-col">
-          <!-- Controls Row -->
-          <div style="display: flex; align-items: center; gap: var(--space-3);">
+          <!-- Control Buttons Row -->
+          <div style="display: flex; align-items: center; gap: var(--space-4);">
             <button
               id="mini-shuffle-btn"
               aria-label="Toggle Shuffle"
-              aria-pressed="${this.playbackManager.shuffleMode === 'on'}"
+              aria-pressed="${this.playbackManager.shuffleMode !== 'off'}"
               style="
                 background: transparent;
                 border: none;
-                color: ${this.playbackManager.shuffleMode === 'on' ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)'};
-                font-size: 14px;
+                color: ${this.playbackManager.shuffleMode !== 'off' ? 'var(--color-accent-purple-glow)' : 'var(--color-text-secondary)'};
                 cursor: pointer;
-                min-width: 44px;
-                min-height: 44px;
-                display: inline-flex;
+                display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: color var(--duration-fast) var(--ease-smooth);
+                padding: 6px;
+                border-radius: var(--radius-full);
+                transition: all var(--duration-fast) var(--ease-smooth);
               "
-            ><span aria-hidden="true">🔀</span></button>
+            >
+              ${getIconSvg('shuffle', { size: 16 })}
+            </button>
 
             <button
               id="mini-prev-btn"
@@ -266,41 +268,39 @@ export class MiniPlayerComponent {
                 background: transparent;
                 border: none;
                 color: var(--color-text-primary);
-                font-size: 18px;
                 cursor: pointer;
-                min-width: 44px;
-                min-height: 44px;
-                display: inline-flex;
+                display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: transform var(--duration-fast) var(--ease-smooth);
+                padding: 6px;
+                border-radius: var(--radius-full);
+                transition: all var(--duration-fast) var(--ease-smooth);
               "
-            ><span aria-hidden="true">⏮</span></button>
+            >
+              ${getIconSvg('skip-back', { size: 20 })}
+            </button>
 
-            <!-- Large Play / Pause Glowing Button -->
+            <!-- Circular Glowing Play/Pause Button -->
             <button
               id="mini-play-btn"
               aria-label="${this.isPlaying ? 'Pause track' : 'Play track'}"
-              aria-pressed="${this.isPlaying}"
+              aria-pressed="${this.isPlaying ? 'true' : 'false'}"
               style="
-                width: 46px;
-                height: 46px;
-                min-width: 46px;
-                min-height: 46px;
+                width: 42px;
+                height: 42px;
                 border-radius: var(--radius-full);
                 background: var(--gradient-primary);
                 border: none;
                 color: #ffffff;
-                font-size: 16px;
-                font-weight: 700;
                 cursor: pointer;
-                display: inline-flex;
+                display: flex;
                 align-items: center;
                 justify-content: center;
-                box-shadow: var(--shadow-glow-purple);
-                transition: transform var(--duration-fast) var(--ease-spring);
+                font-size: 16px;
+                box-shadow: 0 0 16px rgba(168, 85, 247, 0.5);
+                transition: all var(--duration-fast) var(--ease-spring);
               "
-            ><span aria-hidden="true">${playIcon}</span></button>
+            >${playIcon}</button>
 
             <button
               id="mini-next-btn"
@@ -309,52 +309,67 @@ export class MiniPlayerComponent {
                 background: transparent;
                 border: none;
                 color: var(--color-text-primary);
-                font-size: 18px;
                 cursor: pointer;
-                min-width: 44px;
-                min-height: 44px;
-                display: inline-flex;
+                display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: transform var(--duration-fast) var(--ease-smooth);
+                padding: 6px;
+                border-radius: var(--radius-full);
+                transition: all var(--duration-fast) var(--ease-smooth);
               "
-            ><span aria-hidden="true">⏭</span></button>
+            >
+              ${getIconSvg('skip-forward', { size: 20 })}
+            </button>
 
             <button
               id="mini-repeat-btn"
-              aria-label="Cycle Repeat Mode"
+              aria-label="Toggle Repeat"
               aria-pressed="${this.playbackManager.repeatMode !== 'off'}"
               style="
                 background: transparent;
                 border: none;
-                color: ${this.playbackManager.repeatMode !== 'off' ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)'};
-                font-size: 14px;
+                color: ${this.playbackManager.repeatMode !== 'off' ? 'var(--color-accent-purple-glow)' : 'var(--color-text-secondary)'};
                 cursor: pointer;
-                min-width: 44px;
-                min-height: 44px;
-                display: inline-flex;
+                display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: color var(--duration-fast) var(--ease-smooth);
+                padding: 6px;
+                border-radius: var(--radius-full);
+                transition: all var(--duration-fast) var(--ease-smooth);
               "
-            ><span aria-hidden="true">${this.playbackManager.repeatMode === 'one' ? '🔂' : '🔁'}</span></button>
+            >
+              ${getIconSvg('repeat', { size: 16 })}
+            </button>
           </div>
 
-          <!-- Timeline Row -->
+          <!-- Scrub Bar Row -->
           <div style="display: flex; align-items: center; gap: var(--space-3); width: 100%;">
-            <span id="mini-time-current" style="font-size: 11px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 35px; text-align: right; font-weight: 500;">
+            <span
+              id="mini-time-current"
+              style="font-size: 11px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; min-width: 32px; text-align: right;"
+            >
               ${this.formatTime(this.currentPositionMs)}
             </span>
-            <input
-              id="mini-progress-slider"
-              type="range"
-              min="0"
-              max="${this.currentDurationMs || 100}"
-              value="${this.currentPositionMs}"
-              aria-label="Playback Progress"
-              style="flex: 1; height: 4px; accent-color: var(--color-accent-purple-glow); cursor: pointer;"
-            />
-            <span id="mini-time-duration" style="font-size: 11px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 35px; font-weight: 500;">
+
+            <div style="flex: 1; position: relative; display: flex; align-items: center;">
+              <input
+                id="mini-progress-slider"
+                type="range"
+                min="0"
+                max="${this.currentDurationMs || 100}"
+                value="${this.currentPositionMs}"
+                aria-label="Track playback progress"
+                aria-valuemin="0"
+                aria-valuemax="${this.currentDurationMs || 100}"
+                aria-valuenow="${this.currentPositionMs}"
+                style="width: 100%;"
+              />
+            </div>
+
+            <span
+              id="mini-time-total"
+              style="font-size: 11px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; min-width: 32px;"
+            >
               ${this.formatTime(this.currentDurationMs)}
             </span>
           </div>
@@ -362,269 +377,319 @@ export class MiniPlayerComponent {
 
         <!-- Right: Volume & Auxiliary Actions -->
         <div class="mini-aux-col">
-          <!-- Volume Group -->
+          <!-- Volume Mute Toggle -->
           <button
             id="mini-mute-btn"
             aria-label="${this.playbackManager.isMuted ? 'Unmute' : 'Mute'}"
-            aria-pressed="${this.playbackManager.isMuted}"
+            aria-pressed="${this.playbackManager.isMuted ? 'true' : 'false'}"
             style="
               background: transparent;
               border: none;
               color: var(--color-text-secondary);
-              font-size: 16px;
               cursor: pointer;
-              min-width: 44px;
-              min-height: 44px;
-              display: inline-flex;
+              display: flex;
               align-items: center;
               justify-content: center;
+              padding: 6px;
             "
           >
-            <span aria-hidden="true">${this.playbackManager.isMuted ? '🔇' : '🔊'}</span>
+            ${getIconSvg(this.playbackManager.isMuted ? 'volume-mute' : 'volume', { size: 18 })}
           </button>
-          <input
-            id="mini-volume-slider"
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value="${this.playbackManager.volume}"
-            aria-label="Volume"
-            style="width: 80px; height: 4px; accent-color: var(--color-accent-purple-glow); cursor: pointer;"
-          />
 
-          <!-- Queue Toggle Button -->
+          <!-- Volume Slider -->
+          <div style="width: 80px; display: flex; align-items: center;">
+            <input
+              id="mini-volume-slider"
+              type="range"
+              min="0"
+              max="100"
+              value="${Math.round((this.playbackManager.volume ?? 1) * 100)}"
+              aria-label="Audio Volume"
+              style="width: 100%;"
+            />
+          </div>
+
+          <!-- Queue Toggle / View -->
           <button
             id="mini-queue-btn"
-            aria-label="View Queue"
+            aria-label="Toggle Queue"
             style="
               background: transparent;
               border: none;
               color: var(--color-text-secondary);
-              font-size: 15px;
               cursor: pointer;
-              min-width: 44px;
-              min-height: 44px;
-              display: inline-flex;
+              display: flex;
               align-items: center;
               justify-content: center;
+              padding: 6px;
+              border-radius: var(--radius-full);
             "
           >
-            <span aria-hidden="true">📑</span>
+            ${getIconSvg('playlist', { size: 18 })}
           </button>
 
-          <!-- Fullscreen / Expand Now Playing -->
+          <!-- Fullscreen / Expand to Now Playing -->
           <button
-            id="mini-fullscreen-btn"
-            aria-label="Expand Now Playing"
+            id="mini-expand-btn"
+            aria-label="Open Now Playing"
             style="
               background: transparent;
               border: none;
               color: var(--color-text-secondary);
-              font-size: 15px;
               cursor: pointer;
-              min-width: 44px;
-              min-height: 44px;
-              display: inline-flex;
+              display: flex;
               align-items: center;
               justify-content: center;
+              padding: 6px;
+              border-radius: var(--radius-full);
             "
           >
-            <span aria-hidden="true">⛶</span>
+            ${getIconSvg('maximize', { size: 16 })}
           </button>
         </div>
-      </footer>
+      </div>
     `;
+
+    this.updateSliderTrackFill();
   }
 
   private bindEvents(): void {
     if (!this.container) return;
 
-    const trackInfo = this.container.querySelector('#mini-track-info');
-    trackInfo?.addEventListener('click', (e: Event) => {
-      // Don't trigger if clicked on favorite button
+    // Track Info click -> Navigate to Now Playing
+    this.container.querySelector('#mini-track-info')?.addEventListener('click', (e: Event) => {
       if ((e.target as HTMLElement).closest('#mini-fav-btn')) return;
       if (this.router) {
         this.router.navigate('nowplaying');
       }
     });
 
-    const favBtn = this.container.querySelector<HTMLButtonElement>('#mini-fav-btn');
-    favBtn?.addEventListener('click', () => {
+    // Favorite toggle
+    this.container.querySelector('#mini-fav-btn')?.addEventListener('click', () => {
       this.isFavorite = !this.isFavorite;
+      const favBtn = this.container?.querySelector<HTMLButtonElement>('#mini-fav-btn');
       if (favBtn) {
-        favBtn.textContent = this.isFavorite ? '♥' : '♡';
         favBtn.style.color = this.isFavorite ? 'var(--color-accent-pink)' : 'var(--color-text-muted)';
-        favBtn.setAttribute('aria-pressed', String(this.isFavorite));
+        favBtn.innerHTML = getIconSvg(this.isFavorite ? 'heart-filled' : 'heart', { size: 18 });
+      }
+      if (this.currentTrack) {
+        this.eventBus.publish(DomainEvents.FAVORITE_CHANGED, {
+          trackId: this.currentTrack.id,
+          isFavorite: this.isFavorite
+        });
       }
     });
 
-    const playBtn = this.container.querySelector('#mini-play-btn');
-    playBtn?.addEventListener('click', () => {
+    // Play/Pause Button
+    this.container.querySelector('#mini-play-btn')?.addEventListener('click', async () => {
       if (this.isPlaying) {
-        void this.playbackManager.pause();
+        await this.playbackManager.pause();
       } else {
-        void this.playbackManager.resume();
+        await this.playbackManager.resume();
       }
     });
 
-    const prevBtn = this.container.querySelector('#mini-prev-btn');
-    prevBtn?.addEventListener('click', () => void this.playbackManager.previous());
-
-    const nextBtn = this.container.querySelector('#mini-next-btn');
-    nextBtn?.addEventListener('click', () => void this.playbackManager.next());
-
-    const shuffleBtn = this.container.querySelector('#mini-shuffle-btn');
-    shuffleBtn?.addEventListener('click', () => {
-      const next = this.playbackManager.shuffleMode === 'on' ? 'off' : 'on';
-      this.playbackManager.setShuffleMode(next);
+    // Next / Prev Buttons
+    this.container.querySelector('#mini-next-btn')?.addEventListener('click', async () => {
+      await this.playbackManager.next();
     });
 
-    const repeatBtn = this.container.querySelector('#mini-repeat-btn');
-    repeatBtn?.addEventListener('click', () => {
-      const cur = this.playbackManager.repeatMode;
-      const next = cur === 'off' ? 'all' : cur === 'all' ? 'one' : 'off';
-      this.playbackManager.setRepeatMode(next);
+    this.container.querySelector('#mini-prev-btn')?.addEventListener('click', async () => {
+      await this.playbackManager.previous();
     });
 
-    const muteBtn = this.container.querySelector('#mini-mute-btn');
-    muteBtn?.addEventListener('click', () => {
-      this.playbackManager.setMuted(!this.playbackManager.isMuted);
+    // Shuffle Button
+    this.container.querySelector('#mini-shuffle-btn')?.addEventListener('click', () => {
+      const nextMode: ShuffleMode = this.playbackManager.shuffleMode === 'off' ? 'on' : 'off';
+      this.playbackManager.setShuffleMode(nextMode);
+      const btn = this.container?.querySelector<HTMLButtonElement>('#mini-shuffle-btn');
+      if (btn) {
+        const active = nextMode !== 'off';
+        btn.style.color = active ? 'var(--color-accent-purple-glow)' : 'var(--color-text-secondary)';
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      }
     });
 
+    // Repeat Button
+    this.container.querySelector('#mini-repeat-btn')?.addEventListener('click', () => {
+      const modes: RepeatMode[] = ['off', 'all', 'one'];
+      const currentIndex = modes.indexOf(this.playbackManager.repeatMode);
+      const nextMode: RepeatMode = modes[(currentIndex + 1) % modes.length]!;
+      this.playbackManager.setRepeatMode(nextMode);
+      const btn = this.container?.querySelector<HTMLButtonElement>('#mini-repeat-btn');
+      if (btn) {
+        const active = nextMode !== 'off';
+        btn.style.color = active ? 'var(--color-accent-purple-glow)' : 'var(--color-text-secondary)';
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      }
+    });
+
+    // Progress Scrub Slider
+    const progressSlider = this.container.querySelector<HTMLInputElement>('#mini-progress-slider');
+    progressSlider?.addEventListener('input', () => {
+      this.isSeeking = true;
+      const val = Number(progressSlider.value);
+      const timeCurrent = this.container?.querySelector('#mini-time-current');
+      if (timeCurrent) timeCurrent.textContent = this.formatTime(val);
+      this.updateSliderTrackFill();
+    });
+
+    progressSlider?.addEventListener('change', async () => {
+      const val = Number(progressSlider.value);
+      await this.playbackManager.seek(val);
+      this.isSeeking = false;
+    });
+
+    // Mute Button
+    this.container.querySelector('#mini-mute-btn')?.addEventListener('click', () => {
+      const nextMuted = !this.playbackManager.isMuted;
+      this.playbackManager.setMuted(nextMuted);
+      const muteBtn = this.container?.querySelector('#mini-mute-btn');
+      if (muteBtn) {
+        muteBtn.innerHTML = getIconSvg(nextMuted ? 'volume-mute' : 'volume', { size: 18 });
+      }
+    });
+
+    // Volume Slider
     const volumeSlider = this.container.querySelector<HTMLInputElement>('#mini-volume-slider');
     volumeSlider?.addEventListener('input', () => {
-      const vol = parseFloat(volumeSlider.value);
+      const vol = Number(volumeSlider.value) / 100;
       this.playbackManager.setVolume(vol);
+      if (this.playbackManager.isMuted && vol > 0) {
+        this.playbackManager.setMuted(false);
+      }
     });
 
-    const progressSlider = this.container.querySelector<HTMLInputElement>('#mini-progress-slider');
-    progressSlider?.addEventListener('mousedown', () => {
-      this.isSeeking = true;
-    });
-    progressSlider?.addEventListener('change', () => {
-      this.isSeeking = false;
-      const pos = parseInt(progressSlider.value, 10);
-      void this.playbackManager.seek(pos);
-    });
-
-    // Queue button -> navigate to nowplaying
-    this.container.querySelector('#mini-queue-btn')?.addEventListener('click', () => {
-      this.router?.navigate('nowplaying');
-    });
-
-    // Fullscreen button -> navigate to nowplaying
-    this.container.querySelector('#mini-fullscreen-btn')?.addEventListener('click', () => {
-      this.router?.navigate('nowplaying');
+    // Expand to Now Playing
+    this.container.querySelector('#mini-expand-btn')?.addEventListener('click', () => {
+      if (this.router) {
+        this.router.navigate('nowplaying');
+      }
     });
   }
 
   private subscribeToDomainEvents(): void {
+    // Track Changed
     this.subscriptions.push(
-      this.eventBus.subscribe(DomainEvents.TRACK_CHANGED, (e: any) => {
-        this.currentTrack = e.currentTrack;
+      this.eventBus.subscribe(DomainEvents.TRACK_CHANGED, (payload: any) => {
+        if (!payload) return;
+        this.currentTrack = payload.currentTrack ?? null;
+        this.currentPositionMs = payload.positionMs ?? 0;
+        this.currentDurationMs = this.currentTrack?.durationMs ?? 0;
         this.isFavorite = this.currentTrack?.isFavorite ?? false;
         this.updateTrackInfo();
       })
     );
 
+    // Playback State Changed
     this.subscriptions.push(
-      this.eventBus.subscribe(DomainEvents.PLAYBACK_STATE_CHANGED, (e: any) => {
-        this.isPlaying = e.state === 'playing';
+      this.eventBus.subscribe(DomainEvents.PLAYBACK_STATE_CHANGED, (payload: any) => {
+        if (!payload) return;
+        this.isPlaying = payload.state === 'playing';
+        if (payload.positionMs !== undefined && !this.isSeeking) {
+          this.currentPositionMs = payload.positionMs;
+        }
+        if (payload.durationMs !== undefined) {
+          this.currentDurationMs = payload.durationMs;
+        }
         this.updatePlayState();
       })
     );
 
+    // Playback Progress / Time Updated
     this.subscriptions.push(
-      this.eventBus.subscribe(DomainEvents.PLAYBACK_TIME_UPDATED, (e: any) => {
-        this.currentPositionMs = e.positionMs;
-        this.currentDurationMs = e.durationMs;
-        this.updateTimeProgress();
-      })
-    );
-
-    this.subscriptions.push(
-      this.eventBus.subscribe(DomainEvents.PLAYBACK_MODES_CHANGED, () => {
-        this.updateModes();
+      this.eventBus.subscribe(DomainEvents.PLAYBACK_TIME_UPDATED, (payload: any) => {
+        if (!payload || this.isSeeking) return;
+        this.currentPositionMs = payload.positionMs;
+        this.currentDurationMs = payload.durationMs;
+        this.updateProgress();
       })
     );
   }
 
-  private async updateTrackInfo(): Promise<void> {
+  private updateTrackInfo(): void {
     if (!this.container) return;
     const titleEl = this.container.querySelector('#mini-track-title');
     const artistEl = this.container.querySelector('#mini-track-artist');
-    const artworkBox = this.container.querySelector('#mini-artwork-box');
+    const totalEl = this.container.querySelector('#mini-time-total');
+    const slider = this.container.querySelector<HTMLInputElement>('#mini-progress-slider');
     const favBtn = this.container.querySelector<HTMLButtonElement>('#mini-fav-btn');
 
     if (titleEl) titleEl.textContent = this.currentTrack?.title || 'No Track Selected';
     if (artistEl) artistEl.textContent = this.currentTrack?.artistName || 'Select a song to play';
-
-    if (favBtn) {
-      favBtn.textContent = this.isFavorite ? '♥' : '♡';
-      favBtn.style.color = this.isFavorite ? 'var(--color-accent-pink)' : 'var(--color-text-muted)';
-      favBtn.setAttribute('aria-pressed', String(this.isFavorite));
-    }
-
-    if (artworkBox) {
-      const artId = (this.currentTrack as any)?.artworkId || this.currentTrack?.albumId;
-      if (this.artworkService && artId) {
-        const url = await this.artworkService.getArtworkUrl(artId, 'small');
-        if (url) {
-          artworkBox.innerHTML = `<img src="${url}" alt="Album Artwork" style="width: 100%; height: 100%; object-fit: cover;" />`;
-          return;
-        }
-      }
-      artworkBox.innerHTML = `<span style="font-size: 22px; color: var(--color-text-muted);">♫</span>`;
-    }
-  }
-
-  private updatePlayState(): void {
-    if (!this.container) return;
-    const playBtn = this.container.querySelector('#mini-play-btn');
-    if (playBtn) {
-      playBtn.textContent = this.isPlaying ? '⏸' : '▶';
-      playBtn.setAttribute('aria-label', this.isPlaying ? 'Pause track' : 'Play track');
-      playBtn.setAttribute('aria-pressed', String(this.isPlaying));
-    }
-  }
-
-  private updateTimeProgress(): void {
-    if (!this.container || this.isSeeking) return;
-    const timeCur = this.container.querySelector('#mini-time-current');
-    const timeDur = this.container.querySelector('#mini-time-duration');
-    const slider = this.container.querySelector<HTMLInputElement>('#mini-progress-slider');
-
-    if (timeCur) timeCur.textContent = this.formatTime(this.currentPositionMs);
-    if (timeDur) timeDur.textContent = this.formatTime(this.currentDurationMs);
+    if (totalEl) totalEl.textContent = this.formatTime(this.currentDurationMs);
     if (slider) {
       slider.max = String(this.currentDurationMs || 100);
       slider.value = String(this.currentPositionMs);
     }
+    if (favBtn) {
+      favBtn.style.color = this.isFavorite ? 'var(--color-accent-pink)' : 'var(--color-text-muted)';
+      favBtn.innerHTML = getIconSvg(this.isFavorite ? 'heart-filled' : 'heart', { size: 18 });
+    }
+
+    this.updateArtwork();
+    this.updateSliderTrackFill();
   }
 
-  private updateModes(): void {
+  private updatePlayState(): void {
     if (!this.container) return;
-    const shuffleBtn = this.container.querySelector<HTMLButtonElement>('#mini-shuffle-btn');
-    const repeatBtn = this.container.querySelector<HTMLButtonElement>('#mini-repeat-btn');
+    const playBtn = this.container.querySelector<HTMLButtonElement>('#mini-play-btn');
+    if (playBtn) {
+      playBtn.textContent = this.isPlaying ? '⏸' : '▶';
+      playBtn.setAttribute('aria-label', this.isPlaying ? 'Pause' : 'Play');
+    }
+  }
 
-    if (shuffleBtn) {
-      shuffleBtn.style.color = this.playbackManager.shuffleMode === 'on' ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)';
-      shuffleBtn.setAttribute('aria-pressed', String(this.playbackManager.shuffleMode === 'on'));
+  private updateProgress(): void {
+    if (!this.container || this.isSeeking) return;
+    const currentEl = this.container.querySelector('#mini-time-current');
+    const slider = this.container.querySelector<HTMLInputElement>('#mini-progress-slider');
+
+    if (currentEl) currentEl.textContent = this.formatTime(this.currentPositionMs);
+    if (slider) {
+      slider.value = String(this.currentPositionMs);
+      slider.setAttribute('aria-valuenow', String(this.currentPositionMs));
     }
-    if (repeatBtn) {
-      repeatBtn.style.color = this.playbackManager.repeatMode !== 'off' ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)';
-      repeatBtn.textContent = this.playbackManager.repeatMode === 'one' ? '🔂' : '🔁';
-      repeatBtn.setAttribute('aria-pressed', String(this.playbackManager.repeatMode !== 'off'));
+    this.updateSliderTrackFill();
+  }
+
+  private async updateArtwork(): Promise<void> {
+    if (!this.container) return;
+    const artBox = this.container.querySelector<HTMLElement>('#mini-artwork-box');
+    if (!artBox) return;
+
+    if (this.currentTrack && this.artworkService) {
+      try {
+        const artworkId = (this.currentTrack as any).artworkId ?? this.currentTrack.id;
+        const url = await this.artworkService.getArtworkUrl(artworkId);
+        if (url) {
+          artBox.innerHTML = `<img src="${url}" alt="${this.currentTrack.title}" style="width: 100%; height: 100%; object-fit: cover;" />`;
+          return;
+        }
+      } catch {
+        // Fallback
+      }
     }
+    artBox.innerHTML = getIconSvg('disc', { size: 22 });
+  }
+
+  private updateSliderTrackFill(): void {
+    if (!this.container) return;
+    const slider = this.container.querySelector<HTMLInputElement>('#mini-progress-slider');
+    if (!slider) return;
+
+    const max = Number(slider.max) || 100;
+    const val = Number(slider.value) || 0;
+    const pct = Math.min(100, Math.max(0, (val / max) * 100));
+
+    slider.style.background = `linear-gradient(to right, var(--color-accent-purple-glow) ${pct}%, rgba(255, 255, 255, 0.15) ${pct}%)`;
   }
 
   private formatTime(ms: number): string {
-    if (!ms || isNaN(ms) || ms < 0) return '0:00';
+    if (!ms || ms < 0) return '0:00';
     const totalSec = Math.floor(ms / 1000);
-    const mins = Math.floor(totalSec / 60);
-    const secs = totalSec % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return `${min}:${sec < 10 ? '0' : ''}${sec}`;
   }
 }
-

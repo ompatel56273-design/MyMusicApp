@@ -1,6 +1,7 @@
 import type { Track } from '../../../domain/entities/models';
 import type { IArtworkService } from '../../../services/contracts/service-contracts';
 import { escapeHtml } from '../../../core/security/html-sanitizer';
+import { getIconSvg } from '../../icons/icon-registry';
 
 export interface TrackRowCallbacks {
   onPlay: (track: Track) => void;
@@ -8,6 +9,7 @@ export interface TrackRowCallbacks {
   onPlayNext?: ((track: Track) => void) | undefined;
   onAddToQueue?: ((track: Track) => void) | undefined;
   onAddToPlaylist?: ((track: Track) => void) | undefined;
+  onInspect?: ((track: Track) => void) | undefined;
 }
 
 export class TrackRowComponent {
@@ -15,10 +17,11 @@ export class TrackRowComponent {
     track: Track,
     index: number,
     callbacks: TrackRowCallbacks,
-    artworkService?: IArtworkService
+    artworkService?: IArtworkService,
+    isPlaying: boolean = false
   ): HTMLElement {
     const row = document.createElement('div');
-    row.className = `track-row ${track.availability === 'missing' ? 'track-missing' : ''}`;
+    row.className = `track-row ${track.availability === 'missing' ? 'track-missing' : ''} ${isPlaying ? 'track-row-playing' : ''}`;
     row.setAttribute('role', 'row');
     row.setAttribute('tabindex', '0');
     row.setAttribute('data-track-id', track.id);
@@ -28,11 +31,7 @@ export class TrackRowComponent {
     const durationStr = TrackRowComponent.formatDuration(track.durationMs);
     const formatBadge = TrackRowComponent.formatBadge(track);
 
-    row.style.display = 'grid';
-    row.style.gridTemplateColumns = '36px 40px 1fr 1fr 1fr 70px 60px 40px';
     row.style.alignItems = 'center';
-    row.style.gap = 'var(--space-3)';
-    row.style.padding = 'var(--space-2) var(--space-4)';
     row.style.height = '56px';
     row.style.boxSizing = 'border-box';
     row.style.borderBottom = '1px solid rgba(255, 255, 255, 0.04)';
@@ -40,19 +39,20 @@ export class TrackRowComponent {
     row.style.cursor = isMissing ? 'not-allowed' : 'pointer';
     row.style.opacity = isMissing ? '0.45' : '1';
     row.style.transition = 'all var(--duration-fast) var(--ease-smooth)';
-    row.style.background = 'transparent';
+    row.style.background = isPlaying ? 'rgba(124, 58, 237, 0.15)' : 'transparent';
+    row.style.borderColor = isPlaying ? 'rgba(168, 85, 247, 0.35)' : 'transparent';
 
     row.innerHTML = `
-      <div class="track-row-index" style="font-size: 12px; font-weight: 600; color: var(--color-text-muted); text-align: center;">
-        ${track.trackNumber ?? index + 1}
+      <div class="track-row-index" style="font-size: 12px; font-weight: 600; color: ${isPlaying ? 'var(--color-accent-cyan)' : 'var(--color-text-muted)'}; text-align: center;">
+        ${isPlaying ? `<span style="color: var(--color-accent-cyan); display: flex; justify-content: center;">${getIconSvg('audio-bars', { size: 14 })}</span>` : (track.trackNumber ?? index + 1)}
       </div>
 
-      <div class="track-row-art" style="width: 38px; height: 38px; border-radius: var(--radius-sm); background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; border: 1px solid rgba(255, 255, 255, 0.08);">
-        <span style="font-size: 14px; color: var(--color-purple-neon);">🎵</span>
+      <div class="track-row-art" style="width: 38px; height: 38px; border-radius: var(--radius-sm); background: linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; border: 1px solid var(--glass-border);">
+        <span style="color: var(--color-accent-purple-glow);">${getIconSvg('music', { size: 18 })}</span>
       </div>
 
-      <div style="display: flex; flex-direction: column; overflow: hidden;">
-        <span class="track-title-text" title="${escapeHtml(track.title)}" style="font-size: 13px; font-weight: 600; color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+      <div style="display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
+        <span class="track-title-text" title="${escapeHtml(track.title)}" style="font-size: 13px; font-weight: var(--font-weight-semibold); color: ${isPlaying ? 'var(--color-accent-cyan)' : 'var(--color-text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
           ${escapeHtml(track.title)}
         </span>
       </div>
@@ -79,28 +79,28 @@ export class TrackRowComponent {
           class="track-add-playlist-btn"
           aria-label="Add ${escapeHtml(track.title)} to playlist"
           title="Add to playlist"
-          style="background: transparent; border: none; font-size: 15px; cursor: pointer; color: var(--color-text-muted); padding: 2px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: all 0.15s ease;"
+          style="background: transparent; border: none; cursor: pointer; color: var(--color-text-muted); padding: 4px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: all 0.15s ease;"
         >
-          <span aria-hidden="true">+</span>
+          ${getIconSvg('plus', { size: 16 })}
         </button>
         ` : ''}
         <button
           class="track-fav-btn"
           aria-label="${track.isFavorite ? 'Remove from favorites' : 'Add to favorites'}"
           aria-pressed="${track.isFavorite}"
-          style="background: transparent; border: none; font-size: 15px; cursor: pointer; color: ${track.isFavorite ? 'var(--color-pink-neon)' : 'var(--color-text-muted)'}; padding: 2px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: all 0.15s ease;"
+          style="background: transparent; border: none; cursor: pointer; color: ${track.isFavorite ? 'var(--color-accent-pink)' : 'var(--color-text-muted)'}; padding: 4px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: all 0.15s ease;"
         >
-          <span aria-hidden="true">${track.isFavorite ? '❤️' : '🤍'}</span>
+          ${getIconSvg(track.isFavorite ? 'heart-filled' : 'heart', { size: 18, color: track.isFavorite ? 'var(--color-accent-pink)' : 'currentColor' })}
         </button>
       </div>
     `;
 
     // Row hover effect
     row.addEventListener('mouseenter', () => {
-      row.style.background = 'rgba(255, 255, 255, 0.04)';
+      row.style.background = isPlaying ? 'rgba(124, 58, 237, 0.25)' : 'rgba(255, 255, 255, 0.04)';
     });
     row.addEventListener('mouseleave', () => {
-      row.style.background = 'transparent';
+      row.style.background = isPlaying ? 'rgba(124, 58, 237, 0.15)' : 'transparent';
     });
 
     // Artwork resolution
@@ -120,12 +120,14 @@ export class TrackRowComponent {
         const target = e.target as HTMLElement;
         if (target && (target.closest('.track-fav-btn') || target.closest('.track-add-playlist-btn'))) return;
         callbacks.onPlay(track);
+        callbacks.onInspect?.(track);
       });
 
       row.addEventListener('keydown', e => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           callbacks.onPlay(track);
+          callbacks.onInspect?.(track);
         }
       });
     }
@@ -164,7 +166,7 @@ export class TrackRowComponent {
       badgeText = `${track.format.bitDepth}b/${Math.round((track.format.sampleRate ?? 0) / 1000)}k`;
     }
 
-    const color = isLossless ? 'var(--color-purple-neon)' : 'var(--color-text-muted)';
+    const color = isLossless ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)';
     const bg = isLossless ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255, 255, 255, 0.06)';
 
     return `
@@ -184,4 +186,3 @@ export class TrackRowComponent {
     `;
   }
 }
-

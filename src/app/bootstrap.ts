@@ -243,11 +243,17 @@ export class AppBootstrap {
     // 7. Check if library is empty and trigger first-launch onboarding if needed
     try {
       const stats = await libraryService.getLibraryStats();
-      if (stats.trackCount === 0) {
+      const isDismissed = typeof localStorage !== 'undefined' && (
+        localStorage.getItem('mymusic_onboarding_dismissed') === 'true' ||
+        localStorage.getItem('mymusic_onboarding_completed') === 'true'
+      );
+      if (stats.trackCount === 0 && !isDismissed) {
         const modal = new LocalMusicOnboardingModal({
           scannerService,
           fsAdapter,
           dbAdapter: adapter,
+          libraryService,
+          router: this.appShell?.getRouter(),
           eventBus: this.eventBus
         });
         modal.show();

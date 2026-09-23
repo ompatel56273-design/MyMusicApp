@@ -1,7 +1,15 @@
 import type { Track } from '../../../domain/entities/models';
 import type { IPlaybackManager, IArtworkService } from '../../../services/contracts/service-contracts';
 import { QueueItemComponent } from './queue-item-component';
+import { getIconSvg } from '../../icons/icon-registry';
 
+/**
+ * Phase 8 Queue Panel Component (Templates 6 & 7 / Up Next Panel).
+ * Features:
+ * - Real-time queue consumption from PlaybackManager
+ * - Live track status, active playback equalizer indicator
+ * - Clear queue & remove item actions
+ */
 export class QueuePanelComponent {
   private container: HTMLElement | null = null;
   private readonly playbackManager: IPlaybackManager;
@@ -40,7 +48,6 @@ export class QueuePanelComponent {
     if ('getTracks' in (this.playbackManager as any)) {
       this.queueTracks = (this.playbackManager as any).getTracks?.() ?? [];
     } else if (this.playbackManager.currentTrack) {
-      // If direct queue tracks are accessible
       this.queueTracks = (this.playbackManager as any).queueManager?.getTracks?.() ?? [this.playbackManager.currentTrack];
     } else {
       this.queueTracks = [];
@@ -64,14 +71,13 @@ export class QueuePanelComponent {
           flex-direction: column;
           height: 100%;
           min-height: 380px;
-          max-height: calc(100vh - 180px);
-          border-radius: var(--radius-xl);
+          border-radius: var(--radius-2xl);
           padding: var(--space-5);
           box-sizing: border-box;
-          background: var(--glass-surface);
+          background: var(--glass-bg-subtle);
           border: 1px solid var(--glass-border);
           backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
+          width: 100%;
         "
       >
         <!-- Queue Header -->
@@ -80,127 +86,166 @@ export class QueuePanelComponent {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding-bottom: var(--space-4);
+            padding-bottom: var(--space-3);
             border-bottom: 1px solid var(--glass-border);
             margin-bottom: var(--space-3);
           "
         >
           <div style="display: flex; align-items: center; gap: var(--space-2);">
-            <h3 style="font-size: 16px; font-weight: 700; letter-spacing: -0.01em; color: var(--color-text-primary); margin: 0;">
-              Up Next
-            </h3>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="color: var(--color-accent-purple-glow); display: flex;">
+                ${getIconSvg('list', { size: 16 })}
+              </span>
+              <h3 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-bold); letter-spacing: -0.01em; color: #ffffff; margin: 0;">
+                Up Next
+              </h3>
+            </div>
             <span
               style="
-                font-size: 11px;
-                font-weight: 700;
+                font-size: 10px;
+                font-weight: var(--font-weight-extrabold);
                 padding: 2px 8px;
                 border-radius: var(--radius-full);
-                background: rgba(168, 85, 247, 0.15);
-                color: var(--color-accent-primary);
-                border: 1px solid rgba(168, 85, 247, 0.3);
+                background: rgba(124, 58, 237, 0.2);
+                color: var(--color-accent-cyan);
+                border: 1px solid var(--glass-border-interactive);
               "
             >
-              ${count}
+              ${count} ${count === 1 ? 'song' : 'songs'}
             </span>
-            ${totalDurationMs > 0 ? `
-              <span style="font-size: 12px; color: var(--color-text-muted);">
-                • ${durationStr}
-              </span>
-            ` : ''}
           </div>
 
-          <button
-            id="queue-clear-btn"
-            aria-label="Clear play queue"
-            ${count === 0 ? 'disabled' : ''}
-            style="
-              background: ${count === 0 ? 'transparent' : 'rgba(239, 68, 68, 0.1)'};
-              border: 1px solid ${count === 0 ? 'transparent' : 'rgba(239, 68, 68, 0.25)'};
-              color: ${count === 0 ? 'var(--color-text-muted)' : '#f87171'};
-              padding: 6px 14px;
-              border-radius: var(--radius-full);
-              font-size: 12px;
-              font-weight: 600;
-              cursor: ${count === 0 ? 'default' : 'pointer'};
-              opacity: ${count === 0 ? '0.4' : '1'};
-              transition: all var(--duration-fast) var(--ease-smooth);
-            "
-          >
-            Clear
-          </button>
+          ${
+            count > 1
+              ? `
+            <button
+              id="queue-clear-btn"
+              aria-label="Clear upcoming queue"
+              style="
+                background: transparent;
+                border: none;
+                color: var(--color-text-muted);
+                font-size: 11px;
+                font-weight: var(--font-weight-semibold);
+                cursor: pointer;
+                padding: 4px 8px;
+                border-radius: var(--radius-md);
+                transition: color var(--duration-fast);
+              "
+            >
+              Clear
+            </button>
+          `
+              : ''
+          }
         </header>
 
         <!-- Queue Items List -->
         <div
-          id="queue-items-viewport"
-          role="list"
+          id="qp-items-list"
           style="
             flex: 1;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 6px;
-            padding-right: 2px;
+            gap: 4px;
+            padding-right: 4px;
           "
         ></div>
+
+        <!-- Footer -->
+        <footer
+          style="
+            margin-top: auto;
+            padding-top: var(--space-3);
+            border-top: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--color-text-muted);
+          "
+        >
+          <span>Queue Runtime:</span>
+          <span style="font-weight: var(--font-weight-bold); color: #ffffff;">${durationStr}</span>
+        </footer>
       </section>
     `;
 
-    this.bindHeaderEvents();
-    this.renderItems();
-  }
-
-  private bindHeaderEvents(): void {
-    if (!this.container) return;
-    const clearBtn = this.container.querySelector('#queue-clear-btn');
-    clearBtn?.addEventListener('click', () => {
-      void this.playbackManager.clearQueue();
-    });
-  }
-
-  private renderItems(): void {
-    if (!this.container) return;
-    const listEl = this.container.querySelector('#queue-items-viewport');
+    const listEl = this.container.querySelector<HTMLElement>('#qp-items-list');
     if (!listEl) return;
 
     if (this.queueTracks.length === 0) {
       listEl.innerHTML = `
-        <div style="padding: var(--space-8); text-align: center; color: var(--color-text-muted); display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-          <span style="font-size: 32px; margin-bottom: var(--space-2); opacity: 0.6;">🎵</span>
-          <p style="font-size: 14px; font-weight: 500; margin-bottom: var(--space-1); color: var(--color-text-secondary);">Queue is empty</p>
-          <p style="font-size: 12px; margin: 0;">Play songs from your library to build a queue.</p>
+        <div
+          style="
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            color: var(--color-text-muted);
+            padding: var(--space-6) 0;
+          "
+        >
+          <span style="color: var(--color-text-muted); display: flex; margin-bottom: 8px;">
+            ${getIconSvg('list', { size: 28 })}
+          </span>
+          <p style="font-size: var(--font-size-xs); margin: 0;">Queue is empty.</p>
         </div>
       `;
       return;
     }
 
-    const fragment = document.createDocumentFragment();
-    const totalCount = this.queueTracks.length;
-
-    this.queueTracks.forEach((track, index) => {
-      const isActive = index === this.activeIndex;
-      const itemEl = QueueItemComponent.create(
+    this.queueTracks.forEach((track, idx) => {
+      const isCurrent = idx === this.activeIndex;
+      const itemNode = QueueItemComponent.create(
         track,
-        index,
-        isActive,
-        totalCount,
+        idx,
+        isCurrent,
+        this.queueTracks.length,
         {
-          onPlay: idx => void this.playbackManager.playQueueIndex(idx),
-          onRemove: idx => void this.playbackManager.removeFromQueue(idx),
-          onMoveUp: idx => void this.playbackManager.reorderQueue(idx, Math.max(0, idx - 1)),
-          onMoveDown: idx => void this.playbackManager.reorderQueue(idx, Math.min(totalCount - 1, idx + 1))
+          onPlay: i => {
+            void this.playbackManager.playQueueIndex(i);
+          },
+          onRemove: async i => {
+            if ('removeFromQueue' in this.playbackManager) {
+              await (this.playbackManager as any).removeFromQueue(i);
+              this.updateQueue();
+            }
+          },
+          onMoveUp: async i => {
+            if (i > 0 && 'reorderQueue' in this.playbackManager) {
+              await (this.playbackManager as any).reorderQueue(i, i - 1);
+              this.updateQueue();
+            }
+          },
+          onMoveDown: async i => {
+            if (i < this.queueTracks.length - 1 && 'reorderQueue' in this.playbackManager) {
+              await (this.playbackManager as any).reorderQueue(i, i + 1);
+              this.updateQueue();
+            }
+          }
         },
         this.artworkService
       );
-      fragment.appendChild(itemEl);
+
+      listEl.appendChild(itemNode);
     });
 
-    listEl.innerHTML = '';
-    listEl.appendChild(fragment);
+    // Clear queue button
+    const clearBtn = this.container.querySelector<HTMLButtonElement>('#queue-clear-btn');
+    clearBtn?.addEventListener('click', async () => {
+      if ('clearQueue' in this.playbackManager) {
+        await (this.playbackManager as any).clearQueue();
+        this.updateQueue();
+      }
+    });
   }
 
   private formatTotalDuration(ms: number): string {
-    if (!ms || isNaN(ms) || ms <= 0) return '0 min';
+    if (!ms || ms <= 0) return '0 min';
     const totalMin = Math.round(ms / 60000);
     if (totalMin < 60) return `${totalMin} min`;
     const hrs = Math.floor(totalMin / 60);

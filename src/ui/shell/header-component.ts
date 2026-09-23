@@ -2,6 +2,8 @@ import type { RouterService } from '../navigation/router-service';
 import type { RouteState } from '../navigation/route-types';
 import type { Disposable } from '../../core/types/common';
 import { ThemeManager } from '../theme/theme-manager';
+import { getIconSvg } from '../icons/icon-registry';
+import { renderAvatar } from '../primitives/avatar';
 
 export class HeaderComponent {
   private container: HTMLElement | null = null;
@@ -19,6 +21,11 @@ export class HeaderComponent {
 
     this.routerSub = this.router.subscribe(state => {
       this.updateTitle(state);
+    });
+
+    const themeManager = ThemeManager.getInstance();
+    this.themeUnsub = themeManager.subscribe(theme => {
+      this.updateThemeIcon(theme);
     });
   }
 
@@ -49,7 +56,7 @@ export class HeaderComponent {
           justify-content: space-between;
           padding: 0 var(--space-6);
           border-bottom: 1px solid var(--glass-border);
-          z-index: 10;
+          z-index: var(--z-header);
           gap: var(--space-4);
           width: 100%;
           max-width: 100%;
@@ -61,7 +68,7 @@ export class HeaderComponent {
         .header-left-group {
           display: flex;
           align-items: center;
-          gap: var(--space-4);
+          gap: var(--space-3);
           flex-shrink: 0;
           min-width: 0;
         }
@@ -80,16 +87,8 @@ export class HeaderComponent {
           flex-shrink: 0;
         }
 
-        .header-user-name {
+        .header-user-name, .header-user-chevron {
           display: inline;
-        }
-
-        .header-user-chevron {
-          display: inline;
-        }
-
-        .header-shortcut-badge {
-          display: block;
         }
 
         /* Mobile Header Responsive (< 768px) */
@@ -137,14 +136,12 @@ export class HeaderComponent {
           }
 
           #header-notifications-btn {
-            width: 32px !important;
-            height: 32px !important;
-            font-size: 14px !important;
+            width: 34px !important;
+            height: 34px !important;
           }
 
           #header-user-profile {
             padding: 2px !important;
-            border-radius: var(--radius-full);
           }
 
           .header-user-name, .header-user-chevron {
@@ -174,10 +171,11 @@ export class HeaderComponent {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 16px;
                 transition: all var(--duration-fast) var(--ease-smooth);
               "
-            >‹</button>
+            >
+              ${getIconSvg('chevron-left', { size: 16 })}
+            </button>
             <button
               id="nav-forward-btn"
               aria-label="Go Forward"
@@ -192,10 +190,11 @@ export class HeaderComponent {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 16px;
                 transition: all var(--duration-fast) var(--ease-smooth);
               "
-            >›</button>
+            >
+              ${getIconSvg('chevron-right', { size: 16 })}
+            </button>
           </div>
 
           <h1 id="header-route-title" style="font-size: 16px; font-weight: 700; text-transform: capitalize; letter-spacing: -0.01em; color: var(--color-text-primary); margin: 0; white-space: nowrap;">
@@ -206,11 +205,13 @@ export class HeaderComponent {
         <!-- Center: Global Search Input -->
         <div class="header-search-container">
           <div style="position: relative; display: flex; align-items: center; width: 100%;">
-            <span class="header-search-icon" style="position: absolute; left: 14px; color: var(--color-text-muted); font-size: 14px; pointer-events: none;">🔍</span>
+            <span class="header-search-icon" style="position: absolute; left: 14px; color: var(--color-text-muted); pointer-events: none; display: flex; align-items: center;">
+              ${getIconSvg('search', { size: 15 })}
+            </span>
             <input
               id="global-search-input"
               type="search"
-              placeholder="Search music, artists, albums..."
+              placeholder="Search music, artists, albums, playlists..."
               aria-label="Search local library"
               style="
                 width: 100%;
@@ -218,7 +219,7 @@ export class HeaderComponent {
                 background: var(--color-bg-surface-elevated);
                 border: 1px solid var(--glass-border);
                 border-radius: var(--radius-full);
-                padding: 0 70px 0 40px;
+                padding: 0 70px 0 38px;
                 color: var(--color-text-primary);
                 font-size: 13px;
                 outline: none;
@@ -259,14 +260,15 @@ export class HeaderComponent {
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 15px;
               transition: all var(--duration-fast) var(--ease-smooth);
             "
           >
-            ☀️
+            <span id="theme-toggle-icon" style="display: flex; align-items: center;">
+              ${getIconSvg('sun', { size: 18 })}
+            </span>
           </button>
 
-          <!-- Notifications Bell -->
+          <!-- Notifications with Indicator -->
           <button
             id="header-notifications-btn"
             aria-label="Notifications"
@@ -282,31 +284,33 @@ export class HeaderComponent {
               align-items: center;
               justify-content: center;
               position: relative;
-              font-size: 15px;
               transition: all var(--duration-fast) var(--ease-smooth);
             "
           >
-            🔔
+            ${getIconSvg('bell', { size: 18 })}
             <span style="
               position: absolute;
               top: 7px;
-              right: 7px;
+              right: 8px;
               width: 7px;
               height: 7px;
               border-radius: var(--radius-full);
-              background: var(--color-accent-pink);
-              box-shadow: var(--shadow-glow-pink);
+              background: var(--color-status-error);
+              border: 1.5px solid var(--color-bg-surface);
             "></span>
           </button>
 
           <!-- User Profile Pill -->
           <div
             id="header-user-profile"
+            role="button"
+            tabindex="0"
+            aria-label="User Profile Om Patel"
             style="
               display: flex;
               align-items: center;
               gap: var(--space-2);
-              padding: 4px 12px 4px 4px;
+              padding: 4px 10px 4px 4px;
               border-radius: var(--radius-full);
               background: var(--color-bg-surface-elevated);
               border: 1px solid var(--glass-border);
@@ -314,70 +318,57 @@ export class HeaderComponent {
               transition: all var(--duration-fast) var(--ease-smooth);
             "
           >
-            <div style="
-              width: 28px;
-              height: 28px;
-              border-radius: var(--radius-full);
-              background: var(--gradient-primary);
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: #ffffff;
-              font-weight: 700;
-              font-size: 13px;
-              box-shadow: var(--shadow-glow-purple);
-              flex-shrink: 0;
-            ">
-              O
-            </div>
+            ${renderAvatar({ name: 'Om Patel', size: 'sm', isArtist: true })}
             <span class="header-user-name" style="font-size: 13px; font-weight: 600; color: var(--color-text-primary);">
               Om Patel
             </span>
-            <span class="header-user-chevron" style="font-size: 10px; color: var(--color-text-muted);">▼</span>
+            <span class="header-user-chevron" style="display: flex; align-items: center; color: var(--color-text-muted);">
+              ${getIconSvg('chevron-down', { size: 14 })}
+            </span>
           </div>
         </div>
       </header>
     `;
 
-    // Bind Back / Forward buttons
-    const backBtn = this.container.querySelector('#nav-back-btn');
-    backBtn?.addEventListener('click', () => this.router.back());
+    this.bindEvents();
+  }
 
-    const fwdBtn = this.container.querySelector('#nav-forward-btn');
-    fwdBtn?.addEventListener('click', () => this.router.forward());
+  private bindEvents(): void {
+    if (!this.container) return;
 
-    // Bind Search Input
-    const searchInput = this.container.querySelector<HTMLInputElement>('#global-search-input');
-    searchInput?.addEventListener('input', () => {
-      const query = searchInput.value.trim();
-      this.router.navigate('search', { query });
+    // History navigation
+    this.container.querySelector('#nav-back-btn')?.addEventListener('click', () => {
+      this.router.back();
     });
 
-    // Bind search focus on Ctrl+K
-    window.addEventListener('keydown', e => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        searchInput?.focus();
-      }
+    this.container.querySelector('#nav-forward-btn')?.addEventListener('click', () => {
+      this.router.forward();
     });
 
-    // Bind theme toggle
-    const themeManager = ThemeManager.getInstance();
-    const themeBtn = this.container.querySelector<HTMLButtonElement>('#header-theme-toggle');
-
-    this.themeUnsub = themeManager.subscribe((resolved) => {
-      if (themeBtn) {
-        themeBtn.textContent = resolved === 'dark' ? '☀️' : '🌙';
-        themeBtn.setAttribute('title', resolved === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode');
-      }
-    });
-
+    // Theme toggle button
+    const themeBtn = this.container.querySelector('#header-theme-toggle');
     themeBtn?.addEventListener('click', () => {
-      const currentResolved = themeManager.getResolvedTheme();
-      themeManager.setPreference(currentResolved === 'dark' ? 'light' : 'dark');
+      const themeManager = ThemeManager.getInstance();
+      const current = themeManager.getPreference();
+      const next = current === 'dark' ? 'light' : 'dark';
+      themeManager.setPreference(next);
     });
 
-    // Profile click -> settings
+    // Search input enter/focus -> Search view
+    const searchInput = this.container.querySelector<HTMLInputElement>('#global-search-input');
+    searchInput?.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && searchInput.value.trim().length > 0) {
+        this.router.navigate('search', { query: searchInput.value.trim() });
+      }
+    });
+
+    searchInput?.addEventListener('click', () => {
+      if (this.router.current.route !== 'search') {
+        this.router.navigate('search');
+      }
+    });
+
+    // Profile click -> Settings
     this.container.querySelector('#header-user-profile')?.addEventListener('click', () => {
       this.router.navigate('settings');
     });
@@ -387,8 +378,15 @@ export class HeaderComponent {
     if (!this.container) return;
     const titleEl = this.container.querySelector('#header-route-title');
     if (titleEl) {
-      titleEl.textContent = state.route.charAt(0).toUpperCase() + state.route.slice(1);
+      titleEl.textContent = state.route === 'nowplaying' ? 'Now Playing' : state.route;
+    }
+  }
+
+  private updateThemeIcon(theme: 'dark' | 'light'): void {
+    if (!this.container) return;
+    const iconEl = this.container.querySelector('#theme-toggle-icon');
+    if (iconEl) {
+      iconEl.innerHTML = getIconSvg(theme === 'dark' ? 'sun' : 'moon', { size: 18 });
     }
   }
 }
-

@@ -13,6 +13,7 @@ import { GalaxyDetailPanel } from '../components/galaxy/galaxy-detail-panel';
 import { RouterService } from '../navigation/router-service';
 import { EventBus } from '../../core/events/event-bus';
 import type { Disposable } from '../../core/types/common';
+import { getIconSvg } from '../icons/icon-registry';
 
 export interface GalaxyViewDependencies {
   galaxyService: IGalaxyService;
@@ -522,6 +523,41 @@ export class GalaxyView implements IView {
     this.canvasRenderer.setGraph(this.currentGraph);
     this.renderAccessibleList();
     this.renderExplorePanels();
+
+    // Render empty state overlay if no graph nodes exist
+    if (this.currentGraph.nodes.length === 0) {
+      const canvasContainer = this.container.querySelector<HTMLElement>('#galaxy-canvas-container');
+      if (canvasContainer) {
+        const emptyOverlay = document.createElement('div');
+        emptyOverlay.id = 'galaxy-empty-state';
+        emptyOverlay.style.cssText = 'position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 15; padding: 24px; pointer-events: auto;';
+        emptyOverlay.innerHTML = `
+          <div class="glass-panel" style="padding: var(--space-8); border-radius: var(--radius-2xl); background: var(--glass-bg-subtle); border: 1px solid var(--glass-border); text-align: center; max-width: 440px; box-shadow: var(--shadow-elevation-medium);">
+            <div style="color: var(--color-accent-purple-glow); display: flex; justify-content: center; margin-bottom: 12px;">
+              ${getIconSvg('galaxy', { size: 48 })}
+            </div>
+            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-extrabold); color: #ffffff; margin: 0 0 8px 0;">
+              Your Music Galaxy is Empty
+            </h3>
+            <p style="font-size: var(--font-size-xs); color: var(--color-text-secondary); margin: 0 0 var(--space-5) 0; line-height: 1.5;">
+              Scan your local music files or connect your music folder to chart an interactive constellation of genres, artists, and albums.
+            </p>
+            <button
+              id="galaxy-empty-open-library"
+              style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; background: linear-gradient(135deg, var(--color-accent-purple) 0%, #9333ea 100%); border: 1px solid var(--glass-border-interactive); border-radius: var(--radius-full); color: #ffffff; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.5);"
+            >
+              <span style="display: flex;">${getIconSvg('library', { size: 14, color: '#ffffff' })}</span>
+              <span>Open Library</span>
+            </button>
+          </div>
+        `;
+        canvasContainer.appendChild(emptyOverlay);
+
+        emptyOverlay.querySelector('#galaxy-empty-open-library')?.addEventListener('click', () => {
+          this.deps?.router?.navigate('library');
+        });
+      }
+    }
 
     // 4. ResizeObserver
     if (typeof ResizeObserver !== 'undefined') {

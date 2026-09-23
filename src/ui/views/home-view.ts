@@ -10,6 +10,7 @@ import type { RouterService } from '../navigation/router-service';
 import type { EventBus } from '../../core/events/event-bus';
 import type { Track, Artist } from '../../domain/entities/models';
 import type { Disposable } from '../../core/types/common';
+import { getIconSvg } from '../icons/icon-registry';
 
 export interface HomeViewDependencies {
   playbackManager?: IPlaybackManager | undefined;
@@ -20,20 +21,9 @@ export interface HomeViewDependencies {
 }
 
 /**
- * Final Desktop & Tablet Dashboard View (Template 11).
- * Features:
- * - Authoritative Template 11 composition for Desktop & Tablet
- * - Main Hero Banner ("Good Music / Brighter Days", "Play. Feel. Repeat.", "Play Now" action)
- * - Category / Mood Filter Pills
- * - "Recently Played" Track Row with real local artwork & hover play
- * - "Made For You" Curated Mix Cards (Discover Weekly, Chill, Workout, Focus, Feel Good, Party)
- * - Secondary Utility Column:
- *   - Inspirational Quote Card ("Music gives a soul to the universe...")
- *   - Real Library Statistics 2x2 Grid (Songs, Artists, Albums, Playlists)
- *   - Top Genres breakdown with colored progress bars
- *   - Quick Actions 2x2 Grid (Create Playlist, Liked Songs, Downloads, Audio Galaxy / EQ)
- *   - Live Up Next Queue Preview
- * - Fully reactive EventBus subscriptions (playback, queue, library)
+ * Phase 4 Complete Visual Rebuild of the Home View.
+ * Matches approved Desktop Templates (1, 2, 11), Tablet Templates (1, 2, 11),
+ * and Mobile Templates (1, 2, 11) using Phase 2 Design Tokens and Icon System.
  */
 export class HomeView implements IView {
   private container: HTMLElement | null = null;
@@ -48,6 +38,7 @@ export class HomeView implements IView {
   private topArtists: readonly Artist[] = [];
   private libraryStats = { trackCount: 0, albumCount: 0, artistCount: 0, playlistCount: 0 };
   private subscriptions: Disposable[] = [];
+  private activeMood = 'For You';
 
   constructor(libraryService?: ILibraryService, deps?: HomeViewDependencies) {
     this.libraryService = libraryService;
@@ -58,10 +49,14 @@ export class HomeView implements IView {
     this.eventBus = deps?.eventBus;
   }
 
+  public getActiveMood(): string {
+    return this.activeMood;
+  }
+
   public mount(container: HTMLElement, _params?: RouteParams): void {
     this.container = container;
     this.render();
-    this.loadData();
+    void this.loadData();
     this.subscribeEvents();
   }
 
@@ -75,276 +70,345 @@ export class HomeView implements IView {
     }
   }
 
+  private getTimeGreeting(): string {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
   private render(): void {
     if (!this.container) return;
 
+    const greeting = this.getTimeGreeting();
+
     this.container.innerHTML = `
       <style>
-        .dashboard-container {
-          padding: 24px 28px;
+        .home-view-container {
+          padding: var(--space-6) var(--space-8);
           max-width: 1720px;
           margin: 0 auto;
           display: flex;
           flex-direction: column;
-          gap: 24px;
-          color: var(--color-text-primary, #ffffff);
-          font-family: inherit;
+          gap: var(--space-6);
+          color: var(--color-text-primary);
+          font-family: var(--font-family-base);
           box-sizing: border-box;
           width: 100%;
+          min-width: 0;
         }
 
-        /* 2-Column Desktop & Tablet Dashboard Grid */
-        .dashboard-grid {
+        /* 2-Column Responsive Home Grid (Desktop & Tablet Landscape) */
+        .home-grid-layout {
           display: grid;
           grid-template-columns: minmax(0, 1fr) 340px;
-          gap: 24px;
+          gap: var(--space-6);
           align-items: start;
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
         }
 
-        .dashboard-main-col {
+        .home-main-col {
           display: flex;
           flex-direction: column;
-          gap: 24px;
+          gap: var(--space-6);
           min-width: 0;
+          width: 100%;
+          box-sizing: border-box;
         }
 
-        .dashboard-side-col {
+        .home-side-col {
           display: flex;
           flex-direction: column;
-          gap: 20px;
+          gap: var(--space-5);
           min-width: 0;
+          width: 100%;
+          box-sizing: border-box;
         }
 
-        /* Hero Banner — Template 11 Style */
-        .dashboard-main-hero {
+        /* Atmospheric Hero Banner — Matching Approved Templates 1, 2 & 11 */
+        .home-hero-card {
           position: relative;
-          border-radius: var(--radius-2xl, 24px);
-          background: linear-gradient(135deg, rgba(28, 20, 68, 0.92) 0%, rgba(15, 23, 42, 0.95) 55%, rgba(6, 7, 14, 0.98) 100%);
-          border: 1px solid rgba(168, 85, 247, 0.22);
-          padding: 32px 36px;
+          border-radius: var(--radius-2xl);
+          background: linear-gradient(135deg, rgba(30, 20, 70, 0.95) 0%, rgba(15, 23, 42, 0.95) 55%, rgba(10, 10, 20, 0.98) 100%);
+          border: 1px solid var(--glass-border-interactive);
+          padding: var(--space-8) var(--space-9);
           overflow: hidden;
-          box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5), 0 0 24px rgba(124, 58, 237, 0.15);
+          box-shadow: var(--shadow-elevation-high), 0 0 32px rgba(124, 58, 237, 0.2);
           display: flex;
           flex-direction: row;
           align-items: center;
           justify-content: space-between;
-          min-height: 200px;
+          min-height: 220px;
+          box-sizing: border-box;
+          width: 100%;
         }
 
-        .dashboard-hero-glow {
+        .home-hero-glow-1 {
           position: absolute;
-          right: 15%;
-          top: -30%;
-          width: 380px;
-          height: 380px;
+          right: 20%;
+          top: -35%;
+          width: 420px;
+          height: 420px;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(124, 58, 237, 0.28) 0%, rgba(6, 182, 212, 0.12) 45%, transparent 70%);
+          background: radial-gradient(circle, rgba(124, 58, 237, 0.35) 0%, rgba(6, 182, 212, 0.15) 50%, transparent 70%);
           pointer-events: none;
         }
 
-        .dashboard-hero-content {
+        .home-hero-glow-2 {
+          position: absolute;
+          left: -10%;
+          bottom: -40%;
+          width: 320px;
+          height: 320px;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(236, 72, 153, 0.2) 0%, transparent 65%);
+          pointer-events: none;
+        }
+
+        .home-hero-content {
           z-index: 2;
-          max-width: 480px;
+          max-width: 520px;
           display: flex;
           flex-direction: column;
+          gap: var(--space-2);
+        }
+
+        .home-hero-greeting {
+          font-size: var(--font-size-xs);
+          font-weight: var(--font-weight-bold);
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--color-accent-cyan);
+          display: flex;
+          align-items: center;
           gap: 6px;
         }
 
-        .dashboard-hero-title {
-          font-size: 38px;
-          font-weight: 800;
+        .home-hero-title {
+          font-size: var(--font-size-4xl);
+          font-weight: var(--font-weight-extrabold);
           letter-spacing: -0.03em;
           line-height: 1.1;
           margin: 0;
-          color: #ffffff;
-          text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+          color: var(--color-text-primary);
+          text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
         }
 
-        .dashboard-hero-subtitle {
-          font-size: 14px;
-          color: var(--color-text-secondary, #94a3b8);
-          margin: 4px 0 18px 0;
-          font-weight: 500;
+        .home-hero-subtitle {
+          font-size: var(--font-size-sm);
+          color: var(--color-text-secondary);
+          margin: 2px 0 var(--space-4) 0;
+          font-weight: var(--font-weight-medium);
         }
 
-        .dashboard-hero-btn-primary {
+        .home-hero-actions {
+          display: flex;
+          gap: var(--space-3);
+          align-items: center;
+          flex-wrap: wrap;
+        }
+
+        .home-hero-btn-play {
           display: inline-flex;
           align-items: center;
-          gap: 10px;
+          gap: var(--space-2);
           padding: 12px 28px;
-          min-height: 44px;
-          border-radius: var(--radius-full, 9999px);
-          background: linear-gradient(135deg, var(--accent-purple, #7c3aed), #9333ea);
+          min-height: 46px;
+          border-radius: var(--radius-full);
+          background: linear-gradient(135deg, var(--color-accent-purple), #9333ea);
           color: #ffffff;
-          font-weight: 700;
-          font-size: 14px;
+          font-weight: var(--font-weight-bold);
+          font-size: var(--font-size-sm);
           border: none;
           cursor: pointer;
-          box-shadow: 0 4px 18px rgba(124, 58, 237, 0.5);
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          box-shadow: 0 4px 20px rgba(124, 58, 237, 0.55);
+          transition: transform var(--duration-fast) var(--ease-smooth), box-shadow var(--duration-fast) var(--ease-smooth);
         }
-        .dashboard-hero-btn-primary:hover {
+        .home-hero-btn-play:hover {
           transform: translateY(-2px);
-          box-shadow: 0 6px 24px rgba(124, 58, 237, 0.7);
+          box-shadow: 0 6px 28px rgba(124, 58, 237, 0.75);
         }
 
-        .dashboard-hero-btn-secondary {
+        .home-hero-btn-shuffle {
           display: inline-flex;
           align-items: center;
-          gap: 8px;
-          padding: 12px 22px;
-          min-height: 44px;
-          border-radius: var(--radius-full, 9999px);
-          background: rgba(255, 255, 255, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          color: #ffffff;
-          font-weight: 600;
-          font-size: 14px;
+          gap: var(--space-2);
+          padding: 12px 24px;
+          min-height: 46px;
+          border-radius: var(--radius-full);
+          background: var(--glass-bg-interactive);
+          border: 1px solid var(--glass-border-interactive);
+          color: var(--color-text-primary);
+          font-weight: var(--font-weight-semibold);
+          font-size: var(--font-size-sm);
           cursor: pointer;
-          transition: all 0.2s ease;
+          transition: background var(--duration-fast) var(--ease-smooth), transform var(--duration-fast) var(--ease-smooth);
         }
-        .dashboard-hero-btn-secondary:hover {
-          background: rgba(255, 255, 255, 0.14);
+        .home-hero-btn-shuffle:hover {
+          background: var(--glass-bg-subtle);
           transform: translateY(-2px);
         }
 
-        .dashboard-hero-visual {
+        .home-hero-decor {
           position: relative;
           z-index: 1;
           display: flex;
           flex-direction: column;
           align-items: flex-end;
-          gap: 8px;
+          gap: var(--space-2);
           pointer-events: none;
         }
 
-        .dashboard-hero-handwritten {
+        .home-hero-tagline {
           font-family: 'Brush Script MT', 'Segoe Script', cursive, sans-serif;
-          font-size: 26px;
-          color: rgba(255, 255, 255, 0.85);
+          font-size: 28px;
+          color: rgba(255, 255, 255, 0.9);
           line-height: 1.15;
           text-align: right;
-          transform: rotate(-5deg);
+          transform: rotate(-4deg);
+          text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
         }
 
-        .dashboard-hero-dots {
+        .home-hero-dots {
           display: flex;
           gap: 6px;
           margin-top: 10px;
         }
-        .dashboard-hero-dot {
+        .home-hero-dot {
           width: 7px;
           height: 7px;
           border-radius: 50%;
           background: rgba(255, 255, 255, 0.3);
+          transition: all var(--duration-fast) var(--ease-smooth);
         }
-        .dashboard-hero-dot.active {
-          background: #ffffff;
-          width: 18px;
-          border-radius: 4px;
+        .home-hero-dot.active {
+          background: var(--color-accent-purple-glow);
+          width: 22px;
+          border-radius: var(--radius-full);
         }
 
-        /* Filter Pills */
-        .dashboard-mood-pills {
+        /* Mobile 4-Tile Quick Access Row */
+        .home-mobile-quick-row {
+          display: none;
+        }
+
+        /* Category / Mood Filter Pills */
+        .home-mood-pills {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: var(--space-2);
           overflow-x: auto;
           scrollbar-width: none;
           padding-bottom: 2px;
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          overscroll-behavior-x: contain;
         }
-        .dashboard-mood-pills::-webkit-scrollbar {
+        .home-mood-pills::-webkit-scrollbar {
           display: none;
         }
-        .dashboard-mood-pill {
-          padding: 8px 18px;
-          min-height: 38px;
-          border-radius: var(--radius-full, 9999px);
-          font-size: 13px;
-          font-weight: 600;
+
+        .home-mood-pill {
+          padding: 8px 20px;
+          min-height: 40px;
+          border-radius: var(--radius-full);
+          font-size: var(--font-size-xs);
+          font-weight: var(--font-weight-semibold);
           cursor: pointer;
           white-space: nowrap;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(255, 255, 255, 0.04);
-          color: var(--color-text-secondary, #94a3b8);
-          transition: all 0.2s ease;
+          border: 1px solid var(--glass-border);
+          background: var(--glass-bg-subtle);
+          color: var(--color-text-secondary);
+          transition: all var(--duration-fast) var(--ease-smooth);
         }
-        .dashboard-mood-pill.active, .dashboard-mood-pill:hover {
-          background: linear-gradient(135deg, var(--accent-purple, #7c3aed), #9333ea);
+        .home-mood-pill.active, .home-mood-pill:hover {
+          background: linear-gradient(135deg, var(--color-accent-purple), #9333ea);
           color: #ffffff;
-          border-color: rgba(255, 255, 255, 0.25);
-          box-shadow: 0 2px 12px rgba(124, 58, 237, 0.35);
+          border-color: var(--glass-border-interactive);
+          box-shadow: 0 2px 14px rgba(124, 58, 237, 0.4);
         }
 
         /* Section Layouts */
-        .dashboard-section {
+        .home-section {
           display: flex;
           flex-direction: column;
-          gap: 14px;
+          gap: var(--space-3);
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
         }
 
-        .dashboard-section-header {
+        .home-section-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          width: 100%;
         }
 
-        .dashboard-section-title {
-          font-size: 20px;
-          font-weight: 800;
+        .home-section-title {
+          font-size: var(--font-size-xl);
+          font-weight: var(--font-weight-extrabold);
           letter-spacing: -0.02em;
-          color: #ffffff;
+          color: var(--color-text-primary);
           margin: 0;
         }
 
-        .dashboard-see-all-btn {
+        .home-see-all-btn {
           background: transparent;
           border: none;
-          color: var(--accent-cyan, #38bdf8);
-          font-size: 13px;
-          font-weight: 600;
+          color: var(--color-accent-cyan);
+          font-size: var(--font-size-xs);
+          font-weight: var(--font-weight-semibold);
           cursor: pointer;
           display: flex;
           align-items: center;
           gap: 4px;
-          padding: 6px 10px;
-          border-radius: var(--radius-md, 8px);
-          transition: background 0.15s ease;
+          padding: 6px 12px;
+          border-radius: var(--radius-md);
+          transition: background var(--duration-fast) var(--ease-smooth);
         }
-        .dashboard-see-all-btn:hover {
-          background: rgba(56, 189, 248, 0.1);
+        .home-see-all-btn:hover {
+          background: rgba(6, 182, 212, 0.1);
         }
 
-        /* Recently Played Track Grid */
-        .dashboard-track-grid {
+        /* Trending / Recently Played Grid */
+        .home-track-grid {
           display: grid;
           grid-template-columns: repeat(5, minmax(0, 1fr));
-          gap: 16px;
+          gap: var(--space-4);
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
         }
 
-        .dashboard-track-card {
+        .home-track-card {
           position: relative;
-          border-radius: var(--radius-xl, 16px);
-          background: rgba(18, 18, 26, 0.7);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: var(--radius-xl);
+          background: var(--glass-bg-subtle);
+          border: 1px solid var(--glass-border);
           padding: 12px;
           display: flex;
           flex-direction: column;
           gap: 10px;
           cursor: pointer;
-          transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: all var(--duration-fast) var(--ease-smooth);
+          min-width: 0;
+          box-sizing: border-box;
         }
-        .dashboard-track-card:hover {
-          background: rgba(26, 26, 38, 0.9);
-          border-color: rgba(168, 85, 247, 0.35);
+        .home-track-card:hover {
+          background: var(--glass-bg-interactive);
+          border-color: var(--glass-border-interactive);
           transform: translateY(-4px);
-          box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5), 0 0 16px rgba(124, 58, 237, 0.2);
+          box-shadow: var(--shadow-elevation-high), 0 0 20px rgba(124, 58, 237, 0.25);
         }
 
-        .dashboard-track-artwork {
+        .home-track-artwork {
           width: 100%;
           aspect-ratio: 1 / 1;
-          border-radius: var(--radius-lg, 12px);
+          border-radius: var(--radius-lg);
           background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
           position: relative;
           overflow: hidden;
@@ -353,57 +417,61 @@ export class HomeView implements IView {
           justify-content: center;
         }
 
-        .dashboard-play-overlay {
+        .home-play-overlay {
           position: absolute;
           right: 10px;
           bottom: 10px;
-          width: 42px;
-          height: 42px;
+          width: 44px;
+          height: 44px;
           border-radius: 50%;
-          background: linear-gradient(135deg, var(--accent-purple, #7c3aed), #9333ea);
+          background: linear-gradient(135deg, var(--color-accent-purple), #9333ea);
           color: #ffffff;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 15px;
-          box-shadow: 0 4px 14px rgba(124, 58, 237, 0.6);
+          box-shadow: 0 4px 16px rgba(124, 58, 237, 0.6);
           opacity: 0;
           transform: translateY(8px);
-          transition: all 0.2s ease;
+          transition: all var(--duration-fast) var(--ease-smooth);
         }
-        .dashboard-track-card:hover .dashboard-play-overlay {
+        .home-track-card:hover .home-play-overlay {
           opacity: 1;
           transform: translateY(0);
         }
 
-        /* Made For You Landscape Grid */
-        .dashboard-mix-grid {
+        /* Made For You Landscape Mix Grid */
+        .home-mix-grid {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 14px;
+          gap: var(--space-4);
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
         }
 
-        .dashboard-mix-card {
-          border-radius: var(--radius-xl, 16px);
-          background: rgba(18, 18, 26, 0.7);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          padding: 10px;
+        .home-mix-card {
+          border-radius: var(--radius-xl);
+          background: var(--glass-bg-subtle);
+          border: 1px solid var(--glass-border);
+          padding: 12px;
           display: flex;
           flex-direction: column;
-          gap: 8px;
+          gap: 10px;
           cursor: pointer;
-          transition: all 0.2s ease;
+          transition: all var(--duration-fast) var(--ease-smooth);
+          min-width: 0;
+          box-sizing: border-box;
         }
-        .dashboard-mix-card:hover {
-          background: rgba(26, 26, 38, 0.9);
-          border-color: rgba(168, 85, 247, 0.35);
+        .home-mix-card:hover {
+          background: var(--glass-bg-interactive);
+          border-color: var(--glass-border-interactive);
           transform: translateY(-3px);
-          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+          box-shadow: var(--shadow-elevation-medium), 0 0 16px rgba(124, 58, 237, 0.2);
         }
-        .dashboard-mix-artwork {
+        .home-mix-artwork {
           width: 100%;
-          aspect-ratio: 16 / 10;
-          border-radius: var(--radius-md, 10px);
+          aspect-ratio: 16 / 9;
+          border-radius: var(--radius-md);
           overflow: hidden;
           position: relative;
           display: flex;
@@ -412,209 +480,199 @@ export class HomeView implements IView {
         }
 
         /* Top Artists Row */
-        .dashboard-artist-avatar {
-          width: 62px;
-          height: 62px;
+        .home-artist-avatar {
+          width: 68px;
+          height: 68px;
           border-radius: 50%;
           background: linear-gradient(135deg, #4338ca, #1e1b4b);
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 20px;
-          font-weight: 700;
+          font-size: 22px;
+          font-weight: var(--font-weight-bold);
           color: #ffffff;
-          border: 2px solid rgba(255, 255, 255, 0.12);
-          transition: all 0.2s ease;
+          border: 2px solid var(--glass-border);
+          transition: all var(--duration-fast) var(--ease-smooth);
           overflow: hidden;
         }
-        .dashboard-artist-avatar:hover {
+        .home-artist-avatar:hover {
           transform: scale(1.08);
-          border-color: var(--accent-purple, #7c3aed);
-          box-shadow: 0 0 16px rgba(124, 58, 237, 0.4);
+          border-color: var(--color-accent-purple);
+          box-shadow: 0 0 20px rgba(124, 58, 237, 0.45);
         }
 
-        /* Secondary Column Widgets — Template 11 */
-        .dashboard-quote-card {
-          padding: 20px;
-          border-radius: var(--radius-2xl, 20px);
-          background: linear-gradient(135deg, rgba(30, 27, 75, 0.75), rgba(15, 23, 42, 0.85));
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        /* Secondary Column Widgets (Template 11) */
+        .home-quote-card {
+          padding: var(--space-5);
+          border-radius: var(--radius-2xl);
+          background: linear-gradient(135deg, rgba(30, 27, 75, 0.8), rgba(15, 23, 42, 0.9));
+          border: 1px solid var(--glass-border);
+          box-shadow: var(--shadow-elevation-medium);
           position: relative;
+          box-sizing: border-box;
+          width: 100%;
         }
 
-        .dashboard-stats-grid {
+        .home-stats-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 12px;
+          gap: var(--space-3);
+          width: 100%;
+          box-sizing: border-box;
         }
 
-        .dashboard-stat-tile {
+        .home-stat-tile {
           display: flex;
           align-items: center;
-          gap: 12px;
-          padding: 14px 16px;
-          border-radius: var(--radius-xl, 16px);
-          background: rgba(18, 18, 26, 0.75);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          transition: all 0.2s ease;
+          gap: var(--space-3);
+          padding: var(--space-3) var(--space-4);
+          border-radius: var(--radius-xl);
+          background: var(--glass-bg-subtle);
+          border: 1px solid var(--glass-border);
+          transition: all var(--duration-fast) var(--ease-smooth);
+          min-width: 0;
+          box-sizing: border-box;
         }
-        .dashboard-stat-tile:hover {
-          background: rgba(26, 26, 38, 0.9);
-          border-color: rgba(168, 85, 247, 0.3);
+        .home-stat-tile:hover {
+          background: var(--glass-bg-interactive);
+          border-color: var(--glass-border-interactive);
         }
 
-        .dashboard-genre-card {
-          padding: 20px;
-          border-radius: var(--radius-2xl, 20px);
-          background: rgba(18, 18, 26, 0.75);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+        .home-genre-card {
+          padding: var(--space-5);
+          border-radius: var(--radius-2xl);
+          background: var(--glass-bg-subtle);
+          border: 1px solid var(--glass-border);
           display: flex;
           flex-direction: column;
-          gap: 14px;
+          gap: var(--space-3);
+          box-sizing: border-box;
+          width: 100%;
         }
 
-        .dashboard-genre-row {
+        .home-genre-row {
           display: flex;
           align-items: center;
-          gap: 12px;
-          font-size: 13px;
+          gap: var(--space-3);
+          font-size: var(--font-size-xs);
         }
-        .dashboard-genre-bar-track {
+        .home-genre-bar-track {
           flex: 1;
           height: 6px;
           border-radius: 3px;
           background: rgba(255, 255, 255, 0.08);
           overflow: hidden;
         }
-        .dashboard-genre-bar-fill {
+        .home-genre-bar-fill {
           height: 100%;
           border-radius: 3px;
         }
 
-        .dashboard-quick-actions-2x2 {
+        .home-quick-actions-2x2 {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 12px;
+          gap: var(--space-3);
+          width: 100%;
+          box-sizing: border-box;
         }
 
-        .dashboard-quick-action-tile {
+        .home-quick-action-tile {
           display: flex;
           align-items: center;
-          gap: 10px;
-          padding: 14px 16px;
-          min-height: 48px;
-          border-radius: var(--radius-xl, 16px);
-          background: rgba(18, 18, 26, 0.75);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          color: #ffffff;
-          font-size: 13px;
-          font-weight: 600;
+          gap: var(--space-2);
+          padding: var(--space-3) var(--space-4);
+          min-height: 52px;
+          border-radius: var(--radius-xl);
+          background: var(--glass-bg-subtle);
+          border: 1px solid var(--glass-border);
+          color: var(--color-text-primary);
+          font-size: var(--font-size-xs);
+          font-weight: var(--font-weight-semibold);
           cursor: pointer;
-          transition: all 0.18s ease;
+          transition: all var(--duration-fast) var(--ease-smooth);
+          box-sizing: border-box;
         }
-        .dashboard-quick-action-tile:hover {
-          background: rgba(26, 26, 38, 0.95);
-          border-color: rgba(168, 85, 247, 0.4);
+        .home-quick-action-tile:hover {
+          background: var(--glass-bg-interactive);
+          border-color: var(--glass-border-interactive);
           transform: translateY(-2px);
-          color: var(--accent-cyan, #38bdf8);
+          color: var(--color-accent-cyan);
         }
 
-        .dashboard-queue-row {
+        .home-queue-row {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: var(--space-2);
           padding: 8px 10px;
-          border-radius: var(--radius-lg, 10px);
+          border-radius: var(--radius-lg);
           background: rgba(255, 255, 255, 0.02);
           border: 1px solid rgba(255, 255, 255, 0.04);
           cursor: pointer;
-          transition: all 0.15s ease;
+          transition: all var(--duration-fast) var(--ease-smooth);
+          min-width: 0;
+          box-sizing: border-box;
         }
-        .dashboard-queue-row:hover {
-          background: rgba(255, 255, 255, 0.07);
-          border-color: rgba(255, 255, 255, 0.1);
+        .home-queue-row:hover {
+          background: var(--glass-bg-interactive);
+          border-color: var(--glass-border);
         }
 
         /* ==========================================================
-           TABLET SPECIFIC STYLES (768px - 1199px) — TEMPLATE 11
+           TABLET RESPONSIVE STYLES (768px - 1199px)
            ========================================================== */
         @media (min-width: 768px) and (max-width: 1199px) {
-          .dashboard-container {
-            padding: 20px 24px;
-            gap: 20px;
+          .home-view-container {
+            padding: var(--space-5) var(--space-6);
+            gap: var(--space-5);
           }
 
-          .dashboard-grid {
-            grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.2fr);
-            gap: 20px;
+          .home-grid-layout {
+            grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.3fr);
+            gap: var(--space-5);
           }
 
-          .dashboard-main-hero {
-            padding: 24px 28px;
-            min-height: 180px;
+          .home-hero-card {
+            padding: var(--space-6);
+            min-height: 190px;
           }
 
-          .dashboard-hero-title {
-            font-size: 30px;
+          .home-hero-title {
+            font-size: var(--font-size-3xl);
           }
 
-          .dashboard-hero-handwritten {
-            font-size: 20px;
+          .home-hero-tagline {
+            font-size: 22px;
           }
 
-          .dashboard-track-grid {
+          .home-track-grid {
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 14px;
+            gap: var(--space-3);
           }
 
-          .dashboard-mix-grid {
+          .home-mix-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
-          }
-
-          .dashboard-stats-grid {
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-          }
-
-          .dashboard-stat-tile {
-            padding: 12px 14px;
+            gap: var(--space-3);
           }
         }
 
         /* Smaller Tablet Portrait (768px - 899px) */
         @media (min-width: 768px) and (max-width: 899px) {
-          .dashboard-grid {
+          .home-grid-layout {
             grid-template-columns: 1fr;
-          }
-          .dashboard-track-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-          }
-        }
-
-        /* Desktop Extra Wide (>= 1200px) */
-        @media (min-width: 1200px) {
-          .dashboard-grid {
-            grid-template-columns: minmax(0, 1fr) 340px;
           }
         }
 
         /* ==========================================================
-           MOBILE SPECIFIC STYLES (< 768px) — TEMPLATE 11
+           MOBILE RESPONSIVE STYLES (< 768px)
            ========================================================== */
-        .dashboard-mobile-quick-row {
-          display: none;
-        }
-
-        .dashboard-vibe-card {
+        .home-vibe-card {
           display: none;
         }
 
         @media (max-width: 767px) {
-          .dashboard-container {
-            padding: 16px 14px 120px 14px;
-            gap: 18px;
+          .home-view-container {
+            padding: var(--space-4) var(--space-3) calc(var(--mini-player-height) + var(--bottom-nav-height) + var(--space-8)) var(--space-3);
+            gap: var(--space-4);
             overflow-x: hidden;
             width: 100%;
             max-width: 100%;
@@ -622,103 +680,89 @@ export class HomeView implements IView {
             box-sizing: border-box;
           }
 
-          .dashboard-grid {
+          .home-grid-layout {
             grid-template-columns: minmax(0, 1fr);
-            gap: 18px;
+            gap: var(--space-4);
             width: 100%;
             max-width: 100%;
             min-width: 0;
             box-sizing: border-box;
           }
 
-          /* Mobile Hero */
-          .dashboard-main-hero {
-            padding: 22px 20px;
+          .home-hero-card {
+            padding: var(--space-5) var(--space-4);
             min-height: 160px;
             flex-direction: column;
             align-items: flex-start;
-            border-radius: var(--radius-xl, 18px);
+            border-radius: var(--radius-xl);
             width: 100%;
             max-width: 100%;
             box-sizing: border-box;
           }
 
-          .dashboard-hero-title {
-            font-size: 24px;
+          .home-hero-title {
+            font-size: var(--font-size-2xl);
             line-height: 1.15;
             word-break: break-word;
           }
 
-          .dashboard-hero-subtitle {
-            font-size: 13px;
-            margin: 4px 0 14px 0;
+          .home-hero-subtitle {
+            font-size: var(--font-size-xs);
+            margin: 2px 0 var(--space-3) 0;
           }
 
-          .dashboard-hero-btn-primary {
-            padding: 10px 22px;
-            font-size: 13px;
+          .home-hero-btn-play, .home-hero-btn-shuffle {
+            padding: 10px 20px;
+            font-size: var(--font-size-xs);
             min-height: 44px;
           }
 
-          .dashboard-hero-btn-secondary {
-            padding: 10px 18px;
-            font-size: 13px;
-            min-height: 44px;
-          }
-
-          .dashboard-hero-visual {
+          .home-hero-decor {
             display: none;
           }
 
           /* Mobile 4-Tile Quick Access Row */
-          .dashboard-mobile-quick-row {
+          .home-mobile-quick-row {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 8px;
             width: 100%;
             max-width: 100%;
+            min-width: 0;
             box-sizing: border-box;
           }
 
-          .dashboard-mobile-quick-tile {
+          .home-mobile-quick-tile {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             padding: 10px 4px;
-            min-height: 44px;
-            border-radius: var(--radius-lg, 12px);
-            background: rgba(18, 18, 26, 0.75);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            min-height: 48px;
+            border-radius: var(--radius-lg);
+            background: var(--glass-bg-subtle);
+            border: 1px solid var(--glass-border);
             text-align: center;
             gap: 4px;
             cursor: pointer;
-            transition: all 0.15s ease;
+            transition: all var(--duration-fast) var(--ease-smooth);
             min-width: 0;
             overflow: hidden;
             box-sizing: border-box;
           }
-          .dashboard-mobile-quick-tile span {
+          .home-mobile-quick-tile span {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             max-width: 100%;
           }
-          .dashboard-mobile-quick-tile:active {
+          .home-mobile-quick-tile:active {
             transform: scale(0.96);
-            background: rgba(26, 26, 38, 0.95);
-          }
-
-          /* Mood pills containment */
-          .dashboard-mood-pills {
-            overscroll-behavior-x: contain;
-            max-width: 100%;
-            min-width: 0;
-            box-sizing: border-box;
+            background: var(--glass-bg-interactive);
           }
 
           /* Horizontal scrolling mixes on mobile */
-          .dashboard-mix-grid {
+          .home-mix-grid {
             display: flex;
             overflow-x: auto;
             overscroll-behavior-x: contain;
@@ -730,16 +774,16 @@ export class HomeView implements IView {
             min-width: 0;
             box-sizing: border-box;
           }
-          .dashboard-mix-grid::-webkit-scrollbar {
+          .home-mix-grid::-webkit-scrollbar {
             display: none;
           }
-          .dashboard-mix-card {
-            flex: 0 0 140px;
+          .home-mix-card {
+            flex: 0 0 150px;
             scroll-snap-align: start;
           }
 
-          /* Track cards on mobile -> compact list/grid */
-          .dashboard-track-grid {
+          /* Track cards on mobile -> compact row format */
+          .home-track-grid {
             display: flex;
             flex-direction: column;
             gap: 8px;
@@ -749,7 +793,7 @@ export class HomeView implements IView {
             box-sizing: border-box;
           }
 
-          .dashboard-track-card {
+          .home-track-card {
             flex-direction: row;
             align-items: center;
             padding: 8px 12px;
@@ -760,251 +804,237 @@ export class HomeView implements IView {
             box-sizing: border-box;
           }
 
-          .dashboard-track-artwork {
+          .home-track-artwork {
             width: 48px;
             height: 48px;
             flex-shrink: 0;
-            border-radius: var(--radius-md, 8px);
+            border-radius: var(--radius-md);
           }
 
-          .dashboard-play-overlay {
-            width: 32px;
-            height: 32px;
-            font-size: 12px;
-            opacity: 1;
-            transform: none;
-            right: 4px;
-            bottom: 4px;
+          .home-play-overlay {
             display: none; /* Tap whole row on mobile */
           }
 
           /* Mobile Your Vibe Today Card */
-          .dashboard-vibe-card {
+          .home-vibe-card {
             display: flex;
             flex-direction: column;
-            gap: 14px;
-            padding: 18px;
-            border-radius: var(--radius-xl, 18px);
-            background: rgba(18, 18, 26, 0.75);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            gap: var(--space-3);
+            padding: var(--space-4);
+            border-radius: var(--radius-xl);
+            background: var(--glass-bg-subtle);
+            border: 1px solid var(--glass-border);
             width: 100%;
             max-width: 100%;
             min-width: 0;
             box-sizing: border-box;
           }
 
-          .dashboard-vibe-ring-container {
+          .home-vibe-ring-container {
             display: flex;
             align-items: center;
             justify-content: space-around;
             gap: 14px;
             width: 100%;
-            max-width: 100%;
             min-width: 0;
             box-sizing: border-box;
           }
 
-          .dashboard-vibe-ring {
-            width: 90px;
-            height: 90px;
+          .home-vibe-ring {
+            width: 88px;
+            height: 88px;
             flex-shrink: 0;
             border-radius: 50%;
-            background: conic-gradient(#8b5cf6 0% 72%, #ec4899 72% 90%, #38bdf8 90% 96%, #06b6d4 96% 100%);
+            background: conic-gradient(var(--color-accent-purple) 0% 72%, var(--color-accent-pink) 72% 90%, var(--color-accent-cyan) 90% 96%, #06b6d4 96% 100%);
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 0 18px rgba(139, 92, 246, 0.35);
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
           }
 
-          .dashboard-vibe-ring-inner {
-            width: 68px;
-            height: 68px;
+          .home-vibe-ring-inner {
+            width: 66px;
+            height: 66px;
             border-radius: 50%;
-            background: #0d111a;
+            background: var(--color-bg-base);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-          }
-
-          .dashboard-side-col {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            width: 100%;
-            max-width: 100%;
-            min-width: 0;
-            box-sizing: border-box;
           }
         }
       </style>
 
-      <section class="dashboard-container" aria-label="Music Dashboard">
-        <!-- 2-Column Template 11 Composition (Left: Content, Right: Utility & Stats) -->
-        <div class="dashboard-grid">
-          <!-- Left Primary Column -->
-          <div class="dashboard-main-col">
-            <!-- Hero Banner: Good Music Brighter Days -->
-            <div class="dashboard-main-hero">
-              <div class="dashboard-hero-glow"></div>
+      <section class="home-view-container" aria-label="Music Dashboard">
+        <div class="home-grid-layout">
+          <!-- Left Main Content Column -->
+          <div class="home-main-col">
+            <!-- 1. Hero Banner: Listen Without Limits / Good Music Brighter Days -->
+            <div class="home-hero-card">
+              <div class="home-hero-glow-1"></div>
+              <div class="home-hero-glow-2"></div>
               
-              <div class="dashboard-hero-content">
-                <h1 class="dashboard-hero-title">
+              <div class="home-hero-content">
+                <div class="home-hero-greeting">
+                  ${getIconSvg('sparkles', { size: 14, color: 'var(--color-accent-cyan)' })}
+                  <span>${greeting}</span>
+                </div>
+                <h1 class="home-hero-title">
                   Music For A<br/>Better You
                 </h1>
-                <p class="dashboard-hero-subtitle">
-                  Different moods. Same you.
+                <p class="home-hero-subtitle">
+                  Different moods. Same you. Lossless audio quality with 10-band EQ.
                 </p>
-                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                  <button class="dashboard-hero-btn-primary" id="home-hero-play-btn" aria-label="Play Now">
-                    <span>▶</span>
+                <div class="home-hero-actions">
+                  <button class="home-hero-btn-play" id="home-hero-play-btn" aria-label="Play Now">
+                    ${getIconSvg('play', { size: 18, color: '#ffffff' })}
                     <span>Play Now</span>
                   </button>
-                  <button class="dashboard-hero-btn-secondary" id="home-hero-shuffle-btn" aria-label="Shuffle Library">
-                    <span>🔀</span>
+                  <button class="home-hero-btn-shuffle" id="home-hero-shuffle-btn" aria-label="Shuffle Library">
+                    ${getIconSvg('shuffle', { size: 18, color: 'currentColor' })}
                     <span>Shuffle</span>
                   </button>
                 </div>
               </div>
 
-              <div class="dashboard-hero-visual">
-                <div class="dashboard-hero-handwritten">
-                  Good Music<br/><span style="color: var(--accent-cyan, #38bdf8);">Brighter Days</span>
+              <div class="home-hero-decor">
+                <div class="home-hero-tagline">
+                  Good Music<br/><span style="color: var(--color-accent-cyan);">Brighter Days</span>
                 </div>
-                <div class="dashboard-hero-dots">
-                  <div class="dashboard-hero-dot active"></div>
-                  <div class="dashboard-hero-dot"></div>
-                  <div class="dashboard-hero-dot"></div>
-                  <div class="dashboard-hero-dot"></div>
+                <div class="home-hero-dots">
+                  <div class="home-hero-dot active"></div>
+                  <div class="home-hero-dot"></div>
+                  <div class="home-hero-dot"></div>
+                  <div class="home-hero-dot"></div>
                 </div>
               </div>
             </div>
 
-            <!-- Mobile 4-Tile Quick Access Row (Template 11 Mobile) -->
-            <div class="dashboard-mobile-quick-row">
-              <div class="dashboard-mobile-quick-tile" id="mobile-quick-liked" aria-label="Liked Songs">
-                <span style="font-size: 18px; color: #ec4899;">💖</span>
+            <!-- 2. Mobile 4-Tile Quick Access Row (Mobile Breakpoint) -->
+            <div class="home-mobile-quick-row">
+              <div class="home-mobile-quick-tile" id="mobile-quick-liked" aria-label="Liked Songs">
+                <span style="color: var(--color-accent-pink);">${getIconSvg('heart-filled', { size: 20 })}</span>
                 <span style="font-size: 11px; font-weight: 700; color: #ffffff;">Liked</span>
-                <span style="font-size: 9px; color: var(--color-text-muted, #64748b);" id="mobile-liked-count">128 songs</span>
+                <span style="font-size: 9px; color: var(--color-text-muted);" id="mobile-liked-count">Favorites</span>
               </div>
-              <div class="dashboard-mobile-quick-tile" id="mobile-quick-recents" aria-label="Recently Played">
-                <span style="font-size: 18px; color: #38bdf8;">🕒</span>
+              <div class="home-mobile-quick-tile" id="mobile-quick-recents" aria-label="Recently Played">
+                <span style="color: var(--color-accent-cyan);">${getIconSvg('clock', { size: 20 })}</span>
                 <span style="font-size: 11px; font-weight: 700; color: #ffffff;">Recent</span>
-                <span style="font-size: 9px; color: var(--color-text-muted, #64748b);" id="mobile-recent-count">25 tracks</span>
+                <span style="font-size: 9px; color: var(--color-text-muted);" id="mobile-recent-count">Tracks</span>
               </div>
-              <div class="dashboard-mobile-quick-tile" id="mobile-quick-downloads" aria-label="Library">
-                <span style="font-size: 18px; color: #a855f7;">📥</span>
+              <div class="home-mobile-quick-tile" id="mobile-quick-downloads" aria-label="Library">
+                <span style="color: var(--color-accent-purple-glow);">${getIconSvg('folder', { size: 20 })}</span>
                 <span style="font-size: 11px; font-weight: 700; color: #ffffff;">Library</span>
-                <span style="font-size: 9px; color: var(--color-text-muted, #64748b);" id="mobile-lib-count">Local Audio</span>
+                <span style="font-size: 9px; color: var(--color-text-muted);" id="mobile-lib-count">Local Audio</span>
               </div>
-              <div class="dashboard-mobile-quick-tile" id="mobile-quick-stats" aria-label="Galaxy">
-                <span style="font-size: 18px; color: #f59e0b;">📊</span>
-                <span style="font-size: 11px; font-weight: 700; color: #ffffff;">Stats</span>
-                <span style="font-size: 9px; color: var(--color-text-muted, #64748b);">Galaxy</span>
+              <div class="home-mobile-quick-tile" id="mobile-quick-stats" aria-label="Audio Galaxy">
+                <span style="color: #f59e0b;">${getIconSvg('galaxy', { size: 20 })}</span>
+                <span style="font-size: 11px; font-weight: 700; color: #ffffff;">Galaxy</span>
+                <span style="font-size: 9px; color: var(--color-text-muted);">Audio Map</span>
               </div>
             </div>
 
-            <!-- Mood Filter Bar -->
-            <div class="dashboard-mood-pills" id="home-mood-pills-bar" aria-label="Filter by mood">
-              <button class="dashboard-mood-pill active" data-mood="For You">For You</button>
-              <button class="dashboard-mood-pill" data-mood="Chill">Chill</button>
-              <button class="dashboard-mood-pill" data-mood="Workout">Workout</button>
-              <button class="dashboard-mood-pill" data-mood="Focus">Focus</button>
-              <button class="dashboard-mood-pill" data-mood="Party">Party</button>
-              <button class="dashboard-mood-pill" data-mood="Love">Love</button>
-              <button class="dashboard-mood-pill" data-mood="Sad">Sad</button>
-              <button class="dashboard-mood-pill" data-mood="Retro">Retro</button>
-              <button class="dashboard-mood-pill" data-mood="Instrumental">Instrumental</button>
+            <!-- 3. Category / Mood Filter Pills -->
+            <div class="home-mood-pills" id="home-mood-pills-bar" aria-label="Filter by mood">
+              <button class="home-mood-pill active" data-mood="For You">For You</button>
+              <button class="home-mood-pill" data-mood="Chill">Chill</button>
+              <button class="home-mood-pill" data-mood="Workout">Workout</button>
+              <button class="home-mood-pill" data-mood="Focus">Focus</button>
+              <button class="home-mood-pill" data-mood="Party">Party</button>
+              <button class="home-mood-pill" data-mood="Love">Love</button>
+              <button class="home-mood-pill" data-mood="Sad">Sad</button>
+              <button class="home-mood-pill" data-mood="Retro">Retro</button>
+              <button class="home-mood-pill" data-mood="Instrumental">Instrumental</button>
             </div>
 
-            <!-- Section 1: Made For You -->
-            <section class="dashboard-section" aria-label="Made For You Mixes">
-              <div class="dashboard-section-header">
-                <h2 class="dashboard-section-title">Made For You</h2>
-                <button class="dashboard-see-all-btn" id="see-all-mixes-btn" aria-label="See all mixes">
+            <!-- 4. Made For You (Curated Mixes) -->
+            <section class="home-section" aria-label="Made For You Mixes">
+              <div class="home-section-header">
+                <h2 class="home-section-title">Made For You</h2>
+                <button class="home-see-all-btn" id="see-all-mixes-btn" aria-label="See all mixes">
                   <span>See all</span>
-                  <span>›</span>
+                  <span>${getIconSvg('chevron-right', { size: 14 })}</span>
                 </button>
               </div>
 
-              <div id="home-mixes-container" class="dashboard-mix-grid">
+              <div id="home-mixes-container" class="home-mix-grid">
                 ${this.renderDefaultMixCards()}
               </div>
             </section>
 
-            <!-- Section 2: Trending / Recently Played -->
-            <section class="dashboard-section" aria-label="Trending / Recently Played Tracks">
-              <div class="dashboard-section-header">
-                <h2 class="dashboard-section-title">Trending Now</h2>
-                <button class="dashboard-see-all-btn" id="see-all-recent-btn" aria-label="See all recently played">
+            <!-- 5. Trending / Recently Played Tracks -->
+            <section class="home-section" aria-label="Trending / Recently Played Tracks">
+              <div class="home-section-header">
+                <h2 class="home-section-title">Trending Now</h2>
+                <button class="home-see-all-btn" id="see-all-recent-btn" aria-label="See all recently played">
                   <span>See all</span>
-                  <span>›</span>
+                  <span>${getIconSvg('chevron-right', { size: 14 })}</span>
                 </button>
               </div>
 
-              <div id="home-recent-tracks-container" class="dashboard-track-grid">
-                <div style="grid-column: 1 / -1; padding: 32px; text-align: center; color: var(--color-text-muted); font-size: 14px;">
+              <div id="home-recent-tracks-container" class="home-track-grid">
+                <div style="grid-column: 1 / -1; padding: 32px; text-align: center; color: var(--color-text-muted); font-size: var(--font-size-sm);">
                   Loading your music...
                 </div>
               </div>
             </section>
 
-            <!-- Mobile Your Vibe Today Card -->
-            <div class="dashboard-vibe-card">
+            <!-- 6. Mobile Your Vibe Today Card -->
+            <div class="home-vibe-card">
               <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 15px; font-weight: 800; color: #ffffff;">Your Vibe Today</span>
-                <span style="font-size: 12px; color: var(--accent-cyan, #38bdf8);">›</span>
+                <span style="font-size: var(--font-size-base); font-weight: var(--font-weight-extrabold); color: #ffffff;">Your Vibe Today</span>
+                <span style="color: var(--color-accent-cyan);">${getIconSvg('chevron-right', { size: 16 })}</span>
               </div>
 
-              <div class="dashboard-vibe-ring-container">
-                <div class="dashboard-vibe-ring">
-                  <div class="dashboard-vibe-ring-inner">
-                    <span style="font-size: 15px; font-weight: 800; color: #ffffff;">72%</span>
-                    <span style="font-size: 10px; color: var(--accent-purple-soft, #c084fc);">Chill</span>
+              <div class="home-vibe-ring-container">
+                <div class="home-vibe-ring">
+                  <div class="home-vibe-ring-inner">
+                    <span style="font-size: var(--font-size-base); font-weight: var(--font-weight-extrabold); color: #ffffff;">72%</span>
+                    <span style="font-size: 10px; color: var(--color-accent-purple-glow);">Chill</span>
                   </div>
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px;">
                   <div style="display: flex; align-items: center; gap: 6px;">
-                    <span style="width: 8px; height: 8px; border-radius: 50%; background: #8b5cf6;"></span>
-                    <span style="color: #ffffff; width: 40px;">Chill</span>
-                    <span style="color: var(--color-text-muted, #64748b);">72%</span>
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent-purple);"></span>
+                    <span style="color: #ffffff; width: 44px;">Chill</span>
+                    <span style="color: var(--color-text-muted);">72%</span>
                   </div>
                   <div style="display: flex; align-items: center; gap: 6px;">
-                    <span style="width: 8px; height: 8px; border-radius: 50%; background: #ec4899;"></span>
-                    <span style="color: #ffffff; width: 40px;">Pop</span>
-                    <span style="color: var(--color-text-muted, #64748b);">18%</span>
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent-pink);"></span>
+                    <span style="color: #ffffff; width: 44px;">Pop</span>
+                    <span style="color: var(--color-text-muted);">18%</span>
                   </div>
                   <div style="display: flex; align-items: center; gap: 6px;">
-                    <span style="width: 8px; height: 8px; border-radius: 50%; background: #38bdf8;"></span>
-                    <span style="color: #ffffff; width: 40px;">Rock</span>
-                    <span style="color: var(--color-text-muted, #64748b);">6%</span>
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent-cyan);"></span>
+                    <span style="color: #ffffff; width: 44px;">Rock</span>
+                    <span style="color: var(--color-text-muted);">6%</span>
                   </div>
                   <div style="display: flex; align-items: center; gap: 6px;">
                     <span style="width: 8px; height: 8px; border-radius: 50%; background: #06b6d4;"></span>
-                    <span style="color: #ffffff; width: 40px;">EDM</span>
-                    <span style="color: var(--color-text-muted, #64748b);">4%</span>
+                    <span style="color: #ffffff; width: 44px;">EDM</span>
+                    <span style="color: var(--color-text-muted);">4%</span>
                   </div>
                 </div>
               </div>
 
-              <p style="font-size: 12px; font-style: italic; color: rgba(255, 255, 255, 0.7); margin: 4px 0 0 0; text-align: center;">
+              <p style="font-size: var(--font-size-xs); font-style: italic; color: rgba(255, 255, 255, 0.7); margin: 4px 0 0 0; text-align: center;">
                 “Music is not just sound, it's a feeling.”
               </p>
             </div>
 
-            <!-- Section 3: Top Artists -->
-            <section class="dashboard-section" aria-label="Top Artists">
-              <div class="dashboard-section-header">
-                <h2 class="dashboard-section-title">Top Artists</h2>
-                <button class="dashboard-see-all-btn" id="see-all-artists-btn" aria-label="See all artists">
+            <!-- 7. Top Artists -->
+            <section class="home-section" aria-label="Top Artists">
+              <div class="home-section-header">
+                <h2 class="home-section-title">Top Artists</h2>
+                <button class="home-see-all-btn" id="see-all-artists-btn" aria-label="See all artists">
                   <span>See all</span>
-                  <span>›</span>
+                  <span>${getIconSvg('chevron-right', { size: 14 })}</span>
                 </button>
               </div>
 
-              <div id="home-top-artists-container" style="display: flex; gap: 20px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none;">
-                <div style="padding: 24px; text-align: center; color: var(--color-text-muted); font-size: 13px;">
+              <div id="home-top-artists-container" style="display: flex; gap: var(--space-5); overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; overscroll-behavior-x: contain;">
+                <div style="padding: 24px; text-align: center; color: var(--color-text-muted); font-size: var(--font-size-xs);">
                   Loading artists...
                 </div>
               </div>
@@ -1012,140 +1042,140 @@ export class HomeView implements IView {
           </div>
 
           <!-- Right Secondary Column (Quote, Stats, Top Genres, Quick Actions, Up Next) -->
-          <div class="dashboard-side-col">
+          <div class="home-side-col">
             <!-- 1. Inspirational Quote Card -->
-            <div class="dashboard-quote-card">
-              <p style="font-size: 13px; font-style: italic; color: rgba(255, 255, 255, 0.9); margin: 0; line-height: 1.5;">
+            <div class="home-quote-card">
+              <p style="font-size: var(--font-size-xs); font-style: italic; color: rgba(255, 255, 255, 0.9); margin: 0; line-height: 1.6;">
                 “Music gives a soul to the universe, wings to the mind, flight to the imagination, and life to everything.”
               </p>
-              <div style="margin-top: 8px; font-size: 11px; font-weight: 700; color: var(--accent-purple-soft, #c084fc); text-align: right;">
+              <div style="margin-top: 8px; font-size: 11px; font-weight: var(--font-weight-bold); color: var(--color-accent-purple-glow); text-align: right;">
                 — Plato
               </div>
             </div>
 
             <!-- 2. Real Statistics 2x2 Grid -->
-            <div class="dashboard-stats-grid" id="home-stats-grid">
-              <div class="dashboard-stat-tile">
-                <span style="font-size: 22px; color: #ec4899;">🎵</span>
+            <div class="home-stats-grid" id="home-stats-grid">
+              <div class="home-stat-tile">
+                <span style="color: var(--color-accent-pink);">${getIconSvg('music', { size: 22 })}</span>
                 <div>
-                  <div style="font-size: 16px; font-weight: 800; color: #ffffff;" id="stat-song-count">0</div>
-                  <div style="font-size: 11px; color: var(--color-text-muted, #64748b);">Songs</div>
+                  <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-extrabold); color: #ffffff;" id="stat-song-count">0</div>
+                  <div style="font-size: 11px; color: var(--color-text-muted);">Songs</div>
                 </div>
               </div>
 
-              <div class="dashboard-stat-tile">
-                <span style="font-size: 22px; color: #38bdf8;">👤</span>
+              <div class="home-stat-tile">
+                <span style="color: var(--color-accent-cyan);">${getIconSvg('user', { size: 22 })}</span>
                 <div>
-                  <div style="font-size: 16px; font-weight: 800; color: #ffffff;" id="stat-artist-count">0</div>
-                  <div style="font-size: 11px; color: var(--color-text-muted, #64748b);">Artists</div>
+                  <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-extrabold); color: #ffffff;" id="stat-artist-count">0</div>
+                  <div style="font-size: 11px; color: var(--color-text-muted);">Artists</div>
                 </div>
               </div>
 
-              <div class="dashboard-stat-tile">
-                <span style="font-size: 22px; color: #a855f7;">💿</span>
+              <div class="home-stat-tile">
+                <span style="color: var(--color-accent-purple-glow);">${getIconSvg('disc', { size: 22 })}</span>
                 <div>
-                  <div style="font-size: 16px; font-weight: 800; color: #ffffff;" id="stat-album-count">0</div>
-                  <div style="font-size: 11px; color: var(--color-text-muted, #64748b);">Albums</div>
+                  <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-extrabold); color: #ffffff;" id="stat-album-count">0</div>
+                  <div style="font-size: 11px; color: var(--color-text-muted);">Albums</div>
                 </div>
               </div>
 
-              <div class="dashboard-stat-tile">
-                <span style="font-size: 22px; color: #f43f5e;">💖</span>
+              <div class="home-stat-tile">
+                <span style="color: #f43f5e;">${getIconSvg('playlist', { size: 22 })}</span>
                 <div>
-                  <div style="font-size: 16px; font-weight: 800; color: #ffffff;" id="stat-playlist-count">0</div>
-                  <div style="font-size: 11px; color: var(--color-text-muted, #64748b);">Playlists</div>
+                  <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-extrabold); color: #ffffff;" id="stat-playlist-count">0</div>
+                  <div style="font-size: 11px; color: var(--color-text-muted);">Playlists</div>
                 </div>
               </div>
             </div>
 
             <!-- 3. Top Genres Card -->
-            <div class="dashboard-genre-card">
+            <div class="home-genre-card">
               <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 15px; font-weight: 800; color: #ffffff;">Top Genres</span>
-                <button id="genre-see-all-btn" style="background: transparent; border: none; color: var(--accent-cyan, #38bdf8); font-size: 12px; font-weight: 600; cursor: pointer;">See all</button>
+                <span style="font-size: var(--font-size-sm); font-weight: var(--font-weight-extrabold); color: #ffffff;">Top Genres</span>
+                <button id="genre-see-all-btn" style="background: transparent; border: none; color: var(--color-accent-cyan); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); cursor: pointer;">See all</button>
               </div>
 
               <div style="display: flex; flex-direction: column; gap: 12px;">
-                <div class="dashboard-genre-row">
-                  <span style="font-size: 14px;">🎵</span>
-                  <span style="width: 60px; font-weight: 600; color: #ffffff;">Pop</span>
-                  <div class="dashboard-genre-bar-track">
-                    <div class="dashboard-genre-bar-fill" style="width: 28%; background: #ec4899;"></div>
+                <div class="home-genre-row">
+                  <span>${getIconSvg('sparkles', { size: 14, color: 'var(--color-accent-pink)' })}</span>
+                  <span style="width: 60px; font-weight: var(--font-weight-semibold); color: #ffffff;">Pop</span>
+                  <div class="home-genre-bar-track">
+                    <div class="home-genre-bar-fill" style="width: 28%; background: var(--color-accent-pink);"></div>
                   </div>
-                  <span style="font-size: 11px; color: var(--color-text-muted, #64748b); width: 28px; text-align: right;">28%</span>
+                  <span style="font-size: 11px; color: var(--color-text-muted); width: 28px; text-align: right;">28%</span>
                 </div>
 
-                <div class="dashboard-genre-row">
-                  <span style="font-size: 14px;">🎤</span>
-                  <span style="width: 60px; font-weight: 600; color: #ffffff;">Hip Hop</span>
-                  <div class="dashboard-genre-bar-track">
-                    <div class="dashboard-genre-bar-fill" style="width: 22%; background: #a855f7;"></div>
+                <div class="home-genre-row">
+                  <span>${getIconSvg('headphones', { size: 14, color: 'var(--color-accent-purple-glow)' })}</span>
+                  <span style="width: 60px; font-weight: var(--font-weight-semibold); color: #ffffff;">Hip Hop</span>
+                  <div class="home-genre-bar-track">
+                    <div class="home-genre-bar-fill" style="width: 22%; background: var(--color-accent-purple-glow);"></div>
                   </div>
-                  <span style="font-size: 11px; color: var(--color-text-muted, #64748b); width: 28px; text-align: right;">22%</span>
+                  <span style="font-size: 11px; color: var(--color-text-muted); width: 28px; text-align: right;">22%</span>
                 </div>
 
-                <div class="dashboard-genre-row">
-                  <span style="font-size: 14px;">🎸</span>
-                  <span style="width: 60px; font-weight: 600; color: #ffffff;">Rock</span>
-                  <div class="dashboard-genre-bar-track">
-                    <div class="dashboard-genre-bar-fill" style="width: 15%; background: #38bdf8;"></div>
+                <div class="home-genre-row">
+                  <span>${getIconSvg('sound-wave', { size: 14, color: 'var(--color-accent-cyan)' })}</span>
+                  <span style="width: 60px; font-weight: var(--font-weight-semibold); color: #ffffff;">Rock</span>
+                  <div class="home-genre-bar-track">
+                    <div class="home-genre-bar-fill" style="width: 15%; background: var(--color-accent-cyan);"></div>
                   </div>
-                  <span style="font-size: 11px; color: var(--color-text-muted, #64748b); width: 28px; text-align: right;">15%</span>
+                  <span style="font-size: 11px; color: var(--color-text-muted); width: 28px; text-align: right;">15%</span>
                 </div>
 
-                <div class="dashboard-genre-row">
-                  <span style="font-size: 14px;">🎚</span>
-                  <span style="width: 60px; font-weight: 600; color: #ffffff;">EDM</span>
-                  <div class="dashboard-genre-bar-track">
-                    <div class="dashboard-genre-bar-fill" style="width: 12%; background: #06b6d4;"></div>
+                <div class="home-genre-row">
+                  <span>${getIconSvg('radio', { size: 14, color: '#06b6d4)' })}</span>
+                  <span style="width: 60px; font-weight: var(--font-weight-semibold); color: #ffffff;">EDM</span>
+                  <div class="home-genre-bar-track">
+                    <div class="home-genre-bar-fill" style="width: 12%; background: #06b6d4;"></div>
                   </div>
-                  <span style="font-size: 11px; color: var(--color-text-muted, #64748b); width: 28px; text-align: right;">12%</span>
+                  <span style="font-size: 11px; color: var(--color-text-muted); width: 28px; text-align: right;">12%</span>
                 </div>
 
-                <div class="dashboard-genre-row">
-                  <span style="font-size: 14px;">🍃</span>
-                  <span style="width: 60px; font-weight: 600; color: #ffffff;">Indie</span>
-                  <div class="dashboard-genre-bar-track">
-                    <div class="dashboard-genre-bar-fill" style="width: 10%; background: #f59e0b;"></div>
+                <div class="home-genre-row">
+                  <span>${getIconSvg('music', { size: 14, color: '#f59e0b' })}</span>
+                  <span style="width: 60px; font-weight: var(--font-weight-semibold); color: #ffffff;">Indie</span>
+                  <div class="home-genre-bar-track">
+                    <div class="home-genre-bar-fill" style="width: 10%; background: #f59e0b;"></div>
                   </div>
-                  <span style="font-size: 11px; color: var(--color-text-muted, #64748b); width: 28px; text-align: right;">10%</span>
+                  <span style="font-size: 11px; color: var(--color-text-muted); width: 28px; text-align: right;">10%</span>
                 </div>
               </div>
             </div>
 
             <!-- 4. Quick Actions (2x2 Grid) -->
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <span style="font-size: 15px; font-weight: 800; color: #ffffff;">Quick Actions</span>
+            <div style="display: flex; flex-direction: column; gap: var(--space-3);">
+              <span style="font-size: var(--font-size-sm); font-weight: var(--font-weight-extrabold); color: #ffffff;">Quick Actions</span>
 
-              <div class="dashboard-quick-actions-2x2">
-                <button class="dashboard-quick-action-tile" id="action-create-playlist" aria-label="Create Playlist">
-                  <span style="font-size: 18px; color: var(--accent-cyan, #38bdf8);">➕</span>
-                  <span>Create Playlist</span>
+              <div class="home-quick-actions-2x2">
+                <button class="home-quick-action-tile" id="action-create-playlist" aria-label="Create Playlist">
+                  <span style="color: var(--color-accent-cyan);">${getIconSvg('plus', { size: 18 })}</span>
+                  <span>New Playlist</span>
                 </button>
-                <button class="dashboard-quick-action-tile" id="action-liked-songs" aria-label="Liked Songs">
-                  <span style="font-size: 18px; color: #ec4899;">💖</span>
+                <button class="home-quick-action-tile" id="action-liked-songs" aria-label="Liked Songs">
+                  <span style="color: var(--color-accent-pink);">${getIconSvg('heart', { size: 18 })}</span>
                   <span>Liked Songs</span>
                 </button>
-                <button class="dashboard-quick-action-tile" id="action-library-downloads" aria-label="Library">
-                  <span style="font-size: 18px; color: #38bdf8;">📥</span>
-                  <span>Library</span>
+                <button class="home-quick-action-tile" id="action-library-downloads" aria-label="Local Library">
+                  <span style="color: var(--color-accent-cyan);">${getIconSvg('folder', { size: 18 })}</span>
+                  <span>Local Library</span>
                 </button>
-                <button class="dashboard-quick-action-tile" id="action-audio-galaxy" aria-label="Audio Galaxy">
-                  <span style="font-size: 18px; color: var(--accent-purple, #a855f7);">✦</span>
+                <button class="home-quick-action-tile" id="action-audio-galaxy" aria-label="Audio Galaxy">
+                  <span style="color: var(--color-accent-purple-glow);">${getIconSvg('galaxy', { size: 18 })}</span>
                   <span>Audio Galaxy</span>
                 </button>
               </div>
             </div>
 
             <!-- 5. Up Next Queue Preview -->
-            <div class="dashboard-genre-card" style="padding: 16px;">
+            <div class="home-genre-card" style="padding: var(--space-4);">
               <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 14px; font-weight: 700; color: #ffffff;">Up Next</span>
-                <button id="home-clear-queue-btn" style="background: transparent; border: none; color: var(--color-text-muted, #64748b); font-size: 11px; cursor: pointer;">Clear</button>
+                <span style="font-size: var(--font-size-sm); font-weight: var(--font-weight-bold); color: #ffffff;">Up Next</span>
+                <button id="home-clear-queue-btn" style="background: transparent; border: none; color: var(--color-text-muted); font-size: 11px; cursor: pointer;">Clear</button>
               </div>
 
               <div id="home-queue-list-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto;">
-                <div style="font-size: 12px; color: var(--color-text-muted); padding: 8px 0; text-align: center;">Queue is empty.</div>
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); padding: 8px 0; text-align: center;">Queue is empty.</div>
               </div>
             </div>
           </div>
@@ -1158,26 +1188,26 @@ export class HomeView implements IView {
 
   private renderDefaultMixCards(): string {
     const mixes = [
-      { title: 'Discover Weekly', subtitle: 'Made for You', emoji: '🌌', bg: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)' },
-      { title: 'Chill Mix', subtitle: 'Relax and Unwind', emoji: '🌙', bg: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' },
-      { title: 'Workout Mix', subtitle: 'Keep Going', emoji: '⚡', bg: 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 100%)' },
-      { title: 'Focus Mix', subtitle: 'Deep Work', emoji: '💻', bg: 'linear-gradient(135deg, #022c22 0%, #064e3b 100%)' },
-      { title: 'Feel Good Mix', subtitle: 'Positive Vibes', emoji: '🌅', bg: 'linear-gradient(135deg, #431407 0%, #7c2d12 100%)' },
-      { title: 'Party Mix', subtitle: 'Turn It Up', emoji: '🎉', bg: 'linear-gradient(135deg, #3b0764 0%, #581c87 100%)' }
-    ];
+      { title: 'Discover Weekly', subtitle: 'Made for You', icon: 'sparkles', bg: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)' },
+      { title: 'Chill Mix', subtitle: 'Relax and Unwind', icon: 'moon', bg: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' },
+      { title: 'Workout Mix', subtitle: 'Keep Going', icon: 'flame', bg: 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 100%)' },
+      { title: 'Focus Mix', subtitle: 'Deep Work', icon: 'headphones', bg: 'linear-gradient(135deg, #022c22 0%, #064e3b 100%)' },
+      { title: 'Feel Good Mix', subtitle: 'Positive Vibes', icon: 'sun', bg: 'linear-gradient(135deg, #431407 0%, #7c2d12 100%)' },
+      { title: 'Party Mix', subtitle: 'Turn It Up', icon: 'radio', bg: 'linear-gradient(135deg, #3b0764 0%, #581c87 100%)' }
+    ] as const;
 
     return mixes
       .map(
         mix => `
-        <div class="dashboard-mix-card home-mix-card" data-mix-title="${mix.title}">
-          <div class="dashboard-mix-artwork" style="background: ${mix.bg};">
-            <span style="font-size: 32px;">${mix.emoji}</span>
+        <div class="home-mix-card" data-mix-title="${mix.title}">
+          <div class="home-mix-artwork" style="background: ${mix.bg};">
+            <span style="color: #ffffff; opacity: 0.9;">${getIconSvg(mix.icon as any, { size: 36 })}</span>
           </div>
           <div style="display: flex; flex-direction: column; gap: 2px;">
-            <span style="font-size: 13px; font-weight: 700; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            <span style="font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
               ${mix.title}
             </span>
-            <span style="font-size: 11px; color: var(--color-text-muted, #64748b);">
+            <span style="font-size: 11px; color: var(--color-text-muted);">
               ${mix.subtitle}
             </span>
           </div>
@@ -1236,12 +1266,12 @@ export class HomeView implements IView {
     const mobRecent = this.container.querySelector('#mobile-recent-count');
     const mobLib = this.container.querySelector('#mobile-lib-count');
 
-    if (mobLiked) mobLiked.textContent = `${this.libraryStats.playlistCount > 0 ? this.libraryStats.playlistCount : 0} playlists`;
+    if (mobLiked) mobLiked.textContent = `${this.libraryStats.playlistCount > 0 ? this.libraryStats.playlistCount : 0} lists`;
     if (mobRecent) mobRecent.textContent = `${this.recentTracks.length} tracks`;
     if (mobLib) mobLib.textContent = `${this.libraryStats.trackCount} songs`;
   }
 
-  private async renderTrackCards(): Promise<void> {
+  private renderTrackCards(): void {
     if (!this.container) return;
     const container = this.container.querySelector('#home-recent-tracks-container');
     if (!container) return;
@@ -1255,16 +1285,18 @@ export class HomeView implements IView {
       .slice(0, 5)
       .map(
         track => `
-        <div class="dashboard-track-card home-track-card" data-track-id="${track.id}">
-          <div class="dashboard-track-artwork home-track-artwork" id="home-art-${track.id}">
-            <span style="font-size: 30px; color: var(--color-text-muted, #64748b);">♫</span>
-            <div class="dashboard-play-overlay home-play-overlay" data-play-id="${track.id}" aria-label="Play ${this.escapeHtml(track.title)}">▶</div>
+        <div class="home-track-card" data-track-id="${track.id}">
+          <div class="home-track-artwork" id="home-art-${track.id}">
+            <span style="color: var(--color-text-muted);">${getIconSvg('music', { size: 28 })}</span>
+            <div class="home-play-overlay" data-play-id="${track.id}" aria-label="Play ${this.escapeHtml(track.title)}">
+              ${getIconSvg('play', { size: 18, color: '#ffffff' })}
+            </div>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 2px; overflow: hidden;">
-            <span title="${this.escapeHtml(track.title)}" style="font-size: 13px; font-weight: 700; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          <div style="display: flex; flex-direction: column; gap: 2px; overflow: hidden; min-width: 0; flex: 1;">
+            <span title="${this.escapeHtml(track.title)}" style="font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
               ${this.escapeHtml(track.title)}
             </span>
-            <span title="${this.escapeHtml(track.artistName ?? 'Unknown Artist')}" style="font-size: 11px; color: var(--color-text-secondary, #94a3b8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            <span title="${this.escapeHtml(track.artistName ?? 'Unknown Artist')}" style="font-size: 11px; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
               ${this.escapeHtml(track.artistName ?? 'Unknown Artist')}
             </span>
           </div>
@@ -1284,7 +1316,9 @@ export class HomeView implements IView {
             if (artEl) {
               artEl.innerHTML = `
                 <img src="${url}" alt="Artwork" style="width: 100%; height: 100%; object-fit: cover;" />
-                <div class="dashboard-play-overlay home-play-overlay" data-play-id="${track.id}" aria-label="Play ${this.escapeHtml(track.title)}">▶</div>
+                <div class="home-play-overlay" data-play-id="${track.id}" aria-label="Play ${this.escapeHtml(track.title)}">
+                  ${getIconSvg('play', { size: 18, color: '#ffffff' })}
+                </div>
               `;
             }
           });
@@ -1313,7 +1347,7 @@ export class HomeView implements IView {
     if (!container) return;
 
     if (this.topArtists.length === 0) {
-      container.innerHTML = `<div style="font-size: 12px; color: var(--color-text-muted);">No artists discovered yet.</div>`;
+      container.innerHTML = `<div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">No artists discovered yet.</div>`;
       return;
     }
 
@@ -1321,11 +1355,11 @@ export class HomeView implements IView {
       .slice(0, 8)
       .map(
         artist => `
-        <div class="dashboard-artist-item" data-artist-id="${this.escapeHtml(artist.id)}" style="display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; flex-shrink: 0;">
-          <div class="dashboard-artist-avatar" id="home-artist-art-${this.escapeHtml(artist.id)}">
+        <div class="home-artist-item" data-artist-id="${this.escapeHtml(artist.id)}" style="display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; flex-shrink: 0;">
+          <div class="home-artist-avatar" id="home-artist-art-${this.escapeHtml(artist.id)}">
             ${this.escapeHtml(artist.name ? artist.name.charAt(0).toUpperCase() : '♫')}
           </div>
-          <span style="font-size: 12px; font-weight: 600; color: #ffffff; max-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">
+          <span style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: #ffffff; max-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">
             ${this.escapeHtml(artist.name || 'Unknown')}
           </span>
         </div>
@@ -1349,7 +1383,7 @@ export class HomeView implements IView {
     }
 
     // Bind artist click -> navigate to Library artists tab
-    container.querySelectorAll<HTMLElement>('.dashboard-artist-item').forEach(el => {
+    container.querySelectorAll<HTMLElement>('.home-artist-item').forEach(el => {
       el.addEventListener('click', () => {
         const artistId = el.getAttribute('data-artist-id');
         if (artistId && this.router) {
@@ -1369,7 +1403,7 @@ export class HomeView implements IView {
     const currentIndex = pm?.currentQueueIndex ?? -1;
 
     if (queue.length === 0) {
-      queueContainer.innerHTML = `<div style="font-size: 12px; color: var(--color-text-muted); padding: 8px 0; text-align: center;">Queue is empty.</div>`;
+      queueContainer.innerHTML = `<div style="font-size: var(--font-size-xs); color: var(--color-text-muted); padding: 8px 0; text-align: center;">Queue is empty.</div>`;
       return;
     }
 
@@ -1383,28 +1417,28 @@ export class HomeView implements IView {
         const durationFormatted = this.formatDuration(track?.durationMs || 0);
 
         return `
-          <div class="dashboard-queue-row" data-queue-index="${idx}">
-            <span style="font-size: 11px; font-weight: 700; color: ${isCurrent ? 'var(--accent-cyan, #38bdf8)' : 'var(--color-text-muted, #64748b)'}; width: 14px; text-align: center;">
+          <div class="home-queue-row" data-queue-index="${idx}">
+            <span style="font-size: 11px; font-weight: var(--font-weight-bold); color: ${isCurrent ? 'var(--color-accent-cyan)' : 'var(--color-text-muted)'}; width: 16px; text-align: center;">
               ${idx + 1}
             </span>
             <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
-              <span style="font-size: 12px; font-weight: 600; color: ${isCurrent ? 'var(--accent-cyan, #38bdf8)' : '#ffffff'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              <span style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: ${isCurrent ? 'var(--color-accent-cyan)' : '#ffffff'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                 ${this.escapeHtml(title)}
               </span>
-              <span style="font-size: 10px; color: var(--color-text-muted, #64748b); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              <span style="font-size: 10px; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                 ${this.escapeHtml(artist)}
               </span>
             </div>
-            <span style="font-size: 11px; color: var(--color-text-muted, #64748b); font-variant-numeric: tabular-nums;">
+            <span style="font-size: 11px; color: var(--color-text-muted); font-variant-numeric: tabular-nums;">
               ${durationFormatted}
             </span>
-            ${isCurrent ? '<span style="color: var(--accent-cyan, #38bdf8); font-size: 11px;">♫</span>' : ''}
+            ${isCurrent ? `<span style="color: var(--color-accent-cyan); display: flex;">${getIconSvg('audio-bars', { size: 12 })}</span>` : ''}
           </div>
         `;
       })
       .join('');
 
-    queueContainer.querySelectorAll<HTMLElement>('.dashboard-queue-row').forEach(row => {
+    queueContainer.querySelectorAll<HTMLElement>('.home-queue-row').forEach(row => {
       row.addEventListener('click', () => {
         const qIdx = Number(row.getAttribute('data-queue-index'));
         if (this.playbackManager) {
@@ -1426,30 +1460,30 @@ export class HomeView implements IView {
     container.innerHTML = `
       <div style="
         grid-column: 1 / -1;
-        padding: 32px;
+        padding: var(--space-8);
         text-align: center;
-        border-radius: var(--radius-2xl, 20px);
-        background: rgba(18, 18, 26, 0.7);
-        border: 1px dashed rgba(255, 255, 255, 0.15);
+        border-radius: var(--radius-2xl);
+        background: var(--glass-bg-subtle);
+        border: 1px dashed var(--glass-border);
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 12px;
+        gap: var(--space-3);
       ">
-        <div style="font-size: 36px; color: var(--accent-purple, #a855f7);">🎵</div>
-        <h4 style="font-size: 16px; font-weight: 700; color: #ffffff; margin: 0;">Your Library is Ready</h4>
-        <p style="font-size: 13px; color: var(--color-text-secondary, #94a3b8); max-width: 400px; line-height: 1.5; margin: 0;">
+        <div style="color: var(--color-accent-purple-glow);">${getIconSvg('music', { size: 40 })}</div>
+        <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-bold); color: #ffffff; margin: 0;">Your Library is Ready</h4>
+        <p style="font-size: var(--font-size-xs); color: var(--color-text-secondary); max-width: 400px; line-height: 1.5; margin: 0;">
           Connect local music folders to listen with lossless audio purity, 10-band EQ, and zero ads.
         </p>
         <button id="home-empty-scan-btn" style="
-          margin-top: 8px;
+          margin-top: var(--space-2);
           padding: 10px 24px;
-          border-radius: var(--radius-full, 9999px);
-          background: linear-gradient(135deg, var(--accent-purple, #7c3aed), #9333ea);
+          border-radius: var(--radius-full);
+          background: linear-gradient(135deg, var(--color-accent-purple), #9333ea);
           color: #ffffff;
           border: none;
-          font-weight: 700;
-          font-size: 13px;
+          font-weight: var(--font-weight-bold);
+          font-size: var(--font-size-xs);
           cursor: pointer;
         ">
           Open Library
@@ -1465,7 +1499,6 @@ export class HomeView implements IView {
   private subscribeEvents(): void {
     if (!this.eventBus) return;
 
-    // Track/Playback state change updates Up Next & currently playing markers
     this.subscriptions.push(
       this.eventBus.subscribe('playback:state-changed', () => {
         this.renderQueuePreview();
@@ -1478,7 +1511,6 @@ export class HomeView implements IView {
       })
     );
 
-    // Library scan reloads dashboard data
     this.subscriptions.push(
       this.eventBus.subscribe('library:scanned', () => {
         void this.loadData();
@@ -1489,7 +1521,7 @@ export class HomeView implements IView {
   private bindStaticEvents(): void {
     if (!this.container) return;
 
-    // Hero buttons
+    // Hero Play / Shuffle
     this.container.querySelector('#home-hero-play-btn')?.addEventListener('click', () => {
       if (this.recentTracks.length > 0 && this.playbackManager) {
         void this.playbackManager.playTrack(this.recentTracks[0]!, [...this.recentTracks]);
@@ -1508,15 +1540,16 @@ export class HomeView implements IView {
     });
 
     // Mood filter pills
-    const moodPills = this.container.querySelectorAll<HTMLElement>('.dashboard-mood-pill');
+    const moodPills = this.container.querySelectorAll<HTMLElement>('.home-mood-pill');
     moodPills.forEach(pill => {
       pill.addEventListener('click', () => {
         moodPills.forEach(p => p.classList.remove('active'));
         pill.classList.add('active');
+        this.activeMood = pill.getAttribute('data-mood') || 'For You';
       });
     });
 
-    // See all buttons
+    // See all navigation
     this.container.querySelector('#see-all-recent-btn')?.addEventListener('click', () => {
       this.router?.navigate('library');
     });
@@ -1541,7 +1574,7 @@ export class HomeView implements IView {
       }
     });
 
-    // Quick Action Buttons
+    // Quick Actions
     this.container.querySelector('#action-create-playlist')?.addEventListener('click', () => {
       this.router?.navigate('playlists');
     });
@@ -1575,7 +1608,7 @@ export class HomeView implements IView {
       this.router?.navigate('galaxy');
     });
 
-    // Mix cards click -> play or open playlist
+    // Mix cards click
     const mixCards = this.container.querySelectorAll<HTMLElement>('.home-mix-card');
     mixCards.forEach(card => {
       card.addEventListener('click', () => {
@@ -1605,4 +1638,3 @@ export class HomeView implements IView {
       .replace(/'/g, '&#039;');
   }
 }
-

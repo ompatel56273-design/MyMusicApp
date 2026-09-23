@@ -12,13 +12,25 @@ import { HeaderComponent } from './header-component';
 import { SidebarComponent } from './sidebar-component';
 import { MiniPlayerComponent } from './mini-player-component';
 import { KeyboardManager } from '../keyboard/keyboard-manager';
-import type { IPlaybackManager, ILibraryService, ISearchService, IArtworkService, IPlaylistService, ILyricsService, IAudioEngine, IAudioSettingsService, IVisualizerService, IGalaxyService, IScannerService } from '../../services/contracts/service-contracts';
+import type {
+  IPlaybackManager,
+  ILibraryService,
+  ISearchService,
+  IArtworkService,
+  IPlaylistService,
+  ILyricsService,
+  IAudioEngine,
+  IAudioSettingsService,
+  IVisualizerService,
+  IGalaxyService,
+  IScannerService
+} from '../../services/contracts/service-contracts';
 import { EventBus } from '../../core/events/event-bus';
 import type { Disposable } from '../../core/types/common';
 import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-filesystem-adapter';
 import type { IDatabaseAdapter } from '../../data/db/database-adapter';
-
 import { ThemeManager } from '../theme/theme-manager';
+import { getIconSvg, type IconName } from '../icons/icon-registry';
 
 export interface AppShellDependencies {
   playbackManager: IPlaybackManager;
@@ -38,7 +50,7 @@ export interface AppShellDependencies {
 }
 
 /**
- * Master Application Shell.
+ * Master Global Application Shell.
  * Mounts persistent layout regions (Header, Sidebar, Main Content Viewport, MiniPlayer, Mobile Bottom Nav),
  * manages view switching based on RouterService, and coordinates global keyboard shortcuts.
  */
@@ -58,12 +70,12 @@ export class AppShell {
   private readonly eventBus?: EventBus | undefined;
   private eventBusSub: Disposable | null = null;
 
-  private mobileNavItems: { id: AppRoute; label: string; icon: string }[] = [
-    { id: 'home', label: 'Home', icon: '⌂' },
-    { id: 'library', label: 'Library', icon: '𝄤' },
-    { id: 'search', label: 'Search', icon: '🔍' },
-    { id: 'playlists', label: 'Playlists', icon: '☰' },
-    { id: 'settings', label: 'Settings', icon: '⚙' }
+  private mobileNavItems: { id: AppRoute; label: string; icon: IconName }[] = [
+    { id: 'home', label: 'Home', icon: 'home' },
+    { id: 'library', label: 'Library', icon: 'library' },
+    { id: 'search', label: 'Search', icon: 'search' },
+    { id: 'playlists', label: 'Playlists', icon: 'playlist' },
+    { id: 'settings', label: 'Settings', icon: 'settings' }
   ];
 
   constructor(deps: AppShellDependencies) {
@@ -146,7 +158,9 @@ export class AppShell {
           libraryService: deps.libraryService,
           fsAdapter: deps.fsAdapter,
           dbAdapter: deps.dbAdapter,
-          eventBus: deps.eventBus
+          eventBus: deps.eventBus,
+          router: this.router,
+          playbackManager: deps.playbackManager
         })
       ],
       [
@@ -279,7 +293,7 @@ export class AppShell {
         /* Mobile Responsive (< 768px) */
         @media (max-width: 767px) {
           #app-shell {
-            grid-template-rows: var(--header-height) 1fr auto auto;
+            grid-template-rows: 56px 1fr auto auto;
             grid-template-columns: 1fr;
             grid-template-areas:
               'header'
@@ -296,15 +310,17 @@ export class AppShell {
           #shell-bottom-nav-slot {
             display: flex !important;
             grid-area: bottomnav;
-            height: var(--bottom-nav-height);
-            z-index: 30;
+            height: auto;
+            min-height: var(--bottom-nav-height);
+            padding-bottom: max(6px, env(safe-area-inset-bottom));
+            z-index: var(--z-bottom-nav);
             width: 100%;
             max-width: 100%;
             box-sizing: border-box;
           }
           #shell-miniplayer-slot {
             grid-area: miniplayer;
-            z-index: 25;
+            z-index: var(--z-player);
             width: 100%;
             max-width: 100%;
             min-width: 0;
@@ -318,17 +334,23 @@ export class AppShell {
           }
         }
       </style>
+
       <div id="app-shell">
         <div id="shell-live-announcer" aria-live="polite" aria-atomic="true" class="sr-only"></div>
         <div id="shell-sidebar-slot" style="grid-area: sidebar; height: 100%;"></div>
         <div id="shell-header-slot" style="grid-area: header;"></div>
+        
         <main id="shell-viewport-slot" role="main" style="
           grid-area: main;
           overflow-y: auto;
           overflow-x: hidden;
           background: var(--color-bg-base);
           position: relative;
+          min-width: 0;
+          max-width: 100%;
+          box-sizing: border-box;
         "></main>
+        
         <div id="shell-miniplayer-slot" style="grid-area: miniplayer;"></div>
         
         <!-- Mobile Bottom Navigation Bar -->
@@ -341,7 +363,8 @@ export class AppShell {
             border-top: 1px solid var(--glass-border);
             align-items: center;
             justify-content: space-around;
-            padding: 0 var(--space-2);
+            padding-left: var(--space-2);
+            padding-right: var(--space-2);
           "
         >
           ${this.mobileNavItems
@@ -369,7 +392,9 @@ export class AppShell {
                 transition: all var(--duration-fast) var(--ease-smooth);
               "
             >
-              <span style="font-size: 18px;">${item.icon}</span>
+              <span style="display: flex; align-items: center; justify-content: center;">
+                ${getIconSvg(item.icon, { size: 20 })}
+              </span>
               <span>${item.label}</span>
             </button>
           `
@@ -431,4 +456,3 @@ export class AppShell {
     nextView.mount(viewport, state.params);
   }
 }
-

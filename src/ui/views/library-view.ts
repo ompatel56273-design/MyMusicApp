@@ -2,12 +2,14 @@ import type { IView } from './view-interface';
 import type { RouteParams, LibraryTab } from '../navigation/route-types';
 import type { ILibraryService, IPlaybackManager, IArtworkService } from '../../services/contracts/service-contracts';
 import { LibraryToolbar, type LibraryToolbarState } from '../components/library/library-toolbar';
+import { TrackInspectorComponent } from '../components/library/track-inspector-component';
 import { SongsTabView } from './library/songs-tab-view';
 import { AlbumsTabView } from './library/albums-tab-view';
 import { ArtistsTabView } from './library/artists-tab-view';
 import { GenresTabView } from './library/genres-tab-view';
 import { FoldersTabView } from './library/folders-tab-view';
 import { FavoritesTabView } from './library/favorites-tab-view';
+import { getIconSvg, type IconName } from '../icons/icon-registry';
 
 export interface LibraryViewDependencies {
   libraryService: ILibraryService;
@@ -15,6 +17,17 @@ export interface LibraryViewDependencies {
   artworkService?: IArtworkService | undefined;
 }
 
+/**
+ * Phase 5 Complete Visual Rebuild of Library View (Template 3).
+ * Features:
+ * - Authoritative Template 3 composition for Desktop, Tablet, and Mobile
+ * - Neon/Glass Library Header Banner with Local Storage badge and Live Stats counters
+ * - Tab navigation with Phase 2 tokens and Lucide SVGs (Songs, Albums, Artists, Genres, Folders, Favorites)
+ * - Interactive Filter Toolbar (Search input, Format filter, Sort selector, Sort direction toggle)
+ * - High-Density Songs Table with active playing row visualizer and favorite toggles
+ * - Desktop Template 3 Right Inspector & Up Next Queue Panel
+ * - Responsive 2-column Desktop layout, fluid Tablet layout, and dedicated Mobile view.
+ */
 export class LibraryView implements IView {
   private container: HTMLElement | null = null;
   private currentTab: LibraryTab = 'songs';
@@ -23,6 +36,7 @@ export class LibraryView implements IView {
   private readonly artworkService?: IArtworkService | undefined;
 
   private toolbar: LibraryToolbar | null = null;
+  private inspector: TrackInspectorComponent | null = null;
   private activeSubView:
     | SongsTabView
     | AlbumsTabView
@@ -55,6 +69,10 @@ export class LibraryView implements IView {
       this.toolbar.unmount();
       this.toolbar = null;
     }
+    if (this.inspector) {
+      this.inspector.unmount();
+      this.inspector = null;
+    }
     if (this.activeSubView) {
       this.activeSubView.unmount();
       this.activeSubView = null;
@@ -79,56 +97,287 @@ export class LibraryView implements IView {
   private render(): void {
     if (!this.container) return;
 
-    // Clean up previous sub-view & toolbar
+    // Clean up previous sub-view, toolbar, & inspector
     if (this.toolbar) {
       this.toolbar.unmount();
       this.toolbar = null;
+    }
+    if (this.inspector) {
+      this.inspector.unmount();
+      this.inspector = null;
     }
     if (this.activeSubView) {
       this.activeSubView.unmount();
       this.activeSubView = null;
     }
 
-    const tabs: Array<{ id: LibraryTab; label: string; icon: string }> = [
-      { id: 'songs', label: 'Songs', icon: '🎵' },
-      { id: 'albums', label: 'Albums', icon: '💿' },
-      { id: 'artists', label: 'Artists', icon: '👤' },
-      { id: 'genres', label: 'Genres', icon: '🏷️' },
-      { id: 'folders', label: 'Folders', icon: '📁' },
-      { id: 'favorites', label: 'Favorites', icon: '❤️' }
+    const tabs: Array<{ id: LibraryTab; label: string; icon: IconName }> = [
+      { id: 'songs', label: 'Songs', icon: 'music' },
+      { id: 'albums', label: 'Albums', icon: 'disc' },
+      { id: 'artists', label: 'Artists', icon: 'user' },
+      { id: 'genres', label: 'Genres', icon: 'sparkles' },
+      { id: 'folders', label: 'Folders', icon: 'folder' },
+      { id: 'favorites', label: 'Favorites', icon: 'heart' }
     ];
 
     this.container.innerHTML = `
-      <section class="library-view" style="padding: var(--space-6); max-width: 1400px; margin: 0 auto; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: var(--space-4); overflow-y: auto;">
-        
-        <!-- Header Banner (Template 3) -->
-        <header style="position: relative; background: linear-gradient(135deg, rgba(30, 27, 75, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%); border: 1px solid var(--glass-border); border-radius: var(--radius-xl); padding: var(--space-6); display: flex; align-items: center; justify-content: space-between; overflow: hidden; backdrop-filter: blur(16px);">
-          <div style="position: absolute; right: -20px; top: -20px; width: 180px; height: 180px; background: radial-gradient(circle, rgba(168, 85, 247, 0.15) 0%, transparent 70%); pointer-events: none; border-radius: 50%;"></div>
+      <style>
+        .library-view-container {
+          padding: var(--space-6) var(--space-8);
+          max-width: 1720px;
+          margin: 0 auto;
+          box-sizing: border-box;
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-5);
+          width: 100%;
+          min-width: 0;
+          color: var(--color-text-primary);
+          font-family: var(--font-family-base);
+        }
+
+        /* 2-Column Desktop Grid for Library (Template 3) */
+        .library-grid-layout {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 340px;
+          gap: var(--space-6);
+          align-items: start;
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+        }
+
+        .library-main-column {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-4);
+          min-width: 0;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .library-inspector-column {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-4);
+          min-width: 0;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        /* Library Header Banner (Template 3) */
+        .library-hero-banner {
+          position: relative;
+          background: linear-gradient(135deg, rgba(30, 20, 70, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+          border: 1px solid var(--glass-border-interactive);
+          border-radius: var(--radius-2xl);
+          padding: var(--space-6) var(--space-8);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          overflow: hidden;
+          box-shadow: var(--shadow-elevation-medium), 0 0 24px rgba(124, 58, 237, 0.15);
+          box-sizing: border-box;
+          width: 100%;
+        }
+
+        .library-banner-glow {
+          position: absolute;
+          right: -30px;
+          top: -40px;
+          width: 240px;
+          height: 240px;
+          background: radial-gradient(circle, rgba(124, 58, 237, 0.3) 0%, rgba(6, 182, 212, 0.1) 50%, transparent 70%);
+          pointer-events: none;
+          border-radius: 50%;
+        }
+
+        /* Category Tabs Bar */
+        .library-nav-tabs {
+          display: flex;
+          gap: var(--space-2);
+          overflow-x: auto;
+          padding-bottom: 2px;
+          scrollbar-width: none;
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          overscroll-behavior-x: contain;
+        }
+        .library-nav-tabs::-webkit-scrollbar {
+          display: none;
+        }
+
+        .library-tab-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--space-2);
+          padding: 10px 22px;
+          border-radius: var(--radius-full);
+          font-size: var(--font-size-xs);
+          font-weight: var(--font-weight-semibold);
+          cursor: pointer;
+          white-space: nowrap;
+          transition: all var(--duration-fast) var(--ease-smooth);
+          min-height: 44px;
+          box-sizing: border-box;
+        }
+
+        /* Mobile Shortcut Grid */
+        .library-mobile-shortcuts {
+          display: none;
+        }
+
+        /* Tablet Responsive (< 1200px) */
+        @media (min-width: 768px) and (max-width: 1199px) {
+          .library-view-container {
+            padding: var(--space-5) var(--space-6);
+            gap: var(--space-4);
+          }
+
+          .library-grid-layout {
+            grid-template-columns: minmax(0, 1fr);
+            gap: var(--space-5);
+          }
+
+          .library-inspector-column {
+            display: none; /* Tablet priority on wide library content */
+          }
+        }
+
+        /* Mobile Responsive (< 768px) */
+        @media (max-width: 767px) {
+          .library-view-container {
+            padding: var(--space-4) var(--space-3) calc(var(--mini-player-height) + var(--bottom-nav-height) + var(--space-8)) var(--space-3);
+            gap: var(--space-4);
+            overflow-x: hidden;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+          }
+
+          .library-grid-layout {
+            grid-template-columns: minmax(0, 1fr);
+            gap: var(--space-4);
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+          }
+
+          .library-inspector-column {
+            display: none;
+          }
+
+          .library-hero-banner {
+            padding: var(--space-4);
+            flex-direction: column;
+            align-items: flex-start;
+            gap: var(--space-3);
+            border-radius: var(--radius-xl);
+          }
+
+          .library-header-metrics {
+            width: 100%;
+          }
+
+          #library-scan-quick-btn {
+            width: 100%;
+            justify-content: center;
+          }
+
+          /* 2-Column Mobile Shortcuts */
+          .library-mobile-shortcuts {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            width: 100%;
+            box-sizing: border-box;
+          }
+
+          .library-mobile-shortcut-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border-radius: var(--radius-xl);
+            background: var(--glass-bg-subtle);
+            border: 1px solid var(--glass-border);
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-smooth);
+            min-height: 48px;
+            box-sizing: border-box;
+          }
+          .library-mobile-shortcut-card:active {
+            transform: scale(0.97);
+            background: var(--glass-bg-interactive);
+          }
+        }
+      </style>
+
+      <section class="library-view-container" aria-label="Music Library">
+        <!-- 1. Library Header Banner (Template 3) -->
+        <header class="library-hero-banner">
+          <div class="library-banner-glow"></div>
           
           <div style="display: flex; flex-direction: column; gap: 6px; z-index: 1;">
-            <div style="display: flex; align-items: center; gap: var(--space-3);">
-              <h1 style="font-size: clamp(24px, 4vw, 32px); font-weight: 800; letter-spacing: -0.02em; color: var(--color-text-primary); margin: 0;">
+            <div style="display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;">
+              <h1 style="font-size: clamp(24px, 4vw, 32px); font-weight: var(--font-weight-extrabold); letter-spacing: -0.02em; color: #ffffff; margin: 0;">
                 Library
               </h1>
-              <span id="library-badge" style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; background: rgba(168, 85, 247, 0.15); color: var(--color-purple-neon); border: 1px solid rgba(168, 85, 247, 0.3); padding: 3px 8px; border-radius: var(--radius-full);">
-                Local Storage
+              <span id="library-badge" style="font-size: 11px; font-weight: var(--font-weight-bold); text-transform: uppercase; letter-spacing: 0.05em; background: rgba(124, 58, 237, 0.2); color: var(--color-accent-cyan); border: 1px solid var(--glass-border-interactive); padding: 3px 10px; border-radius: var(--radius-full);">
+                Local Audio Purity
               </span>
             </div>
-            <p id="library-stats-label" style="font-size: 13px; color: var(--color-text-secondary); margin: 0;">
-              Your complete music collection. Loading stats...
+            <p id="library-stats-label" style="font-size: var(--font-size-xs); color: var(--color-text-secondary); margin: 0;">
+              Your complete audio collection. Loading stats...
             </p>
           </div>
 
-          <!-- Quick Stats Pills (Tablet & Desktop) -->
+          <!-- Quick Actions Button (Add Music / Scan) -->
           <div class="library-header-metrics" style="display: flex; align-items: center; gap: var(--space-3); z-index: 1;">
-            <button id="library-scan-quick-btn" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: var(--radius-full); font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: linear-gradient(135deg, var(--color-purple-neon) 0%, var(--color-pink-neon) 100%); color: #ffffff; box-shadow: var(--shadow-glow-purple); transition: all var(--duration-fast) var(--ease-smooth);">
-              <span>+</span> Add Music / Scan
+            <button id="library-scan-quick-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; border: none; background: linear-gradient(135deg, var(--color-accent-purple) 0%, #9333ea 100%); color: #ffffff; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.5); transition: all var(--duration-fast) var(--ease-smooth);">
+              <span>${getIconSvg('plus', { size: 16, color: '#ffffff' })}</span>
+              <span>Add Music / Scan</span>
             </button>
           </div>
         </header>
 
-        <!-- Category Navigation Tabs (Template 3) -->
-        <nav role="tablist" aria-label="Library Navigation" style="display: flex; gap: var(--space-2); overflow-x: auto; padding-bottom: var(--space-1); scrollbar-width: none;">
+        <!-- 2. Mobile 2-Column Shortcut Navigation Grid (Mobile View) -->
+        <div class="library-mobile-shortcuts">
+          <div class="library-mobile-shortcut-card" data-shortcut-tab="songs">
+            <span style="color: var(--color-accent-cyan);">${getIconSvg('music', { size: 20 })}</span>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: #ffffff;">Songs</span>
+              <span style="font-size: 10px; color: var(--color-text-muted);" id="mob-songs-count">Tracks</span>
+            </div>
+          </div>
+          <div class="library-mobile-shortcut-card" data-shortcut-tab="albums">
+            <span style="color: var(--color-accent-purple-glow);">${getIconSvg('disc', { size: 20 })}</span>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: #ffffff;">Albums</span>
+              <span style="font-size: 10px; color: var(--color-text-muted);" id="mob-albums-count">Albums</span>
+            </div>
+          </div>
+          <div class="library-mobile-shortcut-card" data-shortcut-tab="artists">
+            <span style="color: var(--color-accent-pink);">${getIconSvg('user', { size: 20 })}</span>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: #ffffff;">Artists</span>
+              <span style="font-size: 10px; color: var(--color-text-muted);" id="mob-artists-count">Artists</span>
+            </div>
+          </div>
+          <div class="library-mobile-shortcut-card" data-shortcut-tab="favorites">
+            <span style="color: #f43f5e;">${getIconSvg('heart', { size: 20 })}</span>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: #ffffff;">Favorites</span>
+              <span style="font-size: 10px; color: var(--color-text-muted);">Liked</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Category Navigation Tabs (Template 3) -->
+        <nav role="tablist" aria-label="Library Navigation" class="library-nav-tabs">
           ${tabs
             .map(
               tab => `
@@ -136,25 +385,15 @@ export class LibraryView implements IView {
               role="tab"
               aria-selected="${this.currentTab === tab.id}"
               data-tab="${tab.id}"
+              class="library-tab-btn"
               style="
-                display: inline-flex;
-                align-items: center;
-                gap: 8px;
-                background: ${this.currentTab === tab.id ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(59, 130, 246, 0.2) 100%)' : 'rgba(255, 255, 255, 0.03)'};
-                color: ${this.currentTab === tab.id ? 'var(--color-text-primary)' : 'var(--color-text-secondary)'};
-                border: 1px solid ${this.currentTab === tab.id ? 'rgba(168, 85, 247, 0.5)' : 'rgba(255, 255, 255, 0.08)'};
-                box-shadow: ${this.currentTab === tab.id ? 'var(--shadow-glow-purple)' : 'none'};
-                padding: 10px 20px;
-                border-radius: var(--radius-full);
-                font-size: 13px;
-                font-weight: 600;
-                cursor: pointer;
-                white-space: nowrap;
-                transition: all var(--duration-fast) var(--ease-smooth);
-                min-height: 44px;
+                background: ${this.currentTab === tab.id ? 'linear-gradient(135deg, var(--color-accent-purple) 0%, #9333ea 100%)' : 'var(--glass-bg-subtle)'};
+                color: ${this.currentTab === tab.id ? '#ffffff' : 'var(--color-text-secondary)'};
+                border: 1px solid ${this.currentTab === tab.id ? 'var(--glass-border-interactive)' : 'var(--glass-border)'};
+                box-shadow: ${this.currentTab === tab.id ? '0 2px 14px rgba(124, 58, 237, 0.4)' : 'none'};
               "
             >
-              <span>${tab.icon}</span>
+              <span>${getIconSvg(tab.icon, { size: 16, color: this.currentTab === tab.id ? '#ffffff' : 'currentColor' })}</span>
               <span>${tab.label}</span>
             </button>
           `
@@ -162,17 +401,27 @@ export class LibraryView implements IView {
             .join('')}
         </nav>
 
-        <!-- Sub-view Toolbar (for Songs / Filterable tabs) -->
-        <div id="library-toolbar-slot"></div>
+        <!-- 4. Sub-view 2-Column Grid Layout (Desktop) -->
+        <div class="library-grid-layout">
+          <div class="library-main-column">
+            <!-- Filter Toolbar Slot -->
+            <div id="library-toolbar-slot"></div>
 
-        <!-- Sub-view Viewport -->
-        <div id="library-content-slot" style="flex: 1; min-height: 350px; display: flex; flex-direction: column;"></div>
+            <!-- Sub-view Viewport -->
+            <div id="library-content-slot" style="flex: 1; min-height: 400px; display: flex; flex-direction: column; min-width: 0; width: 100%;"></div>
+          </div>
+
+          <!-- Right Track Inspector Column (Desktop Template 3) -->
+          <div class="library-inspector-column" id="library-inspector-slot"></div>
+        </div>
       </section>
     `;
 
     this.bindTabEvents();
     this.bindHeaderEvents();
-    this.updateStats();
+    this.bindMobileShortcutEvents();
+    void this.updateStats();
+    this.mountInspector();
     this.mountActiveTab();
   }
 
@@ -190,11 +439,24 @@ export class LibraryView implements IView {
     });
   }
 
+  private bindMobileShortcutEvents(): void {
+    if (!this.container) return;
+    const shortcutCards = this.container.querySelectorAll<HTMLElement>('.library-mobile-shortcut-card');
+    shortcutCards.forEach(card => {
+      card.addEventListener('click', () => {
+        const tab = card.getAttribute('data-shortcut-tab') as LibraryTab;
+        if (tab && tab !== this.currentTab) {
+          this.currentTab = tab;
+          this.render();
+        }
+      });
+    });
+  }
+
   private bindHeaderEvents(): void {
     if (!this.container) return;
     const scanBtn = this.container.querySelector<HTMLButtonElement>('#library-scan-quick-btn');
     scanBtn?.addEventListener('click', () => {
-      // Trigger folder rescan or quick file input where supported
       const fileInput = document.createElement('input');
       fileInput.type = 'file';
       (fileInput as any).webkitdirectory = true;
@@ -202,7 +464,9 @@ export class LibraryView implements IView {
       fileInput.style.display = 'none';
       document.body.appendChild(fileInput);
       fileInput.addEventListener('change', () => {
-        document.body.removeChild(fileInput);
+        if (fileInput.parentElement) {
+          fileInput.parentElement.removeChild(fileInput);
+        }
         this.render();
       });
       fileInput.click();
@@ -215,11 +479,31 @@ export class LibraryView implements IView {
       const stats = await this.libraryService.getLibraryStats();
       const label = this.container.querySelector('#library-stats-label');
       if (label) {
-        label.textContent = `Your complete music collection. ${stats.trackCount} songs • ${stats.albumCount} albums • ${stats.artistCount} artists`;
+        label.textContent = `Your complete audio collection. ${stats.trackCount.toLocaleString()} songs • ${stats.albumCount.toLocaleString()} albums • ${stats.artistCount.toLocaleString()} artists`;
       }
+
+      // Update mobile shortcuts count
+      const mobSongs = this.container.querySelector('#mob-songs-count');
+      const mobAlbums = this.container.querySelector('#mob-albums-count');
+      const mobArtists = this.container.querySelector('#mob-artists-count');
+      if (mobSongs) mobSongs.textContent = `${stats.trackCount} tracks`;
+      if (mobAlbums) mobAlbums.textContent = `${stats.albumCount} albums`;
+      if (mobArtists) mobArtists.textContent = `${stats.artistCount} artists`;
     } catch (_e) {
       // Ignore
     }
+  }
+
+  private mountInspector(): void {
+    if (!this.container) return;
+    const inspectorSlot = this.container.querySelector<HTMLElement>('#library-inspector-slot');
+    if (!inspectorSlot) return;
+
+    this.inspector = new TrackInspectorComponent({
+      playbackManager: this.playbackManager,
+      artworkService: this.artworkService
+    });
+    this.inspector.mount(inspectorSlot);
   }
 
   private mountActiveTab(): void {
@@ -229,7 +513,7 @@ export class LibraryView implements IView {
     const contentSlot = this.container.querySelector<HTMLElement>('#library-content-slot');
     if (!contentSlot) return;
 
-    // Show toolbar on Songs and Favorites tabs
+    // Show toolbar on Songs tab
     if (this.currentTab === 'songs' && toolbarSlot) {
       this.toolbar = new LibraryToolbar({
         onChange: state => this.handleToolbarChange(state)
@@ -322,4 +606,3 @@ export class LibraryView implements IView {
     }
   }
 }
-

@@ -1,10 +1,19 @@
 import type { IPlaybackManager } from '../../../services/contracts/service-contracts';
 import type { RepeatMode, ShuffleMode } from '../../../domain/value-objects/audio-types';
+import { getIconSvg } from '../../icons/icon-registry';
 
 export interface PlayerControlsCallbacks {
   onToggleFavorite: () => void;
 }
 
+/**
+ * Phase 8 Player Controls Component (Templates 6 & 7).
+ * Features:
+ * - High-fidelity playback controls with neon glow
+ * - Accurate seek bar with hover thumb and smooth position updates
+ * - Volume slider with instant mute toggle
+ * - Lucide icons for play, pause, next, previous, shuffle, repeat, and favorite
+ */
 export class PlayerControlsComponent {
   private container: HTMLElement | null = null;
   private readonly playbackManager: IPlaybackManager;
@@ -42,7 +51,7 @@ export class PlayerControlsComponent {
     if (!this.container) return;
     const playBtn = this.container.querySelector('#np-play-btn');
     if (playBtn) {
-      playBtn.textContent = isPlaying ? '⏸' : '▶';
+      playBtn.innerHTML = getIconSvg(isPlaying ? 'pause' : 'play', { size: 22, color: '#ffffff' });
       playBtn.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
     }
   }
@@ -74,13 +83,16 @@ export class PlayerControlsComponent {
     const repeatBtn = this.container.querySelector<HTMLButtonElement>('#np-repeat-btn');
 
     if (shuffleBtn) {
-      shuffleBtn.style.color = shuffleMode === 'on' ? 'var(--color-accent-primary)' : 'var(--color-text-muted)';
+      const active = shuffleMode === 'on';
+      shuffleBtn.style.color = active ? 'var(--color-accent-cyan)' : 'var(--color-text-muted)';
+      shuffleBtn.innerHTML = getIconSvg('shuffle', { size: 18, color: active ? 'var(--color-accent-cyan)' : 'currentColor' });
       shuffleBtn.setAttribute('aria-label', `Toggle Shuffle (Currently ${shuffleMode})`);
     }
 
     if (repeatBtn) {
-      repeatBtn.style.color = repeatMode !== 'off' ? 'var(--color-accent-primary)' : 'var(--color-text-muted)';
-      repeatBtn.textContent = repeatMode === 'one' ? '🔂' : '🔁';
+      const active = repeatMode !== 'off';
+      repeatBtn.style.color = active ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)';
+      repeatBtn.innerHTML = getIconSvg('repeat', { size: 18, color: active ? 'var(--color-accent-purple-glow)' : 'currentColor' });
       repeatBtn.setAttribute('aria-label', `Cycle Repeat Mode (Currently ${repeatMode})`);
     }
   }
@@ -90,8 +102,11 @@ export class PlayerControlsComponent {
     if (!this.container) return;
     const favBtn = this.container.querySelector<HTMLButtonElement>('#np-fav-btn');
     if (favBtn) {
-      favBtn.textContent = isFavorite ? '★' : '☆';
-      favBtn.style.color = isFavorite ? 'var(--color-accent-primary)' : 'var(--color-text-muted)';
+      favBtn.innerHTML = getIconSvg(isFavorite ? 'heart-filled' : 'heart', {
+        size: 20,
+        color: isFavorite ? 'var(--color-accent-pink)' : 'currentColor'
+      });
+      favBtn.style.color = isFavorite ? 'var(--color-accent-pink)' : 'var(--color-text-muted)';
       favBtn.setAttribute('aria-label', isFavorite ? 'Remove from favorites' : 'Add to favorites');
     }
   }
@@ -102,8 +117,9 @@ export class PlayerControlsComponent {
     const volSlider = this.container.querySelector<HTMLInputElement>('#np-volume-slider');
 
     if (muteBtn) {
-      muteBtn.textContent = this.playbackManager.isMuted ? '🔇' : '🔊';
-      muteBtn.setAttribute('aria-label', this.playbackManager.isMuted ? 'Unmute' : 'Mute');
+      const isMuted = this.playbackManager.isMuted;
+      muteBtn.innerHTML = getIconSvg(isMuted ? 'volume-mute' : 'volume', { size: 18 });
+      muteBtn.setAttribute('aria-label', isMuted ? 'Unmute' : 'Mute');
     }
     if (volSlider) {
       volSlider.value = String(this.playbackManager.volume);
@@ -113,103 +129,222 @@ export class PlayerControlsComponent {
   private render(): void {
     if (!this.container) return;
 
-    const playIcon = this.isPlaying ? '⏸' : '▶';
-    const shuffleColor = this.playbackManager.shuffleMode === 'on' ? 'var(--color-accent-primary)' : 'var(--color-text-muted)';
-    const repeatColor = this.playbackManager.repeatMode !== 'off' ? 'var(--color-accent-primary)' : 'var(--color-text-muted)';
-    const repeatIcon = this.playbackManager.repeatMode === 'one' ? '🔂' : '🔁';
-    const favColor = this.isFavorite ? 'var(--color-accent-primary)' : 'var(--color-text-muted)';
+    const playIconSvg = getIconSvg(this.isPlaying ? 'pause' : 'play', { size: 22, color: '#ffffff' });
+    const isShuffle = this.playbackManager.shuffleMode === 'on';
+    const isRepeat = this.playbackManager.repeatMode !== 'off';
 
     this.container.innerHTML = `
-      <div class="player-controls-container" style="display: flex; flex-direction: column; gap: var(--space-4); width: 100%;">
-        <!-- Scrubber Progress Bar -->
-        <div style="display: flex; flex-direction: column; gap: var(--space-1); width: 100%;">
-          <div style="display: flex; align-items: center; gap: var(--space-3); width: 100%;">
-            <span id="np-time-current" style="font-size: 12px; font-weight: 600; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 44px; text-align: right;">
-              ${this.formatTime(this.currentPositionMs)}
-            </span>
+      <div
+        class="player-controls-container"
+        style="
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-4);
+          width: 100%;
+          max-width: 580px;
+          margin: 0 auto;
+          box-sizing: border-box;
+        "
+      >
+        <!-- 1. Seek / Progress Bar -->
+        <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
+          <div style="position: relative; width: 100%; display: flex; align-items: center;">
             <input
               id="np-progress-slider"
               type="range"
               min="0"
               max="${this.currentDurationMs || 100}"
               value="${this.currentPositionMs}"
-              role="slider"
-              aria-label="Playback progress scrubber"
-              aria-valuenow="${this.currentPositionMs}"
+              aria-label="Track Progress"
               aria-valuemin="0"
               aria-valuemax="${this.currentDurationMs || 100}"
-              style="flex: 1; height: 6px; accent-color: var(--color-accent-primary); cursor: pointer; border-radius: var(--radius-full);"
+              aria-valuenow="${this.currentPositionMs}"
+              style="
+                width: 100%;
+                height: 6px;
+                border-radius: var(--radius-full);
+                background: rgba(255, 255, 255, 0.1);
+                outline: none;
+                cursor: pointer;
+                accent-color: var(--color-accent-purple);
+                transition: height var(--duration-fast);
+              "
             />
-            <span id="np-time-duration" style="font-size: 12px; font-weight: 600; color: var(--color-text-muted); font-variant-numeric: tabular-nums; width: 44px;">
-              ${this.formatTime(this.currentDurationMs)}
-            </span>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--color-text-muted); font-variant-numeric: tabular-nums;">
+            <span id="np-time-current">${this.formatTime(this.currentPositionMs)}</span>
+            <span id="np-time-duration">${this.formatTime(this.currentDurationMs)}</span>
           </div>
         </div>
 
-        <!-- Primary Playback Controls -->
-        <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-5);">
+        <!-- 2. Main Playback Control Bar -->
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <!-- Shuffle Button -->
           <button
             id="np-shuffle-btn"
-            aria-label="Toggle Shuffle"
-            style="min-width: 44px; min-height: 44px; background: transparent; border: none; font-size: 18px; cursor: pointer; color: ${shuffleColor}; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: transform 0.1s, color 0.15s;"
-          >🔀</button>
-
-          <button
-            id="np-prev-btn"
-            aria-label="Previous Track"
-            style="min-width: 44px; min-height: 44px; background: transparent; border: none; color: var(--color-text-primary); font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: transform 0.1s;"
-          >⏮</button>
-
-          <button
-            id="np-play-btn"
-            aria-label="${this.isPlaying ? 'Pause' : 'Play'}"
+            aria-label="Toggle Shuffle (Currently ${this.playbackManager.shuffleMode})"
+            title="Shuffle"
             style="
-              width: 58px;
-              height: 58px;
-              border-radius: var(--radius-full);
-              background: var(--color-accent-gradient);
+              background: transparent;
               border: none;
-              color: #ffffff;
-              font-size: 24px;
+              color: ${isShuffle ? 'var(--color-accent-cyan)' : 'var(--color-text-muted)'};
               cursor: pointer;
+              padding: 8px;
+              border-radius: 50%;
               display: flex;
               align-items: center;
               justify-content: center;
-              box-shadow: var(--shadow-glow-purple);
-              transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
+              min-width: 44px;
+              min-height: 44px;
+              transition: all var(--duration-fast);
             "
-          >${playIcon}</button>
+          >
+            ${getIconSvg('shuffle', { size: 18, color: isShuffle ? 'var(--color-accent-cyan)' : 'currentColor' })}
+          </button>
 
+          <!-- Previous Button -->
+          <button
+            id="np-prev-btn"
+            aria-label="Previous Track"
+            title="Previous"
+            style="
+              background: var(--glass-bg-subtle);
+              border: 1px solid var(--glass-border);
+              color: var(--color-text-primary);
+              cursor: pointer;
+              padding: 8px;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-width: 44px;
+              min-height: 44px;
+              transition: all var(--duration-fast);
+            "
+          >
+            ${getIconSvg('skip-back', { size: 20 })}
+          </button>
+
+          <!-- Large Play / Pause Button -->
+          <button
+            id="np-play-btn"
+            aria-label="${this.isPlaying ? 'Pause' : 'Play'}"
+            title="${this.isPlaying ? 'Pause' : 'Play'}"
+            style="
+              width: 58px;
+              height: 58px;
+              border-radius: 50%;
+              background: linear-gradient(135deg, var(--color-accent-purple) 0%, #9333ea 100%);
+              border: 1px solid var(--glass-border-interactive);
+              color: #ffffff;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              cursor: pointer;
+              box-shadow: 0 4px 20px rgba(124, 58, 237, 0.55);
+              transition: all var(--duration-fast) var(--ease-smooth);
+            "
+          >
+            ${playIconSvg}
+          </button>
+
+          <!-- Next Button -->
           <button
             id="np-next-btn"
             aria-label="Next Track"
-            style="min-width: 44px; min-height: 44px; background: transparent; border: none; color: var(--color-text-primary); font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: transform 0.1s;"
-          >⏭</button>
+            title="Next"
+            style="
+              background: var(--glass-bg-subtle);
+              border: 1px solid var(--glass-border);
+              color: var(--color-text-primary);
+              cursor: pointer;
+              padding: 8px;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-width: 44px;
+              min-height: 44px;
+              transition: all var(--duration-fast);
+            "
+          >
+            ${getIconSvg('skip-forward', { size: 20 })}
+          </button>
 
+          <!-- Repeat Button -->
           <button
             id="np-repeat-btn"
-            aria-label="Cycle Repeat Mode"
-            style="min-width: 44px; min-height: 44px; background: transparent; border: none; font-size: 18px; cursor: pointer; color: ${repeatColor}; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: transform 0.1s, color 0.15s;"
-          >${repeatIcon}</button>
+            aria-label="Cycle Repeat Mode (Currently ${this.playbackManager.repeatMode})"
+            title="Repeat"
+            style="
+              background: transparent;
+              border: none;
+              color: ${isRepeat ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)'};
+              cursor: pointer;
+              padding: 8px;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-width: 44px;
+              min-height: 44px;
+              transition: all var(--duration-fast);
+            "
+          >
+            ${getIconSvg('repeat', { size: 18, color: isRepeat ? 'var(--color-accent-purple-glow)' : 'currentColor' })}
+          </button>
         </div>
 
-        <!-- Secondary Controls: Volume & Favorite -->
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-1); padding: 0 var(--space-2); width: 100%;">
+        <!-- 3. Bottom Utility Bar: Favorite + Volume -->
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; border-top: 1px solid var(--glass-border); padding-top: var(--space-3);">
+          <!-- Favorite Heart Button -->
           <button
             id="np-fav-btn"
             aria-label="${this.isFavorite ? 'Remove from favorites' : 'Add to favorites'}"
-            style="min-width: 44px; min-height: 44px; background: transparent; border: none; font-size: 22px; cursor: pointer; color: ${favColor}; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: transform 0.1s, color 0.15s;"
+            title="Favorite"
+            style="
+              background: transparent;
+              border: none;
+              color: ${this.isFavorite ? 'var(--color-accent-pink)' : 'var(--color-text-muted)'};
+              cursor: pointer;
+              padding: 6px;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-width: 44px;
+              min-height: 44px;
+              transition: all var(--duration-fast);
+            "
           >
-            ${this.isFavorite ? '★' : '☆'}
+            ${getIconSvg(this.isFavorite ? 'heart-filled' : 'heart', {
+              size: 20,
+              color: this.isFavorite ? 'var(--color-accent-pink)' : 'currentColor'
+            })}
           </button>
 
-          <div style="display: flex; align-items: center; gap: var(--space-2); background: var(--glass-surface); padding: 4px 12px; border-radius: var(--radius-full); border: 1px solid var(--glass-border);">
+          <!-- Volume Controls -->
+          <div style="display: flex; align-items: center; gap: 8px;">
             <button
               id="np-mute-btn"
-              aria-label="Toggle Mute"
-              style="min-width: 32px; min-height: 32px; background: transparent; border: none; font-size: 16px; cursor: pointer; color: var(--color-text-secondary); display: flex; align-items: center; justify-content: center;"
+              aria-label="${this.playbackManager.isMuted ? 'Unmute' : 'Mute'}"
+              title="Mute / Unmute"
+              style="
+                background: transparent;
+                border: none;
+                color: var(--color-text-muted);
+                cursor: pointer;
+                padding: 6px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 44px;
+                min-height: 44px;
+              "
             >
-              ${this.playbackManager.isMuted ? '🔇' : '🔊'}
+              ${getIconSvg(this.playbackManager.isMuted ? 'volume-mute' : 'volume', { size: 18 })}
             </button>
             <input
               id="np-volume-slider"
@@ -218,8 +353,16 @@ export class PlayerControlsComponent {
               max="1"
               step="0.01"
               value="${this.playbackManager.volume}"
-              aria-label="Volume level"
-              style="width: 100px; height: 4px; accent-color: var(--color-accent-primary); cursor: pointer;"
+              aria-label="Volume Slider"
+              style="
+                width: 100px;
+                height: 4px;
+                border-radius: var(--radius-full);
+                background: rgba(255, 255, 255, 0.15);
+                outline: none;
+                cursor: pointer;
+                accent-color: var(--color-accent-cyan);
+              "
             />
           </div>
         </div>
@@ -232,7 +375,8 @@ export class PlayerControlsComponent {
   private bindEvents(): void {
     if (!this.container) return;
 
-    const playBtn = this.container.querySelector('#np-play-btn');
+    // Play / Pause
+    const playBtn = this.container.querySelector<HTMLButtonElement>('#np-play-btn');
     playBtn?.addEventListener('click', () => {
       if (this.isPlaying) {
         void this.playbackManager.pause();
@@ -241,64 +385,81 @@ export class PlayerControlsComponent {
       }
     });
 
-    const prevBtn = this.container.querySelector('#np-prev-btn');
-    prevBtn?.addEventListener('click', () => void this.playbackManager.previous());
+    // Next
+    const nextBtn = this.container.querySelector<HTMLButtonElement>('#np-next-btn');
+    nextBtn?.addEventListener('click', () => {
+      void this.playbackManager.next();
+    });
 
-    const nextBtn = this.container.querySelector('#np-next-btn');
-    nextBtn?.addEventListener('click', () => void this.playbackManager.next());
+    // Previous
+    const prevBtn = this.container.querySelector<HTMLButtonElement>('#np-prev-btn');
+    prevBtn?.addEventListener('click', () => {
+      void this.playbackManager.previous();
+    });
 
-    const shuffleBtn = this.container.querySelector('#np-shuffle-btn');
+    // Shuffle
+    const shuffleBtn = this.container.querySelector<HTMLButtonElement>('#np-shuffle-btn');
     shuffleBtn?.addEventListener('click', () => {
-      const next = this.playbackManager.shuffleMode === 'on' ? 'off' : 'on';
-      this.playbackManager.setShuffleMode(next);
+      const nextMode: ShuffleMode = this.playbackManager.shuffleMode === 'on' ? 'off' : 'on';
+      this.playbackManager.setShuffleMode(nextMode);
+      this.updateModes(this.playbackManager.repeatMode, nextMode);
     });
 
-    const repeatBtn = this.container.querySelector('#np-repeat-btn');
+    // Repeat
+    const repeatBtn = this.container.querySelector<HTMLButtonElement>('#np-repeat-btn');
     repeatBtn?.addEventListener('click', () => {
-      const cur = this.playbackManager.repeatMode;
-      const next = cur === 'off' ? 'all' : cur === 'all' ? 'one' : 'off';
-      this.playbackManager.setRepeatMode(next);
+      let nextMode: RepeatMode = 'off';
+      if (this.playbackManager.repeatMode === 'off') nextMode = 'all';
+      else if (this.playbackManager.repeatMode === 'all') nextMode = 'one';
+      this.playbackManager.setRepeatMode(nextMode);
+      this.updateModes(nextMode, this.playbackManager.shuffleMode);
     });
 
-    const favBtn = this.container.querySelector('#np-fav-btn');
+    // Favorite
+    const favBtn = this.container.querySelector<HTMLButtonElement>('#np-fav-btn');
     favBtn?.addEventListener('click', () => {
       this.callbacks.onToggleFavorite();
     });
 
-    const muteBtn = this.container.querySelector('#np-mute-btn');
-    muteBtn?.addEventListener('click', () => {
-      this.playbackManager.setMuted(!this.playbackManager.isMuted);
-      this.updateVolume();
-    });
-
-    const volumeSlider = this.container.querySelector<HTMLInputElement>('#np-volume-slider');
-    volumeSlider?.addEventListener('input', () => {
-      const vol = parseFloat(volumeSlider.value);
-      this.playbackManager.setVolume(vol);
-      this.updateVolume();
-    });
-
+    // Progress Slider Seeking
     const progressSlider = this.container.querySelector<HTMLInputElement>('#np-progress-slider');
-    progressSlider?.addEventListener('mousedown', () => {
-      this.isSeeking = true;
-    });
     progressSlider?.addEventListener('input', () => {
-      const val = parseInt(progressSlider.value, 10);
+      this.isSeeking = true;
+      const targetMs = Number(progressSlider.value);
       const timeCur = this.container?.querySelector('#np-time-current');
-      if (timeCur) timeCur.textContent = this.formatTime(val);
+      if (timeCur) timeCur.textContent = this.formatTime(targetMs);
     });
+
     progressSlider?.addEventListener('change', () => {
+      const targetMs = Number(progressSlider.value);
       this.isSeeking = false;
-      const pos = parseInt(progressSlider.value, 10);
-      void this.playbackManager.seek(pos);
+      void this.playbackManager.seek(targetMs);
+    });
+
+    // Volume Slider & Mute
+    const volSlider = this.container.querySelector<HTMLInputElement>('#np-volume-slider');
+    volSlider?.addEventListener('input', () => {
+      const val = Number(volSlider.value);
+      this.playbackManager.setVolume(val);
+      if (this.playbackManager.isMuted && val > 0) {
+        this.playbackManager.setMuted(false);
+      }
+      this.updateVolume();
+    });
+
+    const muteBtn = this.container.querySelector<HTMLButtonElement>('#np-mute-btn');
+    muteBtn?.addEventListener('click', () => {
+      const nextMute = !this.playbackManager.isMuted;
+      this.playbackManager.setMuted(nextMute);
+      this.updateVolume();
     });
   }
 
   private formatTime(ms: number): string {
-    if (!ms || isNaN(ms) || ms < 0) return '0:00';
+    if (!ms || ms <= 0) return '0:00';
     const totalSec = Math.floor(ms / 1000);
-    const mins = Math.floor(totalSec / 60);
-    const secs = totalSec % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
   }
 }

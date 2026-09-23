@@ -2,12 +2,12 @@ import type { RouterService } from '../navigation/router-service';
 import type { AppRoute, RouteState } from '../navigation/route-types';
 import type { Disposable } from '../../core/types/common';
 import type { ILibraryService } from '../../services/contracts/service-contracts';
+import { getIconSvg, type IconName } from '../icons/icon-registry';
 
 export interface NavItem {
   id: AppRoute;
   label: string;
-  icon: string;
-  badge?: string | undefined;
+  icon: IconName;
 }
 
 export class SidebarComponent {
@@ -17,20 +17,21 @@ export class SidebarComponent {
   private routerSub: Disposable | null = null;
   private statsInterval: number | null = null;
 
-  private navItems: NavItem[] = [
-    { id: 'home', label: 'Home', icon: '⌂' },
-    { id: 'library', label: 'Library', icon: '𝄤' },
-    { id: 'search', label: 'Search', icon: '🔍' },
-    { id: 'playlists', label: 'Playlists', icon: '☰' },
-    { id: 'galaxy', label: 'Galaxy', icon: '✦' },
-    { id: 'settings', label: 'Settings', icon: '⚙' }
+  private primaryNavItems: NavItem[] = [
+    { id: 'home', label: 'Home', icon: 'home' },
+    { id: 'library', label: 'Library', icon: 'library' },
+    { id: 'search', label: 'Search', icon: 'search' },
+    { id: 'playlists', label: 'Playlists', icon: 'playlist' },
+    { id: 'galaxy', label: 'Galaxy', icon: 'galaxy' },
+    { id: 'nowplaying', label: 'Now Playing', icon: 'now-playing' },
+    { id: 'settings', label: 'Settings', icon: 'settings' }
   ];
 
-  private yourMusicItems = [
-    { label: 'Favorites', icon: '♡', route: 'library' as AppRoute, params: { tab: 'favorites' } },
-    { label: 'Recently Added', icon: '🕒', route: 'library' as AppRoute, params: { tab: 'songs', sort: 'dateAdded' } },
-    { label: 'Most Played', icon: '📊', route: 'library' as AppRoute, params: { tab: 'songs', sort: 'playCount' } },
-    { label: 'Downloads / Folders', icon: '📥', route: 'library' as AppRoute, params: { tab: 'folders' } }
+  private yourMusicItems: { label: string; icon: IconName; route: AppRoute; params?: Record<string, any> }[] = [
+    { label: 'Favorites', icon: 'heart', route: 'library', params: { tab: 'favorites' } },
+    { label: 'Recently Added', icon: 'clock', route: 'library', params: { tab: 'songs', sort: 'dateAdded' } },
+    { label: 'Most Played', icon: 'trending', route: 'library', params: { tab: 'songs', sort: 'playCount' } },
+    { label: 'Downloads', icon: 'download', route: 'library', params: { tab: 'folders' } }
   ];
 
   constructor(router: RouterService, libraryService?: ILibraryService) {
@@ -80,10 +81,11 @@ export class SidebarComponent {
           flex-direction: column;
           border-right: 1px solid var(--glass-border);
           padding: var(--space-4);
-          gap: var(--space-4);
-          z-index: 10;
+          gap: var(--space-3);
+          z-index: var(--z-sidebar);
           overflow-y: auto;
           overflow-x: hidden;
+          box-sizing: border-box;
         "
       >
         <!-- App Logo & Tagline -->
@@ -96,17 +98,11 @@ export class SidebarComponent {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: 800;
-            font-size: 18px;
             color: #ffffff;
             box-shadow: var(--shadow-glow-purple);
             flex-shrink: 0;
           ">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M9 18V5l12-2v13"></path>
-              <circle cx="6" cy="18" r="3" fill="currentColor"></circle>
-              <circle cx="18" cy="16" r="3" fill="currentColor"></circle>
-            </svg>
+            ${getIconSvg('sound-wave', { size: 22, color: '#ffffff' })}
           </div>
           <div style="display: flex; flex-direction: column; overflow: hidden;">
             <span style="font-size: 17px; font-weight: 800; letter-spacing: -0.03em; color: var(--color-text-primary); line-height: 1.2;">
@@ -119,8 +115,8 @@ export class SidebarComponent {
         </div>
 
         <!-- Main Navigation Section -->
-        <nav style="display: flex; flex-direction: column; gap: var(--space-1);">
-          ${this.navItems
+        <nav style="display: flex; flex-direction: column; gap: var(--space-1);" aria-label="Main menu">
+          ${this.primaryNavItems
             .map(item => {
               const isActive = this.router.current.route === item.id;
               return `
@@ -132,7 +128,7 @@ export class SidebarComponent {
                     align-items: center;
                     gap: var(--space-3);
                     padding: 10px var(--space-4);
-                    min-height: 44px;
+                    min-height: 42px;
                     border-radius: var(--radius-md);
                     border: 1px solid ${isActive ? 'var(--glass-border-highlight)' : 'transparent'};
                     background: ${isActive ? 'var(--color-bg-surface-elevated)' : 'transparent'};
@@ -146,7 +142,9 @@ export class SidebarComponent {
                     transition: all var(--duration-fast) var(--ease-smooth);
                   "
                 >
-                  <span style="font-size: 16px; width: 22px; text-align: center; color: ${isActive ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)'};">${item.icon}</span>
+                  <span style="display: flex; align-items: center; justify-content: center; width: 20px; color: ${isActive ? 'var(--color-accent-purple-glow)' : 'var(--color-text-muted)'};">
+                    ${getIconSvg(item.icon, { size: 18 })}
+                  </span>
                   <span style="flex: 1;">${item.label}</span>
                   ${isActive ? `<span style="width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--color-accent-purple-glow); box-shadow: var(--shadow-glow-purple);"></span>` : ''}
                 </button>
@@ -156,8 +154,8 @@ export class SidebarComponent {
         </nav>
 
         <!-- YOUR MUSIC Section -->
-        <div style="display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2);">
-          <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-dim); padding-left: var(--space-3);">
+        <div style="display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-2);">
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-dim); padding: 0 var(--space-3) var(--space-1);">
             Your Music
           </span>
           <div style="display: flex; flex-direction: column; gap: var(--space-0-5);">
@@ -166,13 +164,13 @@ export class SidebarComponent {
                 <button
                   class="sidebar-sub-nav-btn"
                   data-sub-route="${item.route}"
-                  data-sub-params='${JSON.stringify(item.params)}'
+                  data-sub-params='${JSON.stringify(item.params ?? {})}'
                   style="
                     display: flex;
                     align-items: center;
                     gap: var(--space-3);
                     padding: 8px var(--space-4);
-                    min-height: 40px;
+                    min-height: 38px;
                     border-radius: var(--radius-md);
                     border: 1px solid transparent;
                     background: transparent;
@@ -185,7 +183,9 @@ export class SidebarComponent {
                     transition: all var(--duration-fast) var(--ease-smooth);
                   "
                 >
-                  <span style="font-size: 14px; width: 20px; text-align: center; color: var(--color-text-muted);">${item.icon}</span>
+                  <span style="display: flex; align-items: center; justify-content: center; width: 18px; color: var(--color-text-muted);">
+                    ${getIconSvg(item.icon, { size: 16 })}
+                  </span>
                   <span>${item.label}</span>
                 </button>
               `)
@@ -194,12 +194,15 @@ export class SidebarComponent {
         </div>
 
         <!-- Spacer -->
-        <div style="flex: 1;"></div>
+        <div style="flex: 1; min-height: var(--space-2);"></div>
 
         <!-- Bottom Local Library Card -->
         <div
           id="sidebar-library-card"
           class="glass-card"
+          role="button"
+          tabindex="0"
+          aria-label="Open Local Library"
           style="
             padding: var(--space-3) var(--space-4);
             display: flex;
@@ -220,9 +223,9 @@ export class SidebarComponent {
               align-items: center;
               justify-content: center;
               color: var(--color-accent-purple-glow);
-              font-size: 14px;
+              flex-shrink: 0;
             ">
-              🗄️
+              ${getIconSvg('folder', { size: 16 })}
             </div>
             <div style="display: flex; flex-direction: column; overflow: hidden;">
               <span style="font-size: 12px; font-weight: 600; color: var(--color-text-primary);">
@@ -233,9 +236,9 @@ export class SidebarComponent {
               </span>
             </div>
           </div>
-          <!-- Storage Meter -->
+          <!-- Storage Meter Progress Bar -->
           <div style="width: 100%; height: 4px; border-radius: var(--radius-full); background: rgba(255, 255, 255, 0.08); overflow: hidden;">
-            <div style="width: 38%; height: 100%; border-radius: var(--radius-full); background: var(--gradient-primary);"></div>
+            <div id="sidebar-lib-meter" style="width: 35%; height: 100%; border-radius: var(--radius-full); background: var(--gradient-primary);"></div>
           </div>
         </div>
       </aside>
@@ -304,4 +307,3 @@ export class SidebarComponent {
     }
   }
 }
-

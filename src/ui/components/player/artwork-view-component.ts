@@ -1,6 +1,14 @@
 import type { Track } from '../../../domain/entities/models';
 import type { IArtworkService } from '../../../services/contracts/service-contracts';
+import { getIconSvg } from '../../icons/icon-registry';
+import { escapeHtml } from '../../../core/security/html-sanitizer';
 
+/**
+ * Phase 8 Artwork View Component (Templates 6 & 7).
+ * Features:
+ * - Vinyl/cover presentation with ambient atmospheric back-glow
+ * - Smooth fallback handling and high-resolution artwork rendering
+ */
 export class ArtworkViewComponent {
   private container: HTMLElement | null = null;
   private artworkBoxEl: HTMLElement | null = null;
@@ -23,10 +31,11 @@ export class ArtworkViewComponent {
           align-items: center;
           justify-content: center;
           width: 100%;
-          max-width: 380px;
+          max-width: 420px;
           aspect-ratio: 1;
-          margin: 0 auto var(--space-6) auto;
+          margin: 0 auto;
           position: relative;
+          box-sizing: border-box;
         "
       >
         <div
@@ -34,11 +43,11 @@ export class ArtworkViewComponent {
           aria-hidden="true"
           style="
             position: absolute;
-            inset: -8px;
-            background: linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(6, 182, 212, 0.25));
+            inset: -12px;
+            background: radial-gradient(circle, rgba(124, 58, 237, 0.4) 0%, rgba(6, 182, 212, 0.2) 50%, transparent 70%);
             border-radius: var(--radius-2xl);
-            filter: blur(20px);
-            opacity: 0.6;
+            filter: blur(28px);
+            opacity: 0.85;
             z-index: 0;
             pointer-events: none;
           "
@@ -48,10 +57,10 @@ export class ArtworkViewComponent {
           style="
             width: 100%;
             height: 100%;
-            border-radius: var(--radius-xl);
-            background: var(--color-bg-surface-elevated);
-            border: 1px solid var(--glass-border);
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(168, 85, 247, 0.2);
+            border-radius: var(--radius-2xl);
+            background: linear-gradient(135deg, rgba(30, 20, 70, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%);
+            border: 1px solid var(--glass-border-interactive);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(124, 58, 237, 0.25);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -59,9 +68,12 @@ export class ArtworkViewComponent {
             position: relative;
             z-index: 1;
             transition: all var(--duration-normal) var(--ease-smooth);
+            box-sizing: border-box;
           "
         >
-          <span style="font-size: 64px; color: var(--color-text-muted); opacity: 0.5;">♫</span>
+          <span style="color: var(--color-accent-purple-glow); display: flex; opacity: 0.6;">
+            ${getIconSvg('music', { size: 64, color: 'var(--color-accent-purple-glow)' })}
+          </span>
         </div>
       </div>
     `;
@@ -97,16 +109,21 @@ export class ArtworkViewComponent {
         this.artworkBoxEl.innerHTML = `
           <img
             src="${url}"
-            alt="Album Artwork"
-            style="width: 100%; height: 100%; object-fit: cover;"
+            alt="${escapeHtml(this.currentTrack?.title || 'Album Artwork')}"
+            style="width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block;"
           />
         `;
         return;
       }
     }
 
+    // Fallback if no artwork is available
     if (this.artworkBoxEl) {
-      this.artworkBoxEl.innerHTML = `<span style="font-size: 64px; color: var(--color-text-muted);">♫</span>`;
+      this.artworkBoxEl.innerHTML = `
+        <span style="color: var(--color-accent-purple-glow); display: flex; opacity: 0.6;">
+          ${getIconSvg('music', { size: 64, color: 'var(--color-accent-purple-glow)' })}
+        </span>
+      `;
     }
   }
 }

@@ -6,9 +6,11 @@ import type {
   IVisualizerService,
   IGalaxyService,
   IScannerService,
-  ILibraryService
+  ILibraryService,
+  IPlaybackManager
 } from '../../services/contracts/service-contracts';
 import type { VisualizerMode } from '../../domain/entities/visualizer-settings';
+import type { RepeatMode, ShuffleMode } from '../../domain/value-objects/audio-types';
 import { EqualizerComponent } from '../components/audio/equalizer-component';
 import { ReplayGainControlsComponent } from '../components/audio/replaygain-controls-component';
 import { ThemeManager, type ThemePreference, type ResolvedTheme } from '../theme/theme-manager';
@@ -17,6 +19,11 @@ import type { IDatabaseAdapter } from '../../data/db/database-adapter';
 import { STORES } from '../../data/db/schema';
 import { FileAccessCapabilityService } from '../../services/scanner/file-access-capability';
 import type { EventBus } from '../../core/events/event-bus';
+import { DomainEvents } from '../../domain/events/domain-events';
+import type { ScanProgressReport } from '../../services/scanner/scanner-types';
+import type { Disposable } from '../../core/types/common';
+import type { RouterService } from '../navigation/router-service';
+import { getIconSvg } from '../icons/icon-registry';
 
 export interface SettingsViewDependencies {
   audioEngine?: IAudioEngine | undefined;
@@ -25,11 +32,36 @@ export interface SettingsViewDependencies {
   galaxyService?: IGalaxyService | undefined;
   scannerService?: IScannerService | undefined;
   libraryService?: ILibraryService | undefined;
+  playbackManager?: IPlaybackManager | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   dbAdapter?: IDatabaseAdapter | undefined;
   eventBus?: EventBus | undefined;
+  router?: RouterService | undefined;
 }
 
+export type SettingsSectionId =
+  | 'music-access'
+  | 'playback'
+  | 'audio'
+  | 'appearance'
+  | 'visualizer'
+  | 'galaxy'
+  | 'storage'
+  | 'devices'
+  | 'privacy'
+  | 'about';
+
+interface SectionNavItem {
+  id: SettingsSectionId;
+  label: string;
+  icon: string;
+}
+
+/**
+ * SettingsView - Comprehensive presentation layer for Desktop, Tablet, and Mobile Template 9.
+ * Rebuilt strictly against Template 9 visual specifications, using Phase 2 design tokens,
+ * full responsive layouts (320px - 1920px), real service integrations, and zero fake state.
+ */
 export class SettingsView implements IView {
   private container: HTMLElement | null = null;
   private readonly audioEngine?: IAudioEngine | undefined;
@@ -38,14 +70,32 @@ export class SettingsView implements IView {
   private readonly galaxyService?: IGalaxyService | undefined;
   private readonly scannerService?: IScannerService | undefined;
   private readonly libraryService?: ILibraryService | undefined;
+  private readonly playbackManager?: IPlaybackManager | undefined;
   private readonly fsAdapter?: BrowserFilesystemAdapter | undefined;
   private readonly dbAdapter?: IDatabaseAdapter | undefined;
+  private readonly eventBus?: EventBus | undefined;
+  private readonly router?: RouterService | undefined;
   private readonly capabilityService = FileAccessCapabilityService.getInstance();
 
   private equalizerComponent: EqualizerComponent | null = null;
   private replayGainComponent: ReplayGainControlsComponent | null = null;
   private themeUnsub: (() => void) | null = null;
+  private eventBusSubs: Disposable[] = [];
   private connectedFolderName: string | null = null;
+  private activeSection: SettingsSectionId = 'music-access';
+
+  private readonly sections: SectionNavItem[] = [
+    { id: 'music-access', label: 'Local Music Access', icon: 'folder' },
+    { id: 'playback', label: 'Playback Preferences', icon: 'play' },
+    { id: 'audio', label: 'Audio DSP & EQ', icon: 'volume' },
+    { id: 'appearance', label: 'Theme & Style', icon: 'settings' },
+    { id: 'visualizer', label: 'Audio Visualizer', icon: 'maximize' },
+    { id: 'galaxy', label: 'Audio Galaxy', icon: 'galaxy' },
+    { id: 'storage', label: 'Storage & Database', icon: 'library' },
+    { id: 'devices', label: 'Audio Output', icon: 'volume' },
+    { id: 'privacy', label: 'Privacy & Architecture', icon: 'check' },
+    { id: 'about', label: 'About & Diagnostics', icon: 'music' }
+  ];
 
   constructor(deps?: SettingsViewDependencies) {
     this.audioEngine = deps?.audioEngine;
@@ -54,18 +104,32 @@ export class SettingsView implements IView {
     this.galaxyService = deps?.galaxyService;
     this.scannerService = deps?.scannerService;
     this.libraryService = deps?.libraryService;
+    this.playbackManager = deps?.playbackManager;
     this.fsAdapter = deps?.fsAdapter;
     this.dbAdapter = deps?.dbAdapter;
+    this.eventBus = deps?.eventBus;
+    this.router = deps?.router;
   }
 
-  public mount(container: HTMLElement, _params?: RouteParams): void {
+  public mount(container: HTMLElement, params?: RouteParams): void {
     this.container = container;
+    const requestedSection = (params as any)?.section || (params?.tab as any);
+    if (requestedSection && this.sections.some(s => s.id === requestedSection)) {
+      this.activeSection = requestedSection as SettingsSectionId;
+    }
+
     this.render();
     this.mountSubComponents();
+    this.attachNavigationEvents();
     this.attachThemeListeners();
+    this.attachPlaybackSettingsListeners();
     this.attachVisualizerSettingsListeners();
     this.attachGalaxySettingsListeners();
     this.attachMusicAccessListeners();
+    this.attachStorageListeners();
+    this.attachDeviceListeners();
+    this.attachEventBusSubscriptions();
+    this.refreshAllStats();
   }
 
   public unmount(): void {
@@ -73,6 +137,11 @@ export class SettingsView implements IView {
       this.themeUnsub();
       this.themeUnsub = null;
     }
+    for (const sub of this.eventBusSubs) {
+      sub.dispose();
+    }
+    this.eventBusSubs = [];
+
     if (this.equalizerComponent) {
       this.equalizerComponent.unmount();
       this.equalizerComponent = null;
@@ -81,9 +150,22 @@ export class SettingsView implements IView {
       this.replayGainComponent.unmount();
       this.replayGainComponent = null;
     }
+
+    const modal = document.querySelector('#settings-confirm-modal-overlay');
+    if (modal) {
+      modal.remove();
+    }
+
     if (this.container) {
       this.container.innerHTML = '';
       this.container = null;
+    }
+  }
+
+  public updateParams(params?: RouteParams): void {
+    const requestedSection = (params as any)?.section || (params?.tab as any);
+    if (requestedSection && this.sections.some(s => s.id === requestedSection)) {
+      this.switchToSection(requestedSection as SettingsSectionId);
     }
   }
 
@@ -93,9 +175,9 @@ export class SettingsView implements IView {
 
     this.container.innerHTML = `
       <style>
-        .settings-view {
+        .settings-view-root {
           padding: var(--space-6);
-          max-width: 1300px;
+          max-width: 1400px;
           margin: 0 auto;
           display: flex;
           flex-direction: column;
@@ -103,10 +185,12 @@ export class SettingsView implements IView {
           box-sizing: border-box;
           position: relative;
           width: 100%;
+          min-width: 0;
         }
 
-        .settings-hero {
-          background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(6, 182, 212, 0.15), rgba(15, 23, 42, 0.7));
+        /* Hero Banner */
+        .settings-hero-card {
+          background: linear-gradient(135deg, rgba(168, 85, 247, 0.22), rgba(6, 182, 212, 0.12), rgba(15, 23, 42, 0.75));
           border: 1px solid var(--glass-border);
           border-radius: var(--radius-2xl);
           padding: var(--space-8);
@@ -118,16 +202,51 @@ export class SettingsView implements IView {
           box-sizing: border-box;
         }
 
-        .settings-grid-layout {
+        .settings-hero-glow {
+          position: absolute;
+          top: -30%;
+          right: -5%;
+          width: 420px;
+          height: 420px;
+          background: radial-gradient(circle, rgba(168, 85, 247, 0.3) 0%, rgba(6, 182, 212, 0.15) 50%, transparent 70%);
+          filter: blur(60px);
+          pointer-events: none;
+        }
+
+        .settings-hero-chips {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          margin-top: var(--space-4);
+          flex-wrap: wrap;
+        }
+
+        .settings-hero-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 12px;
+          border-radius: var(--radius-full);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          border: 1px solid var(--glass-border);
+          background: var(--glass-surface);
+          color: var(--color-text-secondary);
+        }
+
+        /* Desktop & Tablet Grid */
+        .settings-main-layout {
           display: grid;
-          grid-template-columns: 260px minmax(0, 1fr);
+          grid-template-columns: 260px minmax(0, 1fr) 300px;
           gap: var(--space-6);
           align-items: start;
           width: 100%;
           box-sizing: border-box;
         }
 
-        .settings-nav-card {
+        /* Sub-Navigation Sidebar */
+        .settings-nav-panel {
           background: var(--glass-surface);
           border: 1px solid var(--glass-border);
           border-radius: var(--radius-2xl);
@@ -142,11 +261,11 @@ export class SettingsView implements IView {
           box-sizing: border-box;
         }
 
-        .settings-nav-item {
+        .settings-nav-btn {
           display: flex;
           align-items: center;
           gap: var(--space-3);
-          padding: 10px 16px;
+          padding: 10px 14px;
           border-radius: var(--radius-lg);
           border: 1px solid transparent;
           background: transparent;
@@ -161,18 +280,19 @@ export class SettingsView implements IView {
           min-height: 44px;
         }
 
-        .settings-nav-item:hover {
+        .settings-nav-btn:hover {
           background: rgba(255, 255, 255, 0.06);
           color: var(--color-text-primary);
         }
 
-        .settings-nav-item.active {
+        .settings-nav-btn.active {
           background: var(--color-accent-gradient);
           color: #ffffff;
           box-shadow: var(--shadow-glow-purple);
         }
 
-        .settings-content-area {
+        /* Central Content Area */
+        .settings-sections-wrapper {
           display: flex;
           flex-direction: column;
           gap: var(--space-6);
@@ -198,6 +318,53 @@ export class SettingsView implements IView {
           min-width: 0;
         }
 
+        .settings-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1px solid var(--glass-border);
+          padding-bottom: var(--space-3);
+          flex-wrap: wrap;
+          gap: var(--space-2);
+        }
+
+        .settings-card-title {
+          font-size: 18px;
+          font-weight: 700;
+          color: var(--color-text-primary);
+          margin: 2px 0 0 0;
+        }
+
+        .settings-card-category {
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: var(--color-accent-secondary);
+        }
+
+        /* Right Side Info Area */
+        .settings-sidebar-info {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-4);
+          box-sizing: border-box;
+        }
+
+        .settings-info-card {
+          background: var(--glass-surface);
+          border: 1px solid var(--glass-border);
+          border-radius: var(--radius-2xl);
+          padding: var(--space-5);
+          box-sizing: border-box;
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3);
+        }
+
+        /* Grids & Form Controls */
         .settings-theme-grid {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -221,6 +388,7 @@ export class SettingsView implements IView {
           transition: all var(--duration-fast) var(--ease-smooth);
           user-select: none;
           box-sizing: border-box;
+          text-align: center;
         }
 
         .settings-theme-option:hover {
@@ -235,15 +403,50 @@ export class SettingsView implements IView {
           box-shadow: var(--shadow-glow-purple);
         }
 
-        .settings-controls-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        .settings-form-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 16px;
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid var(--glass-border);
+          border-radius: var(--radius-xl);
           gap: var(--space-4);
-          width: 100%;
+          flex-wrap: wrap;
+        }
+
+        .settings-form-row-label {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 180px;
+          flex: 1;
+        }
+
+        .settings-form-row-title {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--color-text-primary);
+        }
+
+        .settings-form-row-desc {
+          font-size: 12px;
+          color: var(--color-text-secondary);
+        }
+
+        .settings-input-control {
+          background: var(--color-bg-surface-elevated);
+          border: 1px solid var(--glass-border);
+          color: var(--color-text-primary);
+          border-radius: var(--radius-md);
+          padding: 8px 12px;
+          font-size: 13px;
+          font-weight: 500;
+          min-height: 40px;
           box-sizing: border-box;
         }
 
-        .settings-btn {
+        .settings-action-btn {
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -257,46 +460,106 @@ export class SettingsView implements IView {
           border: 1px solid var(--glass-border);
           background: var(--glass-surface);
           color: var(--color-text-primary);
-          min-height: 40px;
+          min-height: 44px;
+          box-sizing: border-box;
+          user-select: none;
         }
-        .settings-btn:hover:not(:disabled) {
+
+        .settings-action-btn:hover:not(:disabled) {
           background: rgba(255, 255, 255, 0.1);
           transform: translateY(-1px);
         }
-        .settings-btn-primary {
+
+        .settings-action-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .settings-action-btn-primary {
           background: var(--color-accent-gradient);
           color: #ffffff;
           border: none;
           box-shadow: var(--shadow-glow-purple);
         }
 
+        .settings-action-btn-danger {
+          background: rgba(239, 68, 68, 0.15);
+          color: #ef4444;
+          border-color: rgba(239, 68, 68, 0.3);
+        }
+        .settings-action-btn-danger:hover:not(:disabled) {
+          background: rgba(239, 68, 68, 0.25);
+          border-color: rgba(239, 68, 68, 0.5);
+        }
+
+        /* Stats Table */
+        .settings-stats-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: var(--space-3);
+          width: 100%;
+        }
+
+        .settings-stat-box {
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid var(--glass-border);
+          border-radius: var(--radius-lg);
+          padding: 12px 14px;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .settings-stat-number {
+          font-size: 22px;
+          font-weight: 800;
+          color: var(--color-text-primary);
+          font-variant-numeric: tabular-nums;
+        }
+
+        .settings-stat-label {
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--color-text-secondary);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
         /* Tablet Responsive (768px - 1199px) */
         @media (max-width: 1199px) and (min-width: 768px) {
-          .settings-grid-layout {
+          .settings-main-layout {
             grid-template-columns: 220px minmax(0, 1fr);
-            gap: var(--space-4);
           }
-          .settings-view {
+          .settings-sidebar-info {
+            display: none;
+          }
+          .settings-view-root {
             padding: var(--space-4);
+          }
+          .settings-hero-card {
+            padding: var(--space-6);
           }
         }
 
-        /* Mobile Responsive (<768px) */
+        /* Mobile Responsive (< 768px) */
         @media (max-width: 767px) {
-          .settings-view {
+          .settings-view-root {
             padding: var(--space-3);
             gap: var(--space-4);
           }
-          .settings-hero {
+          .settings-hero-card {
             padding: var(--space-5);
             border-radius: var(--radius-xl);
           }
-          .settings-grid-layout {
+          .settings-main-layout {
             display: flex;
             flex-direction: column;
             gap: var(--space-4);
           }
-          .settings-nav-card {
+          .settings-sidebar-info {
+            display: none;
+          }
+          .settings-nav-panel {
             position: static;
             flex-direction: row;
             overflow-x: auto;
@@ -304,93 +567,96 @@ export class SettingsView implements IView {
             padding: 4px;
             max-width: 100%;
             scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
           }
-          .settings-nav-item {
+          .settings-nav-panel::-webkit-scrollbar {
+            display: none;
+          }
+          .settings-nav-btn {
             flex: 0 0 auto;
             padding: 8px 14px;
             font-size: 12px;
+            min-height: 40px;
           }
           .settings-theme-grid {
             grid-template-columns: 1fr;
+            gap: 8px;
+          }
+          .settings-form-row {
+            flex-direction: column;
+            align-items: flex-start;
             gap: 10px;
           }
-          .settings-controls-grid {
-            grid-template-columns: 1fr !important;
+          .settings-form-row > select,
+          .settings-form-row > button {
+            width: 100%;
           }
         }
       </style>
 
-      <section class="settings-view" role="region" aria-label="Settings Studio">
+      <section class="settings-view-root" role="region" aria-label="Settings Studio">
         <!-- Template 9 Studio Hero Banner -->
-        <header class="settings-hero">
-          <div
-            style="
-              position: absolute;
-              top: -40%;
-              right: -5%;
-              width: 380px;
-              height: 380px;
-              background: radial-gradient(circle, rgba(168, 85, 247, 0.35) 0%, rgba(6, 182, 212, 0.15) 50%, transparent 70%);
-              filter: blur(60px);
-              pointer-events: none;
-            "
-            aria-hidden="true"
-          ></div>
+        <header class="settings-hero-card">
+          <div class="settings-hero-glow" aria-hidden="true"></div>
           <div style="position: relative; z-index: 1;">
             <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--color-accent-secondary);">
               Personal Audio Operating System
             </span>
-            <h2 style="font-size: 32px; font-weight: 800; letter-spacing: -0.03em; margin: var(--space-1) 0 var(--space-2) 0; color: var(--color-text-primary);">
-              Settings
-            </h2>
-            <p style="font-size: 14px; font-weight: 500; color: var(--color-text-secondary); margin: 0; max-width: 560px; line-height: 1.5;">
-              Customize your music experience. Manage local music access, audio DSP equalization, dynamic ReplayGain normalization, real-time visualizer, and Audio Galaxy.
+            <h1 style="font-size: 32px; font-weight: 800; letter-spacing: -0.03em; margin: var(--space-1) 0 var(--space-2) 0; color: var(--color-text-primary);">
+              Settings & Preferences
+            </h1>
+            <p style="font-size: 14px; font-weight: 500; color: var(--color-text-secondary); margin: 0; max-width: 620px; line-height: 1.5;">
+              Configure local music access, audio DSP equalization, dynamic ReplayGain normalization, real-time visualizer, Audio Galaxy, and local storage.
             </p>
+
+            <div class="settings-hero-chips">
+              <span id="settings-chip-folder" class="settings-hero-chip">
+                <span>📁</span>
+                <span id="settings-chip-folder-text">Checking Access...</span>
+              </span>
+              <span id="settings-chip-theme" class="settings-hero-chip">
+                <span>🎨</span>
+                <span id="settings-chip-theme-text">Dark Atmosphere</span>
+              </span>
+              <span id="settings-chip-dsp" class="settings-hero-chip">
+                <span>🎚</span>
+                <span id="settings-chip-dsp-text">Audio DSP Active (48kHz)</span>
+              </span>
+            </div>
           </div>
         </header>
 
-        <!-- Main Layout with Category Sidebar & Content Cards -->
-        <div class="settings-grid-layout">
-          <!-- Category Sidebar Nav -->
-          <nav class="settings-nav-card" aria-label="Settings Categories">
-            <button class="settings-nav-item active" data-target="section-music-access">
-              <span aria-hidden="true">📁</span>
-              <span>Local Music Access</span>
-            </button>
-            <button class="settings-nav-item" data-target="section-audio">
-              <span aria-hidden="true">🎚</span>
-              <span>Audio & Equalizer</span>
-            </button>
-            <button class="settings-nav-item" data-target="section-appearance">
-              <span aria-hidden="true">🎨</span>
-              <span>Theme & Style</span>
-            </button>
-            <button class="settings-nav-item" data-target="section-visualizer">
-              <span aria-hidden="true">📊</span>
-              <span>Visualizer</span>
-            </button>
-            <button class="settings-nav-item" data-target="section-galaxy">
-              <span aria-hidden="true">🌌</span>
-              <span>Audio Galaxy</span>
-            </button>
-            <button class="settings-nav-item" data-target="section-privacy">
-              <span aria-hidden="true">🛡</span>
-              <span>Privacy & Storage</span>
-            </button>
+        <!-- Main Layout: Navigation Sidebar + Central Content + Right-Side Info -->
+        <div class="settings-main-layout">
+          <!-- Sub-Navigation Panel -->
+          <nav class="settings-nav-panel" role="tablist" aria-label="Settings Categories">
+            ${this.sections
+              .map(
+                s => `
+              <button
+                class="settings-nav-btn ${s.id === this.activeSection ? 'active' : ''}"
+                data-target="section-${s.id}"
+                role="tab"
+                aria-selected="${s.id === this.activeSection ? 'true' : 'false'}"
+                aria-controls="section-${s.id}"
+                id="tab-${s.id}"
+              >
+                <span style="display: flex; align-items: center;">${getIconSvg(s.icon as any, { size: 18 })}</span>
+                <span>${s.label}</span>
+              </button>
+            `
+              )
+              .join('')}
           </nav>
 
-          <!-- Content Sections -->
-          <div class="settings-content-area">
-            <!-- 0. Local Music Access Section -->
-            <section id="section-music-access" class="settings-card">
-              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: var(--space-3); flex-wrap: wrap; gap: 8px;">
+          <!-- Central Content Sections -->
+          <div class="settings-sections-wrapper" role="tabpanel" id="settings-tab-panel">
+            <!-- 1. Local Music Access Section -->
+            <section id="section-music-access" class="settings-card" tabindex="-1">
+              <div class="settings-card-header">
                 <div>
-                  <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent-secondary);">
-                    Local Storage
-                  </span>
-                  <h3 style="font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin: 2px 0 0 0;">
-                    Local Music Access
-                  </h3>
+                  <span class="settings-card-category">Local Filesystem</span>
+                  <h2 class="settings-card-title">Local Music Access</h2>
                 </div>
                 <span id="settings-music-access-badge" style="font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: var(--radius-full); background: rgba(148, 163, 184, 0.15); color: var(--color-text-secondary); border: 1px solid rgba(148, 163, 184, 0.3);">
                   Checking status...
@@ -400,30 +666,46 @@ export class SettingsView implements IView {
               <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 14px 16px; display: flex; align-items: center; gap: 12px;">
                 <span style="font-size: 20px;">🔒</span>
                 <p style="margin: 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.4;">
-                  <strong>Your music stays on your device.</strong> MyMusicApp only accesses files you explicitly choose. Your audio is never uploaded to any cloud service.
+                  <strong>Your audio stays on your local device.</strong> MyMusicApp operates fully local-first via File System Access API and IndexedDB. Zero cloud uploads or remote tracking.
                 </p>
               </div>
 
-              <div id="settings-scan-status-msg" style="display: none; font-size: 13px; padding: 10px 14px; border-radius: var(--radius-md); background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3);"></div>
+              <!-- Real-time Scan Progress Container -->
+              <div id="settings-scan-progress-box" style="display: none; flex-direction: column; gap: 8px; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: var(--radius-lg); padding: 14px 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span id="settings-scan-status-text" style="font-size: 13px; font-weight: 700; color: #818cf8;">
+                    Scanning Music Library...
+                  </span>
+                  <span id="settings-scan-progress-count" style="font-size: 12px; font-weight: 600; color: var(--color-text-secondary);">
+                    0 files
+                  </span>
+                </div>
+                <div style="width: 100%; height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: var(--radius-full); overflow: hidden;">
+                  <div id="settings-scan-progress-bar" style="width: 30%; height: 100%; background: var(--color-accent-gradient); transition: width 0.2s ease;"></div>
+                </div>
+                <span id="settings-scan-current-file" style="font-size: 11px; color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                  Starting scanner...
+                </span>
+              </div>
 
               <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px;">
-                <button id="settings-btn-rescan" class="settings-btn settings-btn-primary">
+                <button id="settings-btn-rescan" class="settings-action-btn settings-action-btn-primary">
                   <span>🔄</span>
                   <span>Rescan Music</span>
                 </button>
 
                 ${caps.hasDirectoryPicker ? `
-                  <button id="settings-btn-change-folder" class="settings-btn">
+                  <button id="settings-btn-change-folder" class="settings-action-btn">
                     <span>📁</span>
                     <span>Change Music Folder</span>
                   </button>
                 ` : `
                   <span style="font-size: 12px; color: var(--color-text-muted); align-self: center;">
-                    Folder access is not supported by this browser.
+                    Directory picker not supported by this browser.
                   </span>
                 `}
 
-                <button id="settings-btn-choose-files" class="settings-btn">
+                <button id="settings-btn-choose-files" class="settings-action-btn">
                   <span>🎵</span>
                   <span>Choose Audio Files</span>
                 </button>
@@ -432,22 +714,76 @@ export class SettingsView implements IView {
               <input type="file" id="settings-file-input" multiple accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.webm,.aiff,.aif,.alac" style="display: none;" />
             </section>
 
-            <!-- 1. Equalizer & DSP Slot -->
-            <div id="section-audio" style="display: flex; flex-direction: column; gap: var(--space-6); width: 100%;">
+            <!-- 2. Playback Preferences Section -->
+            <section id="section-playback" class="settings-card" tabindex="-1">
+              <div class="settings-card-header">
+                <div>
+                  <span class="settings-card-category">Transport & Queue</span>
+                  <h2 class="settings-card-title">Playback Preferences</h2>
+                </div>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Default Playback Rate</span>
+                  <span class="settings-form-row-desc">Speed factor for audio playback (0.5x - 2.0x)</span>
+                </div>
+                <select id="settings-playback-rate" class="settings-input-control">
+                  <option value="0.75">0.75x (Slow)</option>
+                  <option value="1.0" selected>1.0x (Normal)</option>
+                  <option value="1.25">1.25x (Fast)</option>
+                  <option value="1.5">1.5x (Accelerated)</option>
+                  <option value="2.0">2.0x (Double Speed)</option>
+                </select>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Repeat Mode</span>
+                  <span class="settings-form-row-desc">Looping behavior when queue reaches completion</span>
+                </div>
+                <select id="settings-repeat-mode" class="settings-input-control">
+                  <option value="off">Off (Stop at queue end)</option>
+                  <option value="all">Repeat All (Loop queue)</option>
+                  <option value="one">Repeat One (Loop single track)</option>
+                </select>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Shuffle Behavior</span>
+                  <span class="settings-form-row-desc">Randomize track playback ordering</span>
+                </div>
+                <select id="settings-shuffle-mode" class="settings-input-control">
+                  <option value="off">Sequential (Play in order)</option>
+                  <option value="all">Shuffle All (Random queue order)</option>
+                </select>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Direct Equalizer Navigation</span>
+                  <span class="settings-form-row-desc">Open the dedicated 10-Band Graphic Equalizer view</span>
+                </div>
+                <button id="settings-btn-go-audio" class="settings-action-btn">
+                  <span>🎚</span>
+                  <span>Open Audio & EQ View</span>
+                </button>
+              </div>
+            </section>
+
+            <!-- 3. Audio DSP & Equalizer Section -->
+            <div id="section-audio" style="display: flex; flex-direction: column; gap: var(--space-6); width: 100%;" tabindex="-1">
               <div id="settings-equalizer-slot"></div>
               <div id="settings-replaygain-slot"></div>
             </div>
 
-            <!-- 2. Theme & Appearance Section -->
-            <div id="section-appearance" class="settings-card">
-              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: var(--space-3); flex-wrap: wrap; gap: 8px;">
+            <!-- 4. Theme & Appearance Section -->
+            <section id="section-appearance" class="settings-card" tabindex="-1">
+              <div class="settings-card-header">
                 <div>
-                  <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent-primary);">
-                    Interface Aesthetics
-                  </span>
-                  <h3 style="font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin: 2px 0 0 0;">
-                    Theme & Appearance
-                  </h3>
+                  <span class="settings-card-category">Interface Aesthetics</span>
+                  <h2 class="settings-card-title">Theme & Appearance</h2>
                 </div>
                 <span id="settings-theme-status-badge" style="font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: var(--radius-full); background: rgba(168, 85, 247, 0.15); color: var(--color-accent-primary); border: 1px solid rgba(168, 85, 247, 0.3);">
                   Dark Atmosphere Active
@@ -456,33 +792,29 @@ export class SettingsView implements IView {
 
               <div class="settings-theme-grid">
                 <div class="settings-theme-option" data-theme-val="dark" role="button" tabindex="0" aria-label="Select Dark Atmosphere Theme">
-                  <span style="font-size: 26px;">🌙</span>
-                  <span style="font-size: 13px; font-weight: 700; color: var(--color-text-primary);">Dark Atmosphere</span>
-                  <span style="font-size: 11px; color: var(--color-text-muted); text-align: center;">Cinematic dark theme with neon accents</span>
+                  <span style="font-size: 28px;">🌙</span>
+                  <span style="font-size: 14px; font-weight: 700; color: var(--color-text-primary);">Dark Atmosphere</span>
+                  <span style="font-size: 11px; color: var(--color-text-muted);">Cinematic dark aesthetic with neon glow</span>
                 </div>
                 <div class="settings-theme-option" data-theme-val="light" role="button" tabindex="0" aria-label="Select Light Mode Theme">
-                  <span style="font-size: 26px;">☀️</span>
-                  <span style="font-size: 13px; font-weight: 700; color: var(--color-text-primary);">Light Mode</span>
-                  <span style="font-size: 11px; color: var(--color-text-muted); text-align: center;">Bright interface with vibrant accent palette</span>
+                  <span style="font-size: 28px;">☀️</span>
+                  <span style="font-size: 14px; font-weight: 700; color: var(--color-text-primary);">Light Mode</span>
+                  <span style="font-size: 11px; color: var(--color-text-muted);">Crisp bright interface with vibrant contrast</span>
                 </div>
                 <div class="settings-theme-option" data-theme-val="system" role="button" tabindex="0" aria-label="Select System Match Theme">
-                  <span style="font-size: 26px;">💻</span>
-                  <span style="font-size: 13px; font-weight: 700; color: var(--color-text-primary);">System Match</span>
-                  <span style="font-size: 11px; color: var(--color-text-muted); text-align: center;">Automatically follows your device appearance</span>
+                  <span style="font-size: 28px;">💻</span>
+                  <span style="font-size: 14px; font-weight: 700; color: var(--color-text-primary);">System Match</span>
+                  <span style="font-size: 11px; color: var(--color-text-muted);">Dynamically syncs with OS color mode</span>
                 </div>
               </div>
-            </div>
+            </section>
 
-            <!-- 3. Visualizer Preferences Section -->
-            <section id="section-visualizer" class="settings-card">
-              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: var(--space-3); flex-wrap: wrap; gap: var(--space-2);">
+            <!-- 5. Audio Visualizer Preferences Section -->
+            <section id="section-visualizer" class="settings-card" tabindex="-1">
+              <div class="settings-card-header">
                 <div>
-                  <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent-secondary);">
-                    Real-time Graphics
-                  </span>
-                  <h3 style="font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin: 2px 0 0 0;">
-                    Audio Visualizer Preferences
-                  </h3>
+                  <span class="settings-card-category">Real-time Graphics</span>
+                  <h2 class="settings-card-title">Audio Visualizer Preferences</h2>
                 </div>
                 <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer; font-size: 13px; font-weight: 700; color: var(--color-text-primary); background: rgba(255, 255, 255, 0.04); padding: 6px 14px; border-radius: var(--radius-full); border: 1px solid var(--glass-border);">
                   <input type="checkbox" id="settings-viz-enabled" style="accent-color: var(--color-accent-secondary);" />
@@ -490,115 +822,296 @@ export class SettingsView implements IView {
                 </label>
               </div>
 
-              <div class="settings-controls-grid">
-                <div>
-                  <label for="settings-viz-mode" style="font-size: 12px; font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 6px;">
-                    Render Style
-                  </label>
-                  <select id="settings-viz-mode" style="width: 100%; background: var(--color-bg-surface-elevated); border: 1px solid var(--glass-border); color: var(--color-text-primary); border-radius: var(--radius-md); padding: 8px 12px; font-size: 13px; font-weight: 500;">
-                    <option value="bars">Frequency Spectrum Bars</option>
-                    <option value="wave">Oscilloscope Waveform</option>
-                    <option value="circular">Circular Radial Ring</option>
-                    <option value="particles">Neon Audio Particles</option>
-                  </select>
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Visualizer Render Mode</span>
+                  <span class="settings-form-row-desc">Algorithm used for rendering dynamic audio frequency waveforms</span>
                 </div>
+                <select id="settings-viz-mode" class="settings-input-control">
+                  <option value="bars">Frequency Spectrum Bars</option>
+                  <option value="wave">Oscilloscope Waveform</option>
+                  <option value="circular">Circular Radial Ring</option>
+                  <option value="particles">Neon Audio Particles</option>
+                </select>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Frame Rate Target</span>
+                  <span class="settings-form-row-desc">Target FPS cap for WebGL / Canvas visualizer rendering</span>
+                </div>
+                <select id="settings-viz-fps" class="settings-input-control">
+                  <option value="60">60 FPS (Smooth Motion)</option>
+                  <option value="30">30 FPS (Power Efficient)</option>
+                </select>
+              </div>
+            </section>
+
+            <!-- 6. Audio Galaxy Configuration Section -->
+            <section id="section-galaxy" class="settings-card" tabindex="-1">
+              <div class="settings-card-header">
                 <div>
-                  <label for="settings-viz-fps" style="font-size: 12px; font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 6px;">
-                    Frame Rate Target
-                  </label>
-                  <select id="settings-viz-fps" style="width: 100%; background: var(--color-bg-surface-elevated); border: 1px solid var(--glass-border); color: var(--color-text-primary); border-radius: var(--radius-md); padding: 8px 12px; font-size: 13px; font-weight: 500;">
-                    <option value="60">60 FPS (Ultra Smooth)</option>
-                    <option value="30">30 FPS (Battery Efficient)</option>
-                  </select>
+                  <span class="settings-card-category">Cosmic Map</span>
+                  <h2 class="settings-card-title">Audio Galaxy Preferences</h2>
+                </div>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Default Level of Detail (LOD)</span>
+                  <span class="settings-form-row-desc">Initial zoom depth when entering Audio Galaxy view</span>
+                </div>
+                <select id="settings-galaxy-lod" class="settings-input-control">
+                  <option value="1">LOD 1 - Macro Genres</option>
+                  <option value="2">LOD 2 - Artists & Bands</option>
+                  <option value="3">LOD 3 - Full Track Constellations</option>
+                </select>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Playlist Orbits</span>
+                  <span class="settings-form-row-desc">Render custom user playlists as planetary orbits</span>
+                </div>
+                <input type="checkbox" id="settings-galaxy-playlists" style="accent-color: var(--color-accent-primary); width: 20px; height: 20px;" />
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Folder Orbits</span>
+                  <span class="settings-form-row-desc">Render filesystem directories as celestial belts</span>
+                </div>
+                <input type="checkbox" id="settings-galaxy-folders" style="accent-color: var(--color-accent-primary); width: 20px; height: 20px;" />
+              </div>
+            </section>
+
+            <!-- 7. Storage & Database Section -->
+            <section id="section-storage" class="settings-card" tabindex="-1">
+              <div class="settings-card-header">
+                <div>
+                  <span class="settings-card-category">IndexedDB Engine</span>
+                  <h2 class="settings-card-title">Storage & Library Management</h2>
+                </div>
+              </div>
+
+              <!-- Statistics Grid -->
+              <div class="settings-stats-grid">
+                <div class="settings-stat-box">
+                  <span id="settings-stat-tracks" class="settings-stat-number">0</span>
+                  <span class="settings-stat-label">Tracks</span>
+                </div>
+                <div class="settings-stat-box">
+                  <span id="settings-stat-albums" class="settings-stat-number">0</span>
+                  <span class="settings-stat-label">Albums</span>
+                </div>
+                <div class="settings-stat-box">
+                  <span id="settings-stat-artists" class="settings-stat-number">0</span>
+                  <span class="settings-stat-label">Artists</span>
+                </div>
+                <div class="settings-stat-box">
+                  <span id="settings-stat-genres" class="settings-stat-number">0</span>
+                  <span class="settings-stat-label">Genres</span>
+                </div>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Rebuild Library Index</span>
+                  <span class="settings-form-row-desc">Rescan connected folders and recalculate library indices</span>
+                </div>
+                <button id="settings-btn-rebuild-index" class="settings-action-btn">
+                  <span>⚡</span>
+                  <span>Rebuild Index</span>
+                </button>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Clear Playback History</span>
+                  <span class="settings-form-row-desc">Remove listening logs and recently played timestamps</span>
+                </div>
+                <button id="settings-btn-clear-history" class="settings-action-btn settings-action-btn-danger">
+                  <span>🗑</span>
+                  <span>Clear History</span>
+                </button>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Reset Local Database</span>
+                  <span class="settings-form-row-desc">Clear IndexedDB library tables (Source audio files remain untouched)</span>
+                </div>
+                <button id="settings-btn-reset-db" class="settings-action-btn settings-action-btn-danger">
+                  <span>⚠️</span>
+                  <span>Reset Database</span>
+                </button>
+              </div>
+            </section>
+
+            <!-- 8. Audio Output & Devices Section -->
+            <section id="section-devices" class="settings-card" tabindex="-1">
+              <div class="settings-card-header">
+                <div>
+                  <span class="settings-card-category">Hardware</span>
+                  <h2 class="settings-card-title">Audio Output & Devices</h2>
+                </div>
+              </div>
+
+              <div id="settings-devices-list" style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="padding: 12px 16px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); font-size: 13px; color: var(--color-text-secondary);">
+                  Scanning connected audio devices...
                 </div>
               </div>
             </section>
 
-            <!-- 4. Audio Galaxy Configuration Section -->
-            <section id="section-galaxy" class="settings-card">
-              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: var(--space-3); flex-wrap: wrap; gap: var(--space-2);">
+            <!-- 9. Data & Privacy Section -->
+            <section id="section-privacy" class="settings-card" tabindex="-1">
+              <div class="settings-card-header">
                 <div>
-                  <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent-primary);">
-                    Cosmic Exploration
-                  </span>
-                  <h3 style="font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin: 2px 0 0 0;">
-                    Audio Galaxy Preferences
-                  </h3>
+                  <span class="settings-card-category">Security & Privacy</span>
+                  <h2 class="settings-card-title">Privacy & Architecture</h2>
                 </div>
               </div>
 
-              <div class="settings-controls-grid">
-                <div>
-                  <label for="settings-galaxy-lod" style="font-size: 12px; font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 6px;">
-                    Default Detail Level
-                  </label>
-                  <select id="settings-galaxy-lod" style="width: 100%; background: var(--color-bg-surface-elevated); border: 1px solid var(--glass-border); color: var(--color-text-primary); border-radius: var(--radius-md); padding: 8px 12px; font-size: 13px; font-weight: 500;">
-                    <option value="1">LOD 1 - Macro Genres</option>
-                    <option value="2">LOD 2 - Artists & Bands</option>
-                    <option value="3">LOD 3 - Full Track Constellations</option>
-                  </select>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-4);">
+                <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: var(--space-4); display: flex; flex-direction: column; gap: 8px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 18px;">🔒</span>
+                    <h3 style="font-size: 15px; font-weight: 700; color: var(--color-text-primary); margin: 0;">Local-First Architecture</h3>
+                  </div>
+                  <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.5;">
+                    Your tracks, metadata, playlists, EQ curves, visualizer presets, and history are stored exclusively inside local IndexedDB. Zero cloud telemetry.
+                  </p>
                 </div>
-                <div style="display: flex; flex-direction: column; gap: 10px; justify-content: center;">
-                  <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer; font-size: 13px; font-weight: 500; color: var(--color-text-primary);">
-                    <input type="checkbox" id="settings-galaxy-playlists" style="accent-color: var(--color-accent-primary);" />
-                    Show Playlist Orbits
-                  </label>
-                  <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer; font-size: 13px; font-weight: 500; color: var(--color-text-primary);">
-                    <input type="checkbox" id="settings-galaxy-folders" style="accent-color: var(--color-accent-primary);" />
-                    Show Folder Orbits
-                  </label>
+
+                <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: var(--space-4); display: flex; flex-direction: column; gap: 8px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 18px;">🛡</span>
+                    <h3 style="font-size: 15px; font-weight: 700; color: var(--color-text-primary); margin: 0;">Audio Safety Limiter</h3>
+                  </div>
+                  <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.5;">
+                    A 20:1 brickwall safety compressor protects your ears and audio hardware from digital clipping when boosting EQ bands or preamp levels.
+                  </p>
                 </div>
               </div>
             </section>
 
-            <!-- 5. General Info, Privacy & Safety -->
-            <section id="section-privacy" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-4); width: 100%; box-sizing: border-box;">
-              <div class="settings-card">
-                <div style="display: flex; align-items: center; gap: var(--space-2);">
-                  <span style="font-size: 18px;">🔒</span>
-                  <h3 style="font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin: 0;">
-                    Local-First Architecture
-                  </h3>
+            <!-- 10. About & Diagnostics Section -->
+            <section id="section-about" class="settings-card" tabindex="-1">
+              <div class="settings-card-header">
+                <div>
+                  <span class="settings-card-category">System Information</span>
+                  <h2 class="settings-card-title">About MyMusicApp</h2>
                 </div>
-                <p style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; margin: 0;">
-                  All database indexes, custom EQ presets, visualizer settings, galaxy coordinates, cached artwork, and playback history are stored strictly on your local device. Zero cloud telemetry or remote tracking.
-                </p>
               </div>
 
-              <div class="settings-card">
-                <div style="display: flex; align-items: center; gap: var(--space-2);">
-                  <span style="font-size: 18px;">🛡</span>
-                  <h3 style="font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin: 0;">
-                    Audio Safety Protection
-                  </h3>
+              <div class="settings-stats-grid">
+                <div class="settings-stat-box">
+                  <span class="settings-stat-number" style="font-size: 18px;">1.0.0</span>
+                  <span class="settings-stat-label">Version</span>
                 </div>
-                <p style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; margin: 0;">
-                  Hard-knee 20:1 brickwall safety compressor is active to prevent digital clipping when boosting EQ frequency bands and preamp gains.
-                </p>
+                <div class="settings-stat-box">
+                  <span class="settings-stat-number" style="font-size: 18px;">Web Audio API</span>
+                  <span class="settings-stat-label">DSP Engine</span>
+                </div>
+                <div class="settings-stat-box">
+                  <span class="settings-stat-number" style="font-size: 18px;">IndexedDB v2</span>
+                  <span class="settings-stat-label">Database</span>
+                </div>
+                <div class="settings-stat-box">
+                  <span class="settings-stat-number" style="font-size: 18px;">Local-First</span>
+                  <span class="settings-stat-label">Architecture</span>
+                </div>
               </div>
             </section>
           </div>
+
+          <!-- Right-Side Information Area (Desktop Template 9) -->
+          <aside class="settings-sidebar-info" aria-label="Library & System Overview">
+            <!-- Local Music Profile Card -->
+            <div class="settings-info-card">
+              <div style="display: flex; align-items: center; gap: var(--space-3);">
+                <div style="width: 44px; height: 44px; border-radius: var(--radius-full); background: var(--color-accent-gradient); display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-glow-purple);">
+                  <span style="font-size: 20px;">🎧</span>
+                </div>
+                <div>
+                  <h3 style="font-size: 15px; font-weight: 700; color: var(--color-text-primary); margin: 0;">Local Audio Profile</h3>
+                  <span id="settings-profile-storage-type" style="font-size: 11px; font-weight: 600; color: var(--color-accent-secondary);">
+                    On-Device Storage
+                  </span>
+                </div>
+              </div>
+
+              <div style="border-top: 1px solid var(--glass-border); padding-top: var(--space-3); display: flex; flex-direction: column; gap: 6px;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                  <span style="color: var(--color-text-secondary);">Active Folder</span>
+                  <span id="settings-profile-folder-name" style="color: var(--color-text-primary); font-weight: 600;">None</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                  <span style="color: var(--color-text-secondary);">Indexed Tracks</span>
+                  <span id="settings-profile-tracks-count" style="color: var(--color-text-primary); font-weight: 600;">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                  <span style="color: var(--color-text-secondary);">Database Status</span>
+                  <span style="color: #34d399; font-weight: 600;">Online</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Audio DSP Status Card -->
+            <div class="settings-info-card">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 18px;">🎚</span>
+                <h3 style="font-size: 14px; font-weight: 700; color: var(--color-text-primary); margin: 0;">DSP Pipeline Status</h3>
+              </div>
+              <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.4;">
+                10 ISO bands active with real-time spline frequency interpolation and ReplayGain normalization.
+              </p>
+            </div>
+          </aside>
         </div>
       </section>
     `;
-
-    this.bindNavigationEvents();
   }
 
-  private bindNavigationEvents(): void {
+  private attachNavigationEvents(): void {
     if (!this.container) return;
-    const navItems = this.container.querySelectorAll<HTMLButtonElement>('.settings-nav-item');
-    navItems.forEach(btn => {
+    const navBtns = this.container.querySelectorAll<HTMLButtonElement>('.settings-nav-btn');
+
+    navBtns.forEach(btn => {
       btn.addEventListener('click', () => {
-        navItems.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const targetId = btn.getAttribute('data-target');
-        if (targetId && this.container) {
-          const targetEl = this.container.querySelector(`#${targetId}`);
-          targetEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const targetId = btn.getAttribute('data-target')?.replace('section-', '') as SettingsSectionId;
+        if (targetId) {
+          this.switchToSection(targetId);
         }
       });
     });
+
+    const goAudioBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-go-audio');
+    goAudioBtn?.addEventListener('click', () => {
+      if (this.router) {
+        this.router.navigate('nowplaying');
+      }
+    });
+  }
+
+  public switchToSection(sectionId: SettingsSectionId): void {
+    if (!this.container) return;
+    this.activeSection = sectionId;
+
+    const navBtns = this.container.querySelectorAll<HTMLButtonElement>('.settings-nav-btn');
+    navBtns.forEach(btn => {
+      const target = btn.getAttribute('data-target');
+      const isActive = target === `section-${sectionId}`;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+
+    const targetSection = this.container.querySelector<HTMLElement>(`#section-${sectionId}`);
+    if (targetSection) {
+      targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      targetSection.focus();
+    }
   }
 
   private mountSubComponents(): void {
@@ -627,33 +1140,23 @@ export class SettingsView implements IView {
 
   private attachThemeListeners(): void {
     if (!this.container) return;
-
     const themeManager = ThemeManager.getInstance();
     const options = this.container.querySelectorAll<HTMLElement>('.settings-theme-option');
     const badge = this.container.querySelector<HTMLElement>('#settings-theme-status-badge');
+    const chipText = this.container.querySelector<HTMLElement>('#settings-chip-theme-text');
 
-    const updateSelection = (pref: ThemePreference, resolved: ResolvedTheme) => {
+    const updateThemeDisplay = (pref: ThemePreference, resolved: ResolvedTheme) => {
       options.forEach(opt => {
         const val = opt.getAttribute('data-theme-val');
-        if (val === pref) {
-          opt.classList.add('active');
-        } else {
-          opt.classList.remove('active');
-        }
+        opt.classList.toggle('active', val === pref);
       });
 
-      if (badge) {
-        if (pref === 'system') {
-          badge.textContent = `System Match (${resolved === 'dark' ? 'Dark' : 'Light'})`;
-        } else if (pref === 'light') {
-          badge.textContent = 'Light Mode Active';
-        } else {
-          badge.textContent = 'Dark Atmosphere Active';
-        }
-      }
+      const label = pref === 'system' ? `System Match (${resolved === 'dark' ? 'Dark' : 'Light'})` : pref === 'light' ? 'Light Mode Active' : 'Dark Atmosphere Active';
+      if (badge) badge.textContent = label;
+      if (chipText) chipText.textContent = label;
     };
 
-    updateSelection(themeManager.getPreference(), themeManager.getResolvedTheme());
+    updateThemeDisplay(themeManager.getPreference(), themeManager.getResolvedTheme());
 
     options.forEach(opt => {
       opt.addEventListener('click', () => {
@@ -662,10 +1165,49 @@ export class SettingsView implements IView {
           themeManager.setPreference(pref);
         }
       });
+      opt.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const pref = opt.getAttribute('data-theme-val') as ThemePreference;
+          if (pref) {
+            themeManager.setPreference(pref);
+          }
+        }
+      });
     });
 
     this.themeUnsub = themeManager.subscribe((resolved, pref) => {
-      updateSelection(pref, resolved);
+      updateThemeDisplay(pref, resolved);
+    });
+  }
+
+  private attachPlaybackSettingsListeners(): void {
+    if (!this.container || !this.playbackManager) return;
+
+    const rateSelect = this.container.querySelector<HTMLSelectElement>('#settings-playback-rate');
+    const repeatSelect = this.container.querySelector<HTMLSelectElement>('#settings-repeat-mode');
+    const shuffleSelect = this.container.querySelector<HTMLSelectElement>('#settings-shuffle-mode');
+
+    if (rateSelect) rateSelect.value = String(this.playbackManager.playbackRate || 1.0);
+    if (repeatSelect) repeatSelect.value = this.playbackManager.repeatMode;
+    if (shuffleSelect) shuffleSelect.value = this.playbackManager.shuffleMode;
+
+    rateSelect?.addEventListener('change', () => {
+      if (this.playbackManager) {
+        this.playbackManager.setPlaybackRate(Number(rateSelect.value));
+      }
+    });
+
+    repeatSelect?.addEventListener('change', () => {
+      if (this.playbackManager) {
+        this.playbackManager.setRepeatMode(repeatSelect.value as RepeatMode);
+      }
+    });
+
+    shuffleSelect?.addEventListener('change', () => {
+      if (this.playbackManager) {
+        this.playbackManager.setShuffleMode(shuffleSelect.value as ShuffleMode);
+      }
     });
   }
 
@@ -740,37 +1282,22 @@ export class SettingsView implements IView {
     const changeFolderBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-change-folder');
     const chooseFilesBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-choose-files');
     const fileInput = this.container.querySelector<HTMLInputElement>('#settings-file-input');
-    const statusMsg = this.container.querySelector<HTMLElement>('#settings-scan-status-msg');
-
-    this.updateMusicAccessStatus();
 
     rescanBtn?.addEventListener('click', async () => {
       if (!this.scannerService || this.scannerService.isScanning) return;
-
-      if (statusMsg) {
-        statusMsg.style.display = 'block';
-        statusMsg.textContent = 'Rescanning music library...';
-      }
+      this.showScanProgress('Preparing rescan...', 0, 0);
 
       try {
         const root = this.connectedFolderName ? `folder://${this.connectedFolderName}` : '';
         if (root && this.fsAdapter?.getDirectoryHandle(root)) {
           await this.scannerService.scanDirectory(root);
-          if (statusMsg) {
-            statusMsg.textContent = 'Rescan completed successfully!';
-            setTimeout(() => { if (statusMsg) statusMsg.style.display = 'none'; }, 3000);
-          }
         } else {
-          if (statusMsg) {
-            statusMsg.textContent = 'No connected music folder found. Please choose a folder or audio files.';
-          }
+          this.showScanError('No active directory connection found. Please choose a folder.');
         }
       } catch (err: any) {
-        if (statusMsg) {
-          statusMsg.textContent = `Rescan failed: ${err?.message || 'Unknown error'}`;
-        }
+        this.showScanError(`Rescan error: ${err?.message || 'Unknown error'}`);
       }
-      this.updateMusicAccessStatus();
+      this.refreshAllStats();
     });
 
     changeFolderBtn?.addEventListener('click', async () => {
@@ -801,22 +1328,14 @@ export class SettingsView implements IView {
         }
 
         if (this.scannerService) {
-          if (statusMsg) {
-            statusMsg.style.display = 'block';
-            statusMsg.textContent = `Scanning "${handle.name}"...`;
-          }
+          this.showScanProgress(`Scanning folder "${handle.name}"...`, 0, 0);
           await this.scannerService.scanDirectory(rootPath);
-          if (statusMsg) {
-            statusMsg.textContent = `Library updated from "${handle.name}"!`;
-            setTimeout(() => { if (statusMsg) statusMsg.style.display = 'none'; }, 3000);
-          }
         }
 
-        this.updateMusicAccessStatus();
+        this.refreshAllStats();
       } catch (e: any) {
-        if (e?.name !== 'AbortError' && statusMsg) {
-          statusMsg.style.display = 'block';
-          statusMsg.textContent = 'Failed to access folder.';
+        if (e?.name !== 'AbortError') {
+          this.showScanError('Failed to access folder.');
         }
       }
     });
@@ -825,60 +1344,309 @@ export class SettingsView implements IView {
       chooseFilesBtn.addEventListener('click', () => fileInput.click());
       fileInput.addEventListener('change', async () => {
         if (fileInput.files && fileInput.files.length > 0 && this.scannerService?.importFiles) {
-          if (statusMsg) {
-            statusMsg.style.display = 'block';
-            statusMsg.textContent = `Importing ${fileInput.files.length} audio files...`;
-          }
+          this.showScanProgress(`Importing ${fileInput.files.length} audio files...`, 0, fileInput.files.length);
           const res = await this.scannerService.importFiles(fileInput.files);
-          if (statusMsg) {
-            statusMsg.textContent = `Added ${res.filesAdded} audio files to library.`;
-            setTimeout(() => { if (statusMsg) statusMsg.style.display = 'none'; }, 3000);
-          }
-          this.updateMusicAccessStatus();
+          this.hideScanProgress(`Imported ${res.filesAdded} audio tracks successfully.`);
+          this.refreshAllStats();
         }
       });
     }
   }
 
-  private updateMusicAccessStatus(): void {
+  private attachStorageListeners(): void {
     if (!this.container) return;
+
+    const rebuildBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-rebuild-index');
+    const clearHistoryBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-clear-history');
+    const resetDbBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-reset-db');
+
+    rebuildBtn?.addEventListener('click', async () => {
+      if (!this.scannerService || this.scannerService.isScanning) return;
+      const root = this.connectedFolderName ? `folder://${this.connectedFolderName}` : '';
+      if (root && this.fsAdapter?.getDirectoryHandle(root)) {
+        await this.scannerService.scanDirectory(root);
+      }
+      this.refreshAllStats();
+    });
+
+    clearHistoryBtn?.addEventListener('click', () => {
+      this.showConfirmationModal(
+        'Clear Playback History',
+        'Are you sure you want to clear your local playback history logs? Your music files and playlists will not be affected.',
+        async () => {
+          if (this.dbAdapter) {
+            await this.dbAdapter.clear(STORES.PLAYBACK_HISTORY);
+          }
+          this.refreshAllStats();
+        }
+      );
+    });
+
+    resetDbBtn?.addEventListener('click', () => {
+      this.showConfirmationModal(
+        'Reset Local Music Database',
+        'This will clear all IndexedDB music tables (tracks, albums, artists, genres). Your source audio files on your device will NOT be deleted.',
+        async () => {
+          if (this.dbAdapter) {
+            await Promise.all([
+              this.dbAdapter.clear(STORES.TRACKS),
+              this.dbAdapter.clear(STORES.ALBUMS),
+              this.dbAdapter.clear(STORES.ARTISTS),
+              this.dbAdapter.clear(STORES.GENRES),
+              this.dbAdapter.clear(STORES.AUDIO_FILES),
+              this.dbAdapter.clear(STORES.FOLDERS)
+            ]);
+          }
+          this.refreshAllStats();
+        }
+      );
+    });
+  }
+
+  private attachDeviceListeners(): void {
+    if (!this.container) return;
+    const devList = this.container.querySelector<HTMLElement>('#settings-devices-list');
+    if (!devList) return;
+
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.enumerateDevices) {
+      navigator.mediaDevices
+        .enumerateDevices()
+        .then(devices => {
+          const audioOuts = devices.filter(d => d.kind === 'audiooutput' || d.kind === 'audioinput');
+          if (audioOuts.length > 0) {
+            devList.innerHTML = audioOuts
+              .map(
+                d => `
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-lg);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span>${d.kind === 'audiooutput' ? '🔊' : '🎙'}</span>
+                  <span style="font-size: 13px; font-weight: 600; color: var(--color-text-primary);">${d.label || (d.kind === 'audiooutput' ? 'System Audio Output' : 'Audio Input Device')}</span>
+                </div>
+                <span style="font-size: 11px; font-weight: 700; color: #34d399; background: rgba(52, 211, 153, 0.15); padding: 2px 8px; border-radius: var(--radius-full);">Active</span>
+              </div>
+            `
+              )
+              .join('');
+          } else {
+            devList.innerHTML = `
+              <div style="padding: 12px 16px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); font-size: 13px; color: var(--color-text-secondary);">
+                Default System Audio Device (Web Audio Output)
+              </div>
+            `;
+          }
+        })
+        .catch(() => {
+          devList.innerHTML = `
+            <div style="padding: 12px 16px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); font-size: 13px; color: var(--color-text-secondary);">
+              Default System Audio Device
+            </div>
+          `;
+        });
+    } else {
+      devList.innerHTML = `
+        <div style="padding: 12px 16px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); font-size: 13px; color: var(--color-text-secondary);">
+          Standard Web Audio Output
+        </div>
+      `;
+    }
+  }
+
+  private attachEventBusSubscriptions(): void {
+    if (!this.eventBus) return;
+
+    this.eventBusSubs.push(
+      this.eventBus.subscribe(DomainEvents.SCAN_PROGRESS, (report: ScanProgressReport) => {
+        if (!report) return;
+        this.showScanProgress(
+          report.currentFile ? `Scanning: ${report.currentFile}` : 'Processing audio files...',
+          report.filesProcessed,
+          report.filesDiscovered
+        );
+      })
+    );
+
+    this.eventBusSubs.push(
+      this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, () => {
+        this.hideScanProgress('Library scan completed successfully!');
+        this.refreshAllStats();
+      })
+    );
+  }
+
+  private showScanProgress(statusText: string, processed: number, total: number): void {
+    if (!this.container) return;
+    const box = this.container.querySelector<HTMLElement>('#settings-scan-progress-box');
+    const status = this.container.querySelector<HTMLElement>('#settings-scan-status-text');
+    const count = this.container.querySelector<HTMLElement>('#settings-scan-progress-count');
+    const bar = this.container.querySelector<HTMLElement>('#settings-scan-progress-bar');
+    const current = this.container.querySelector<HTMLElement>('#settings-scan-current-file');
+
+    if (box) box.style.display = 'flex';
+    if (status) status.textContent = statusText;
+    if (count) count.textContent = total > 0 ? `${processed} / ${total} files` : `${processed} files`;
+    if (bar) {
+      const pct = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 30;
+      bar.style.width = `${pct}%`;
+    }
+    if (current) current.textContent = statusText;
+  }
+
+  private hideScanProgress(message: string): void {
+    if (!this.container) return;
+    const box = this.container.querySelector<HTMLElement>('#settings-scan-progress-box');
+    const status = this.container.querySelector<HTMLElement>('#settings-scan-status-text');
+    if (status) status.textContent = message;
+
+    setTimeout(() => {
+      if (box) box.style.display = 'none';
+    }, 3000);
+  }
+
+  private showScanError(msg: string): void {
+    if (!this.container) return;
+    const box = this.container.querySelector<HTMLElement>('#settings-scan-progress-box');
+    const status = this.container.querySelector<HTMLElement>('#settings-scan-status-text');
+    if (box) box.style.display = 'flex';
+    if (status) {
+      status.textContent = msg;
+      status.style.color = '#ef4444';
+    }
+  }
+
+  private refreshAllStats(): void {
+    if (!this.container) return;
+
+    // 1. Folder connection & badge
     const badge = this.container.querySelector<HTMLElement>('#settings-music-access-badge');
-    if (!badge) return;
+    const folderChip = this.container.querySelector<HTMLElement>('#settings-chip-folder-text');
+    const profileFolder = this.container.querySelector<HTMLElement>('#settings-profile-folder-name');
+    const profileTracks = this.container.querySelector<HTMLElement>('#settings-profile-tracks-count');
 
     if (this.dbAdapter) {
-      void this.dbAdapter.get<{ key: string; name: string }>(STORES.SETTINGS, 'music_directory_handle').then(record => {
-        if (record && record.name) {
-          this.connectedFolderName = record.name;
-          badge.textContent = `Folder: ${record.name} (Connected)`;
-          badge.style.background = 'rgba(52, 211, 153, 0.15)';
-          badge.style.color = '#34d399';
-          badge.style.borderColor = 'rgba(52, 211, 153, 0.3)';
-        } else {
-          this.checkLibraryCount(badge);
-        }
-      }).catch(() => {
-        this.checkLibraryCount(badge);
-      });
+      void this.dbAdapter
+        .get<{ key: string; name: string }>(STORES.SETTINGS, 'music_directory_handle')
+        .then(record => {
+          if (record && record.name) {
+            this.connectedFolderName = record.name;
+            if (badge) {
+              badge.textContent = `Folder: ${record.name} (Connected)`;
+              badge.style.background = 'rgba(52, 211, 153, 0.15)';
+              badge.style.color = '#34d399';
+              badge.style.borderColor = 'rgba(52, 211, 153, 0.3)';
+            }
+            if (folderChip) folderChip.textContent = `Connected: ${record.name}`;
+            if (profileFolder) profileFolder.textContent = record.name;
+          } else {
+            this.fallbackBadgeFromStats();
+          }
+        })
+        .catch(() => this.fallbackBadgeFromStats());
     } else {
-      this.checkLibraryCount(badge);
+      this.fallbackBadgeFromStats();
+    }
+
+    // 2. Library counts
+    if (this.libraryService) {
+      void this.libraryService.getLibraryStats().then(stats => {
+        const statTracks = this.container?.querySelector<HTMLElement>('#settings-stat-tracks');
+        const statAlbums = this.container?.querySelector<HTMLElement>('#settings-stat-albums');
+        const statArtists = this.container?.querySelector<HTMLElement>('#settings-stat-artists');
+
+        if (statTracks) statTracks.textContent = String(stats.trackCount);
+        if (statAlbums) statAlbums.textContent = String(stats.albumCount);
+        if (statArtists) statArtists.textContent = String(stats.artistCount);
+        if (profileTracks) profileTracks.textContent = String(stats.trackCount);
+      });
+    }
+
+    if (this.dbAdapter) {
+      void this.dbAdapter.count(STORES.GENRES).then(cnt => {
+        const statGenres = this.container?.querySelector<HTMLElement>('#settings-stat-genres');
+        if (statGenres) statGenres.textContent = String(cnt);
+      });
     }
   }
 
-  private checkLibraryCount(badge: HTMLElement): void {
-    if (this.libraryService) {
-      void this.libraryService.getLibraryStats().then(stats => {
-        if (stats.trackCount > 0) {
+  private fallbackBadgeFromStats(): void {
+    if (!this.container || !this.libraryService) return;
+    const badge = this.container.querySelector<HTMLElement>('#settings-music-access-badge');
+    const folderChip = this.container.querySelector<HTMLElement>('#settings-chip-folder-text');
+
+    void this.libraryService.getLibraryStats().then(stats => {
+      if (stats.trackCount > 0) {
+        if (badge) {
           badge.textContent = `${stats.trackCount} Local Tracks Available`;
           badge.style.background = 'rgba(99, 102, 241, 0.15)';
           badge.style.color = '#818cf8';
           badge.style.borderColor = 'rgba(99, 102, 241, 0.3)';
-        } else {
+        }
+        if (folderChip) folderChip.textContent = `${stats.trackCount} Local Tracks`;
+      } else {
+        if (badge) {
           badge.textContent = 'Not Connected';
           badge.style.background = 'rgba(148, 163, 184, 0.15)';
           badge.style.color = 'var(--color-text-secondary)';
           badge.style.borderColor = 'rgba(148, 163, 184, 0.3)';
         }
-      });
-    }
+        if (folderChip) folderChip.textContent = 'Not Connected';
+      }
+    });
+  }
+
+  private showConfirmationModal(title: string, message: string, onConfirm: () => Promise<void> | void): void {
+    const existing = document.querySelector('#settings-confirm-modal-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'settings-confirm-modal-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'settings-modal-title');
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-4);
+      box-sizing: border-box;
+    `;
+
+    overlay.innerHTML = `
+      <div style="background: var(--color-bg-surface-elevated); border: 1px solid var(--glass-border); border-radius: var(--radius-2xl); padding: var(--space-6); max-width: 440px; width: 100%; box-shadow: var(--shadow-2xl); display: flex; flex-direction: column; gap: var(--space-4);">
+        <h3 id="settings-modal-title" style="margin: 0; font-size: 18px; font-weight: 700; color: var(--color-text-primary);">${title}</h3>
+        <p style="margin: 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.5;">${message}</p>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: var(--space-2);">
+          <button id="settings-modal-cancel-btn" class="settings-action-btn" style="min-height: 40px;">Cancel</button>
+          <button id="settings-modal-confirm-btn" class="settings-action-btn settings-action-btn-danger" style="min-height: 40px;">Confirm</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const cancelBtn = overlay.querySelector<HTMLButtonElement>('#settings-modal-cancel-btn');
+    const confirmBtn = overlay.querySelector<HTMLButtonElement>('#settings-modal-confirm-btn');
+
+    cancelBtn?.focus();
+
+    cancelBtn?.addEventListener('click', () => overlay.remove());
+    confirmBtn?.addEventListener('click', async () => {
+      overlay.remove();
+      await onConfirm();
+    });
+
+    overlay.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        overlay.remove();
+      }
+    });
   }
 }

@@ -74,6 +74,21 @@ export class MockElement {
     };
   }
 
+  public get placeholder(): string {
+    return this.getAttribute('placeholder') || '';
+  }
+
+  public get dataset(): Record<string, string> {
+    const ds: Record<string, string> = {};
+    for (const [key, val] of this.attributes.entries()) {
+      if (key.startsWith('data-')) {
+        const camelKey = key.slice(5).replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+        ds[camelKey] = val;
+      }
+    }
+    return ds;
+  }
+
   public getContext(type: string, _options?: any): any {
     if (type === '2d') {
       return {
@@ -369,8 +384,8 @@ function parseHtmlToTree(html: string, root: MockElement): void {
           current.appendChild(element);
         }
 
-        const voidElements = ['input', 'img', 'br', 'hr', 'meta', 'link'];
-        if (!voidElements.includes(tagName.toLowerCase())) {
+        const isSelfClosing = (rawAttrs || '').trim().endsWith('/') || ['input', 'img', 'br', 'hr', 'meta', 'link', 'path', 'circle', 'line', 'polygon', 'polyline', 'rect', 'stop'].includes(tagName.toLowerCase());
+        if (!isSelfClosing) {
           stack.push(element);
         }
       }
@@ -404,6 +419,8 @@ export function setupMockDomEnvironment(): void {
       removeEventListener: () => {},
       document: doc,
       devicePixelRatio: 1,
+      setTimeout: (fn: Function, ms?: number) => globalThis.setTimeout(fn as any, ms),
+      clearTimeout: (id: any) => globalThis.clearTimeout(id),
       matchMedia: (query: string) => ({
         matches: false,
         media: query,
