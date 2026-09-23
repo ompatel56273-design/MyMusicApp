@@ -378,7 +378,7 @@ export class HeaderComponent {
     if (!this.container) return;
     const titleEl = this.container.querySelector('#header-route-title');
     if (titleEl) {
-      titleEl.textContent = state.route === 'nowplaying' ? 'Now Playing' : state.route;
+      titleEl.textContent = state.route === 'nowplaying' ? 'Now Playing' : state.route === 'stats' ? 'Statistics' : state.route;
     }
   }
 

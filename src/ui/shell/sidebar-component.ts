@@ -22,6 +22,7 @@ export class SidebarComponent {
     { id: 'library', label: 'Library', icon: 'library' },
     { id: 'search', label: 'Search', icon: 'search' },
     { id: 'playlists', label: 'Playlists', icon: 'playlist' },
+    { id: 'stats', label: 'Statistics', icon: 'bar-chart' },
     { id: 'galaxy', label: 'Galaxy', icon: 'galaxy' },
     { id: 'nowplaying', label: 'Now Playing', icon: 'now-playing' },
     { id: 'settings', label: 'Settings', icon: 'settings' }

@@ -1,4 +1,4 @@
-export type AppRoute = 'home' | 'library' | 'playlists' | 'galaxy' | 'settings' | 'search' | 'nowplaying';
+export type AppRoute = 'home' | 'library' | 'playlists' | 'galaxy' | 'settings' | 'search' | 'nowplaying' | 'stats';
 
 export type LibraryTab = 'songs' | 'albums' | 'artists' | 'genres' | 'folders' | 'favorites';
 
