@@ -64,6 +64,12 @@ describe('VisualizerCanvasRenderer', () => {
     renderer.setConfig({ mode: 'particles' });
     expect(() => renderer.drawFrame()).not.toThrow();
 
+    renderer.setConfig({ mode: 'pulse' });
+    expect(() => renderer.drawFrame()).not.toThrow();
+
+    renderer.setConfig({ mode: 'album-reactive' });
+    expect(() => renderer.drawFrame()).not.toThrow();
+
     renderer.setConfig({ mode: 'minimal' });
     expect(() => renderer.drawFrame()).not.toThrow();
 
@@ -83,7 +89,7 @@ describe('VisualizerCanvasRenderer', () => {
       timeDomainData: new Uint8Array(128).fill(128)
     }));
 
-    const modes = ['bars', 'waveform', 'circular', 'spectrum', 'particles', 'minimal'] as const;
+    const modes = ['bars', 'waveform', 'circular', 'spectrum', 'particles', 'pulse', 'album-reactive', 'minimal'] as const;
     for (const mode of modes) {
       renderer.setConfig({ mode });
       expect(() => renderer.drawFrame()).not.toThrow();
@@ -98,7 +104,7 @@ describe('VisualizerCanvasRenderer', () => {
       timeDomainData: new Uint8Array(128).fill(255)
     }));
 
-    const modes = ['bars', 'waveform', 'circular', 'spectrum', 'particles', 'minimal'] as const;
+    const modes = ['bars', 'waveform', 'circular', 'spectrum', 'particles', 'pulse', 'album-reactive', 'minimal'] as const;
     for (const mode of modes) {
       renderer.setConfig({ mode });
       expect(() => renderer.drawFrame()).not.toThrow();

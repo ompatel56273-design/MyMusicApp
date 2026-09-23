@@ -851,9 +851,13 @@ export class SettingsView implements IView {
                 </div>
                 <select id="settings-viz-mode" class="settings-input-control">
                   <option value="bars">Frequency Spectrum Bars</option>
-                  <option value="wave">Oscilloscope Waveform</option>
+                  <option value="waveform">Oscilloscope Waveform</option>
                   <option value="circular">Circular Radial Ring</option>
+                  <option value="spectrum">Continuous Filled Spectrum</option>
                   <option value="particles">Neon Audio Particles</option>
+                  <option value="pulse">Concentric Bass Pulse</option>
+                  <option value="album-reactive">Album-Reactive Chromatic</option>
+                  <option value="minimal">Minimal Ambient Orb</option>
                 </select>
               </div>
 

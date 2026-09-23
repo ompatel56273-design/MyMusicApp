@@ -26,12 +26,13 @@ import { PlayerControlsComponent } from '../components/player/player-controls-co
 import { QueuePanelComponent } from '../components/player/queue-panel-component';
 import { LyricsViewComponent } from '../components/player/lyrics-view-component';
 import { AudioInfoPanelComponent } from '../components/player/audio-info-panel-component';
+import { VisualizerComponent } from '../components/visualizer/visualizer-component';
 import { SleepTimerService } from '../../services/playback/sleep-timer-service';
 import { SleepTimerModalComponent } from '../components/player/sleep-timer-modal';
 import { escapeHtml } from '../../core/security/html-sanitizer';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
-export type NowPlayingTab = 'queue' | 'lyrics' | 'info';
+export type NowPlayingTab = 'queue' | 'lyrics' | 'info' | 'visualizer';
 
 export interface NowPlayingViewDependencies {
   playbackManager: IPlaybackManager;
@@ -50,7 +51,7 @@ export interface NowPlayingViewDependencies {
  * Features:
  * - Authoritative Desktop, Tablet, and Mobile Templates 6 & 7 layouts
  * - Left Player Hero: Vinyl artwork presentation, ambient radial glows, track title, artist, album, format badge
- * - Center / Right Tabbed Experience: Up Next live queue, Synced Lyrics with live cue highlighting, Audio Technical info
+ * - Center / Right Tabbed Experience: Up Next live queue, Synced Lyrics with live cue highlighting, Audio Technical info, Real-time Audio Visualizer
  * - Smooth playback controls, progress seek bar, volume slider, favorite toggle
  * - Full reactivity with PlaybackManager events and zero duplicate clock logic
  */
@@ -71,6 +72,7 @@ export class NowPlayingView implements IView {
   private queueComponent: QueuePanelComponent | null = null;
   private lyricsComponent: LyricsViewComponent | null = null;
   private audioInfoComponent: AudioInfoPanelComponent | null = null;
+  private visualizerComponent: VisualizerComponent | null = null;
 
   private activeTab: NowPlayingTab = 'queue';
   private subscriptions: Disposable[] = [];
@@ -86,8 +88,6 @@ export class NowPlayingView implements IView {
     this.router = deps.router;
     this.eventBus = deps.eventBus;
     this.sleepTimerService = deps.sleepTimerService;
-    void this.audioEngine;
-    void this.visualizerService;
   }
 
   public mount(container: HTMLElement, _params?: RouteParams): void {
@@ -124,6 +124,10 @@ export class NowPlayingView implements IView {
       this.audioInfoComponent.unmount();
       this.audioInfoComponent = null;
     }
+    if (this.visualizerComponent) {
+      this.visualizerComponent.unmount();
+      this.visualizerComponent = null;
+    }
 
     if (this.container) {
       this.container.innerHTML = '';
@@ -152,7 +156,8 @@ export class NowPlayingView implements IView {
     const tabs: Array<{ id: NowPlayingTab; label: string; icon: IconName }> = [
       { id: 'queue', label: 'Up Next', icon: 'list' },
       { id: 'lyrics', label: 'Synced Lyrics', icon: 'mic' },
-      { id: 'info', label: 'Audio Info', icon: 'info' }
+      { id: 'info', label: 'Audio Info', icon: 'info' },
+      { id: 'visualizer', label: 'Visualizer', icon: 'maximize' }
     ];
 
     this.container.innerHTML = `
@@ -576,6 +581,14 @@ export class NowPlayingView implements IView {
     } else if (this.activeTab === 'info') {
       this.audioInfoComponent = new AudioInfoPanelComponent();
       this.audioInfoComponent.mount(tabSlot, this.currentTrack);
+    } else if (this.activeTab === 'visualizer' && this.audioEngine) {
+      this.visualizerComponent = new VisualizerComponent({
+        audioEngine: this.audioEngine,
+        visualizerService: this.visualizerService,
+        playbackManager: this.playbackManager,
+        eventBus: this.eventBus
+      });
+      void this.visualizerComponent.mount(tabSlot);
     }
   }
 

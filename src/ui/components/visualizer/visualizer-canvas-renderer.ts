@@ -159,6 +159,12 @@ export class VisualizerCanvasRenderer {
       case 'particles':
         this.renderParticles(ctx, width, height, metrics.rms);
         break;
+      case 'pulse':
+        this.renderPulse(ctx, width, height, metrics.rms, metrics.peak);
+        break;
+      case 'album-reactive':
+        this.renderAlbumReactive(ctx, width, height, metrics.rms, metrics.peak);
+        break;
       case 'minimal':
         this.renderMinimal(ctx, width, height, metrics.rms, metrics.peak);
         break;
@@ -316,7 +322,118 @@ export class VisualizerCanvasRenderer {
     }
   }
 
-  // 6. Minimal (Subtle pulsing orb / level indicator)
+  // 6. Pulse (Concentric expanding shockwave rings and central radiant core)
+  private renderPulse(ctx: CanvasRenderingContext2D, width: number, height: number, rms: number, peak: number): void {
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const minDim = Math.min(width, height);
+    const baseRadius = minDim * 0.12;
+
+    // Center radiant pulsing core
+    const coreRadius = baseRadius * (1 + rms * 1.5);
+    const grad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, coreRadius * 1.8);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+    grad.addColorStop(0.3, 'rgba(168, 85, 247, 0.8)');
+    grad.addColorStop(0.7, 'rgba(6, 182, 212, 0.4)');
+    grad.addColorStop(1, 'rgba(6, 182, 212, 0)');
+
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, coreRadius * 1.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Concentric shockwave rings (4 layers reactive to different frequency bands)
+    const ringCount = 4;
+    for (let r = 1; r <= ringCount; r++) {
+      const bandIndex = Math.min(127, r * 20);
+      const bandEnergy = (this.frequencyData[bandIndex] || 0) / 255;
+      const ringRadius = baseRadius + (r / ringCount) * (minDim * 0.35) + bandEnergy * 25 + peak * 15;
+      const alpha = Math.max(0.1, (1 - r / (ringCount + 1)) * (0.4 + bandEnergy * 0.6));
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, ringRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(168, 85, 247, ${alpha.toFixed(2)})`;
+      ctx.lineWidth = 1.5 + bandEnergy * 2;
+      ctx.stroke();
+    }
+
+    // Radial transient spikes (32 rays)
+    const numSpikes = 32;
+    for (let i = 0; i < numSpikes; i++) {
+      const binIdx = Math.floor((i / numSpikes) * 64);
+      const energy = (this.frequencyData[binIdx] || 0) / 255;
+      const angle = (i / numSpikes) * Math.PI * 2;
+      const startDist = coreRadius * 1.1;
+      const endDist = startDist + energy * (minDim * 0.2) + peak * 10;
+
+      const x1 = centerX + Math.cos(angle) * startDist;
+      const y1 = centerY + Math.sin(angle) * startDist;
+      const x2 = centerX + Math.cos(angle) * endDist;
+      const y2 = centerY + Math.sin(angle) * endDist;
+
+      ctx.strokeStyle = `rgba(6, 182, 212, ${(0.3 + energy * 0.7).toFixed(2)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+  }
+
+  // 7. Album-Reactive (Flowing multi-layered chromatic wave ribbons with mirror reflection)
+  private renderAlbumReactive(ctx: CanvasRenderingContext2D, width: number, height: number, rms: number, _peak: number): void {
+    const centerY = height / 2;
+    const sliceCount = 64;
+    const sliceWidth = width / (sliceCount - 1);
+
+    // Layer 1: Bottom mirrored cyan chromatic wave
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    for (let i = 0; i < sliceCount; i++) {
+      const bin = Math.min(127, i * 2);
+      const freq = (this.frequencyData[bin] || 0) / 255;
+      const amp = freq * (height * 0.38) * (0.5 + rms);
+      const x = i * sliceWidth;
+      const y = centerY + amp;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = 'rgba(6, 182, 212, 0.7)';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Layer 2: Top purple chromatic wave
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    for (let i = 0; i < sliceCount; i++) {
+      const bin = Math.min(127, i * 2);
+      const freq = (this.frequencyData[bin] || 0) / 255;
+      const amp = freq * (height * 0.38) * (0.5 + rms);
+      const x = i * sliceWidth;
+      const y = centerY - amp;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = 'rgba(168, 85, 247, 0.85)';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Center glow line with time-domain detail
+    ctx.beginPath();
+    const tdSlice = width / 128;
+    for (let i = 0; i < 128; i++) {
+      const v = ((this.timeDomainData[i] || 128) - 128) / 128; // [-1, 1]
+      const x = i * tdSlice;
+      const y = centerY + v * 30 * (1 + rms * 2);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  // 8. Minimal (Subtle pulsing orb / level indicator)
   private renderMinimal(ctx: CanvasRenderingContext2D, width: number, height: number, rms: number, peak: number): void {
     const centerX = width / 2;
     const centerY = height / 2;
@@ -325,9 +442,9 @@ export class VisualizerCanvasRenderer {
 
     // Glowing circle
     const grad = ctx.createRadialGradient(centerX, centerY, baseRadius * 0.5, centerX, centerY, pulseRadius * 1.5);
-    grad.addColorStop(0, 'rgba(255, 107, 0, 0.6)');
-    grad.addColorStop(0.6, 'rgba(255, 107, 0, 0.2)');
-    grad.addColorStop(1, 'rgba(255, 107, 0, 0)');
+    grad.addColorStop(0, 'rgba(168, 85, 247, 0.6)');
+    grad.addColorStop(0.6, 'rgba(6, 182, 212, 0.2)');
+    grad.addColorStop(1, 'rgba(6, 182, 212, 0)');
 
     ctx.fillStyle = grad;
     ctx.beginPath();

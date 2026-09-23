@@ -79,7 +79,7 @@ export class VisualizerComponent {
   private render(): void {
     if (!this.container) return;
 
-    const modes: VisualizerMode[] = ['bars', 'waveform', 'circular', 'spectrum', 'particles', 'minimal'];
+    const modes: VisualizerMode[] = ['bars', 'waveform', 'circular', 'spectrum', 'particles', 'pulse', 'album-reactive', 'minimal'];
 
     this.container.innerHTML = `
       <div
