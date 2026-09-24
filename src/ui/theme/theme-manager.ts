@@ -6,6 +6,14 @@ import {
   getAccentTheme,
   getAllAccentThemes
 } from './accent-theme';
+import {
+  type AmbientMode,
+  type AmbientModeDefinition,
+  DEFAULT_AMBIENT_MODE,
+  AMBIENT_MODES,
+  getAmbientMode,
+  getAllAmbientModes
+} from './ambient-background';
 
 export type ThemePreference = 'dark' | 'light' | 'system';
 export type ResolvedTheme = 'dark' | 'light';
@@ -18,8 +26,13 @@ export interface AccentThemeChangeListener {
   (accent: AccentThemeId, definition: AccentThemeDefinition): void;
 }
 
+export interface AmbientModeChangeListener {
+  (mode: AmbientMode, definition: AmbientModeDefinition): void;
+}
+
 const STORAGE_KEY = 'mymusicapp_theme_preference';
 const ACCENT_STORAGE_KEY = 'mymusicapp_accent_theme';
+const AMBIENT_STORAGE_KEY = 'mymusicapp_ambient_mode';
 
 /**
  * Centralized Theme Manager for MyMusicApp.
@@ -28,6 +41,7 @@ const ACCENT_STORAGE_KEY = 'mymusicapp_accent_theme';
  * - 'light': Light Mode
  * - 'system': Follows OS prefers-color-scheme dynamically via matchMedia
  * - Accent Themes: User-selectable color accents (Purple, Cyan, Blue, Emerald, Amber, Pink, Rose)
+ * - Ambient Backgrounds: Optional atmospheric visual backgrounds (Off, Aurora, Gradient Flow, Soft Glow, Static Gradient)
  *
  * Persists preferences and updates documentElement attributes and custom CSS properties.
  */
@@ -35,16 +49,19 @@ export class ThemeManager {
   private static instance: ThemeManager | null = null;
   private preference: ThemePreference = 'dark';
   private accentTheme: AccentThemeId = DEFAULT_ACCENT_THEME;
+  private ambientMode: AmbientMode = DEFAULT_AMBIENT_MODE;
   private mediaQuery: MediaQueryList | null = null;
   private mediaQueryListener: ((e: MediaQueryListEvent) => void) | null = null;
   private listeners: Set<ThemeChangeListener> = new Set();
   private accentListeners: Set<AccentThemeChangeListener> = new Set();
+  private ambientListeners: Set<AmbientModeChangeListener> = new Set();
 
   private constructor() {
     this.loadPreference();
     this.setupMediaQuery();
     this.applyTheme();
     this.applyAccentTheme();
+    this.applyAmbientMode();
   }
 
   public static getInstance(): ThemeManager {
@@ -94,6 +111,27 @@ export class ThemeManager {
     this.notifyAccentListeners();
   }
 
+  public getAmbientMode(): AmbientMode {
+    return this.ambientMode;
+  }
+
+  public getAmbientModeDefinition(): AmbientModeDefinition {
+    return getAmbientMode(this.ambientMode);
+  }
+
+  public getAvailableAmbientModes(): readonly AmbientModeDefinition[] {
+    return getAllAmbientModes();
+  }
+
+  public setAmbientMode(mode: AmbientMode | string): void {
+    const validMode = (mode && mode in AMBIENT_MODES ? mode : DEFAULT_AMBIENT_MODE) as AmbientMode;
+    if (this.ambientMode === validMode) return;
+    this.ambientMode = validMode;
+    this.saveAmbientPreference();
+    this.applyAmbientMode();
+    this.notifyAmbientListeners();
+  }
+
   public subscribe(listener: ThemeChangeListener): () => void {
     this.listeners.add(listener);
     // Immediately notify current state
@@ -112,6 +150,15 @@ export class ThemeManager {
     };
   }
 
+  public subscribeAmbient(listener: AmbientModeChangeListener): () => void {
+    this.ambientListeners.add(listener);
+    // Immediately notify current state
+    listener(this.ambientMode, this.getAmbientModeDefinition());
+    return () => {
+      this.ambientListeners.delete(listener);
+    };
+  }
+
   private loadPreference(): void {
     try {
       if (typeof localStorage !== 'undefined') {
@@ -122,6 +169,10 @@ export class ThemeManager {
         const storedAccent = localStorage.getItem(ACCENT_STORAGE_KEY) as AccentThemeId | null;
         if (storedAccent && storedAccent in ACCENT_THEMES) {
           this.accentTheme = storedAccent;
+        }
+        const storedAmbient = localStorage.getItem(AMBIENT_STORAGE_KEY) as AmbientMode | null;
+        if (storedAmbient && storedAmbient in AMBIENT_MODES) {
+          this.ambientMode = storedAmbient;
         }
       }
     } catch (_e) {
@@ -143,6 +194,16 @@ export class ThemeManager {
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(ACCENT_STORAGE_KEY, this.accentTheme);
+      }
+    } catch (_e) {
+      // Ignore storage errors in restricted contexts
+    }
+  }
+
+  private saveAmbientPreference(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(AMBIENT_STORAGE_KEY, this.ambientMode);
       }
     } catch (_e) {
       // Ignore storage errors in restricted contexts
@@ -232,6 +293,35 @@ export class ThemeManager {
     }
   }
 
+  public applyAmbientMode(): void {
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.setAttribute('data-ambient', this.ambientMode);
+
+      let bgContainer = document.getElementById('app-ambient-bg');
+      if (!bgContainer && document.body) {
+        bgContainer = document.createElement('div');
+        bgContainer.id = 'app-ambient-bg';
+        bgContainer.setAttribute('aria-hidden', 'true');
+        bgContainer.innerHTML = `
+          <div class="ambient-blob ambient-blob-1"></div>
+          <div class="ambient-blob ambient-blob-2"></div>
+          <div class="ambient-blob ambient-blob-3"></div>
+        `;
+        if (typeof document.body.prepend === 'function') {
+          document.body.prepend(bgContainer);
+        } else if (document.body.firstChild) {
+          document.body.insertBefore(bgContainer, document.body.firstChild);
+        } else {
+          document.body.appendChild(bgContainer);
+        }
+      }
+
+      if (bgContainer) {
+        bgContainer.className = `ambient-bg-root ambient-mode-${this.ambientMode}`;
+      }
+    }
+  }
+
   private notifyListeners(): void {
     const resolved = this.getResolvedTheme();
     for (const listener of this.listeners) {
@@ -250,6 +340,17 @@ export class ThemeManager {
         listener(this.accentTheme, def);
       } catch (err) {
         console.error('Error in ThemeManager accent listener:', err);
+      }
+    }
+  }
+
+  private notifyAmbientListeners(): void {
+    const def = this.getAmbientModeDefinition();
+    for (const listener of this.ambientListeners) {
+      try {
+        listener(this.ambientMode, def);
+      } catch (err) {
+        console.error('Error in ThemeManager ambient listener:', err);
       }
     }
   }

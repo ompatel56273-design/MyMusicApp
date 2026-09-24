@@ -1512,3 +1512,155 @@ html, body {
   box-sizing: border-box;
 }
 
+/* ==========================================================================
+   AMBIENT BACKGROUND ENGINE & STYLES (F2.2)
+   ========================================================================== */
+
+#app-ambient-bg,
+.ambient-bg-root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: -1;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.6s var(--ease-smooth);
+}
+
+.ambient-blob {
+  position: absolute;
+  border-radius: var(--radius-full);
+  filter: blur(80px);
+  will-change: transform, opacity;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* 1. Mode: Off */
+[data-ambient="off"] #app-ambient-bg,
+.ambient-mode-off {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+/* 2. Mode: Aurora Borealis */
+[data-ambient="aurora"] #app-ambient-bg,
+.ambient-mode-aurora {
+  opacity: 1;
+}
+
+.ambient-mode-aurora .ambient-blob-1 {
+  top: -10%;
+  left: 15%;
+  width: 55vw;
+  height: 55vw;
+  background: radial-gradient(circle, var(--color-accent-purple-glow, #a855f7) 0%, rgba(139, 92, 246, 0) 70%);
+  animation: ambient-aurora-drift-1 18s ease-in-out infinite alternate;
+}
+
+.ambient-mode-aurora .ambient-blob-2 {
+  bottom: -15%;
+  right: 10%;
+  width: 50vw;
+  height: 50vw;
+  background: radial-gradient(circle, var(--color-accent-secondary, #38bdf8) 0%, rgba(6, 182, 212, 0) 70%);
+  animation: ambient-aurora-drift-2 22s ease-in-out infinite alternate;
+}
+
+.ambient-mode-aurora .ambient-blob-3 {
+  top: 35%;
+  left: 30%;
+  width: 45vw;
+  height: 45vw;
+  background: radial-gradient(circle, var(--color-accent-purple-soft, #c084fc) 0%, rgba(236, 72, 153, 0) 70%);
+  animation: ambient-aurora-drift-3 15s ease-in-out infinite alternate;
+}
+
+@keyframes ambient-aurora-drift-1 {
+  0% { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
+  50% { transform: translate3d(8%, 12%, 0) scale(1.15) rotate(15deg); }
+  100% { transform: translate3d(-6%, 5%, 0) scale(0.95) rotate(-10deg); }
+}
+
+@keyframes ambient-aurora-drift-2 {
+  0% { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
+  50% { transform: translate3d(-10%, -8%, 0) scale(1.2) rotate(-20deg); }
+  100% { transform: translate3d(5%, -15%, 0) scale(0.9) rotate(10deg); }
+}
+
+@keyframes ambient-aurora-drift-3 {
+  0% { transform: translate3d(0, 0, 0) scale(0.9) opacity: 0.25; }
+  50% { transform: translate3d(-12%, 10%, 0) scale(1.1) opacity: 0.45; }
+  100% { transform: translate3d(10%, -8%, 0) scale(1) opacity: 0.3; }
+}
+
+/* 3. Mode: Gradient Flow */
+[data-ambient="gradient-flow"] #app-ambient-bg,
+.ambient-mode-gradient-flow {
+  opacity: 1;
+  background: linear-gradient(-45deg, var(--color-bg-base), var(--color-accent-muted), var(--color-bg-surface), var(--color-accent-subtle));
+  background-size: 400% 400%;
+  animation: ambient-gradient-flow-anim 16s ease infinite;
+}
+
+.ambient-mode-gradient-flow .ambient-blob {
+  display: none;
+}
+
+@keyframes ambient-gradient-flow-anim {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* 4. Mode: Soft Glow */
+[data-ambient="soft-glow"] #app-ambient-bg,
+.ambient-mode-soft-glow {
+  opacity: 1;
+}
+
+.ambient-mode-soft-glow .ambient-blob-1 {
+  top: 20%;
+  left: 25%;
+  width: 50vw;
+  height: 50vw;
+  background: radial-gradient(circle, var(--color-accent-muted, rgba(139, 92, 246, 0.25)) 0%, rgba(7, 9, 14, 0) 70%);
+  animation: ambient-soft-pulse 8s ease-in-out infinite alternate;
+}
+
+.ambient-mode-soft-glow .ambient-blob-2,
+.ambient-mode-soft-glow .ambient-blob-3 {
+  display: none;
+}
+
+@keyframes ambient-soft-pulse {
+  0% { transform: scale(0.95); opacity: 0.25; }
+  100% { transform: scale(1.15); opacity: 0.45; }
+}
+
+/* 5. Mode: Static Gradient */
+[data-ambient="static-gradient"] #app-ambient-bg,
+.ambient-mode-static-gradient {
+  opacity: 1;
+  background: radial-gradient(circle at 50% 30%, var(--color-accent-muted, rgba(139, 92, 246, 0.2)) 0%, var(--color-bg-base) 70%);
+}
+
+.ambient-mode-static-gradient .ambient-blob {
+  display: none;
+}
+
+/* --- Reduced Motion Accessibility Support --- */
+@media (prefers-reduced-motion: reduce) {
+  #app-ambient-bg,
+  .ambient-bg-root,
+  .ambient-blob {
+    animation: none !important;
+    transition: opacity 0.3s ease !important;
+  }
+}
+

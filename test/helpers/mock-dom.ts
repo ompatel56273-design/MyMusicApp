@@ -306,6 +306,18 @@ export class MockElement {
     return child;
   }
 
+  public prepend<T extends MockElement>(child: T): T {
+    child.parent = this;
+    this.children.unshift(child);
+    return child;
+  }
+
+  public insertBefore<T extends MockElement>(child: T, _refNode: MockElement | null): T {
+    child.parent = this;
+    this.children.unshift(child);
+    return child;
+  }
+
   public removeChild<T extends MockElement>(child: T): T {
     const idx = this.children.indexOf(child);
     if (idx !== -1) {
