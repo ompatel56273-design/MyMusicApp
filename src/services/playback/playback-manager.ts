@@ -56,6 +56,11 @@ export class PlaybackManager implements IPlaybackManager {
   private preloadedTrack: Track | null = null;
   private preloadPromise: Promise<void> | null = null;
 
+  // Crossfade state
+  private crossfadeEnabledValue = false;
+  private crossfadeDurationSecValue = 3;
+  private isCrossfadingActive = false;
+
   // Position persistence & history tracking
   private lastPositionPersistTime = 0;
   private sessionListenStartMs = 0;
@@ -113,6 +118,26 @@ export class PlaybackManager implements IPlaybackManager {
 
   public get playbackRate(): number {
     return this.currentPlaybackRate;
+  }
+
+  public get crossfadeEnabled(): boolean {
+    return this.crossfadeEnabledValue;
+  }
+
+  public get crossfadeDurationSec(): number {
+    return this.crossfadeDurationSecValue;
+  }
+
+  public setCrossfade(enabled: boolean, durationSec?: number): void {
+    this.crossfadeEnabledValue = enabled;
+    if (durationSec !== undefined) {
+      this.crossfadeDurationSecValue = Math.max(1, Math.min(12, durationSec));
+    }
+    this.audioEngine.setCrossfade?.(this.crossfadeEnabledValue, this.crossfadeDurationSecValue);
+    if (!this.crossfadeEnabledValue && this.isCrossfadingActive) {
+      this.audioEngine.cancelCrossfade?.();
+      this.isCrossfadingActive = false;
+    }
   }
 
   public get repeatMode(): RepeatMode {
@@ -354,6 +379,10 @@ export class PlaybackManager implements IPlaybackManager {
 
   public async pause(): Promise<void> {
     if (this.currentState === 'playing') {
+      if (this.isCrossfadingActive) {
+        this.audioEngine.cancelCrossfade?.();
+        this.isCrossfadingActive = false;
+      }
       this.audioEngine.pause();
       this.transitionToState('paused');
       await this.persistCurrentPosition();
@@ -363,6 +392,10 @@ export class PlaybackManager implements IPlaybackManager {
 
   public async resume(): Promise<void> {
     if (this.currentState === 'paused' || this.currentState === 'ready') {
+      if (this.isCrossfadingActive) {
+        this.audioEngine.cancelCrossfade?.();
+        this.isCrossfadingActive = false;
+      }
       this.sessionListenStartMs = Date.now();
       await this.audioEngine.play();
       this.transitionToState('playing');
@@ -610,10 +643,19 @@ export class PlaybackManager implements IPlaybackManager {
   /**
    * Cancels in-flight preloading and resets prepared standby track.
    */
+  /**
+   * Cancels in-flight preloading and resets prepared standby track and crossfades.
+   */
   private cancelPreload(): void {
     this.preloadToken++;
     this.preloadedTrack = null;
     this.preloadPromise = null;
+    if (this.isCrossfadingActive) {
+      this.isCrossfadingActive = false;
+    }
+    if (this.audioEngine.cancelCrossfade) {
+      this.audioEngine.cancelCrossfade();
+    }
     if (this.audioEngine.cancelPreload) {
       this.audioEngine.cancelPreload();
     }
@@ -638,6 +680,75 @@ export class PlaybackManager implements IPlaybackManager {
       this.lastPositionPersistTime = now;
       void this.persistCurrentPosition();
     }
+
+    // Trigger crossfade transition if enabled and threshold reached
+    if (
+      this.crossfadeEnabledValue &&
+      !this.isCrossfadingActive &&
+      this.currentState === 'playing' &&
+      durSec > 0 &&
+      this.preloadedTrack &&
+      this.audioEngine.hasPreparedNext?.() &&
+      this.audioEngine.startCrossfadeToNext
+    ) {
+      const remainingSec = durSec - sec;
+      const effectiveDuration = Math.min(this.crossfadeDurationSecValue, durSec / 2);
+      if (remainingSec <= effectiveDuration && remainingSec >= 0) {
+        const nextIdx = this.queueManager.getNextIndex();
+        if (nextIdx !== null) {
+          const tracks = this.queueManager.getTracks();
+          const nextTrack = tracks[nextIdx];
+          if (nextTrack && nextTrack.id === this.preloadedTrack.id) {
+            this.isCrossfadingActive = true;
+            void this.triggerCrossfade(nextIdx, nextTrack, effectiveDuration);
+          }
+        }
+      }
+    }
+  }
+
+  private async triggerCrossfade(nextIdx: number, nextTrack: Track, effectiveDuration: number): Promise<void> {
+    try {
+      if (!this.audioEngine.startCrossfadeToNext) {
+        this.isCrossfadingActive = false;
+        return;
+      }
+
+      await this.audioEngine.startCrossfadeToNext(effectiveDuration);
+
+      // Record listening duration / history for outgoing track
+      const outgoingTrack = this.currentTrackEntity;
+      this.updateListeningDuration();
+      if (outgoingTrack && !this.hasCountedPlay) {
+        this.hasCountedPlay = true;
+        void this.recordPlaybackHistory(true, outgoingTrack);
+      }
+
+      const previousTrack = this.currentTrackEntity;
+      this.queueManager.setActiveIndex(nextIdx);
+      this.emitQueueChanged();
+      void this.syncQueueToRepository();
+
+      this.currentTrackEntity = nextTrack;
+      this.currentDurationMs = nextTrack.durationMs || 0;
+      this.currentPositionMs = 0;
+      this.sessionListenStartMs = Date.now();
+      this.sessionListenedMs = 0;
+      this.hasCountedPlay = false;
+
+      this.transitionToState('playing');
+      this.eventBus.publish(DomainEvents.TRACK_CHANGED, {
+        currentTrack: nextTrack,
+        previousTrack,
+        positionMs: 0
+      });
+
+      this.preloadedTrack = null;
+      this.preloadPromise = this.preloadNextTrack();
+    } catch (err) {
+      this.isCrossfadingActive = false;
+      this.logger.warn('Crossfade transition trigger failed:', { error: String(err) });
+    }
   }
 
   private updateListeningDuration(): void {
@@ -660,6 +771,13 @@ export class PlaybackManager implements IPlaybackManager {
   }
 
   private async handleTrackEnded(): Promise<void> {
+    // If crossfading was active, the outgoing track finished its gain ramp-down.
+    // The incoming track is already playing as active track, so ignore onEnded from the old track.
+    if (this.isCrossfadingActive || (this.audioEngine.isCrossfading)) {
+      this.isCrossfadingActive = false;
+      return;
+    }
+
     this.updateListeningDuration();
     if (this.currentTrackEntity && !this.hasCountedPlay) {
       this.hasCountedPlay = true;
@@ -765,14 +883,15 @@ export class PlaybackManager implements IPlaybackManager {
     }
   }
 
-  private async recordPlaybackHistory(completed: boolean): Promise<void> {
-    if (!this.currentTrackEntity) return;
+  private async recordPlaybackHistory(completed: boolean, trackToRecord?: Track): Promise<void> {
+    const targetTrack = trackToRecord ?? this.currentTrackEntity;
+    if (!targetTrack) return;
 
     try {
       // 1. Record history item
       if (this.historyRepo) {
         const historyRecord: Omit<PlaybackHistoryItem, 'id'> = {
-          trackId: this.currentTrackEntity.id,
+          trackId: targetTrack.id,
           playedAt: Date.now(),
           durationListenedMs: this.sessionListenedMs,
           completed
@@ -781,9 +900,9 @@ export class PlaybackManager implements IPlaybackManager {
       }
 
       // 2. Increment track play count & update lastPlayedAt
-      await this.trackRepo.incrementPlayCount(this.currentTrackEntity.id, Date.now());
-      const updatedTrack = await this.trackRepo.getById(this.currentTrackEntity.id);
-      if (updatedTrack) {
+      await this.trackRepo.incrementPlayCount(targetTrack.id, Date.now());
+      const updatedTrack = await this.trackRepo.getById(targetTrack.id);
+      if (updatedTrack && this.currentTrackEntity?.id === targetTrack.id) {
         this.currentTrackEntity = updatedTrack;
       }
     } catch (err) {

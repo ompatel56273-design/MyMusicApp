@@ -767,6 +767,35 @@ export class SettingsView implements IView {
 
               <div class="settings-form-row">
                 <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Crossfade Playback</span>
+                  <span class="settings-form-row-desc">Smoothly blend consecutive tracks with overlapping volume ramps</span>
+                </div>
+                <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer; font-size: 13px; font-weight: 700; color: var(--color-text-primary); background: rgba(255, 255, 255, 0.04); padding: 6px 14px; border-radius: var(--radius-full); border: 1px solid var(--glass-border);">
+                  <input type="checkbox" id="settings-crossfade-enabled" style="accent-color: var(--color-accent-secondary);" />
+                  Enable Crossfade
+                </label>
+              </div>
+
+              <div class="settings-form-row" id="settings-crossfade-duration-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Crossfade Duration</span>
+                  <span class="settings-form-row-desc">Transition overlap length between tracks (1s – 12s)</span>
+                </div>
+                <select id="settings-crossfade-duration" class="settings-input-control">
+                  <option value="1">1 Second</option>
+                  <option value="2">2 Seconds</option>
+                  <option value="3" selected>3 Seconds (Default)</option>
+                  <option value="4">4 Seconds</option>
+                  <option value="5">5 Seconds</option>
+                  <option value="6">6 Seconds</option>
+                  <option value="8">8 Seconds</option>
+                  <option value="10">10 Seconds</option>
+                  <option value="12">12 Seconds</option>
+                </select>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
                   <span class="settings-form-row-title">Direct Equalizer Navigation</span>
                   <span class="settings-form-row-desc">Open the dedicated 10-Band Graphic Equalizer view</span>
                 </div>
@@ -1243,6 +1272,53 @@ export class SettingsView implements IView {
           sleepTimerService: this.sleepTimerService,
           eventBus: this.eventBus
         });
+      }
+    });
+
+    const crossfadeEnabledCheckbox = this.container.querySelector<HTMLInputElement>('#settings-crossfade-enabled');
+    const crossfadeDurationSelect = this.container.querySelector<HTMLSelectElement>('#settings-crossfade-duration');
+    const crossfadeDurationRow = this.container.querySelector<HTMLElement>('#settings-crossfade-duration-row');
+
+    if (this.audioSettingsService) {
+      void this.audioSettingsService.getSettings().then(settings => {
+        if (crossfadeEnabledCheckbox) {
+          crossfadeEnabledCheckbox.checked = settings.crossfadeEnabled;
+        }
+        if (crossfadeDurationSelect) {
+          crossfadeDurationSelect.value = String(settings.crossfadeDurationSec);
+        }
+        if (crossfadeDurationRow) {
+          crossfadeDurationRow.style.opacity = settings.crossfadeEnabled ? '1' : '0.5';
+        }
+      });
+    }
+
+    crossfadeEnabledCheckbox?.addEventListener('change', async () => {
+      const enabled = crossfadeEnabledCheckbox.checked;
+      if (crossfadeDurationRow) {
+        crossfadeDurationRow.style.opacity = enabled ? '1' : '0.5';
+      }
+      if (this.playbackManager) {
+        this.playbackManager.setCrossfade?.(enabled);
+      }
+      if (this.audioEngine) {
+        this.audioEngine.setCrossfade?.(enabled);
+      }
+      if (this.audioSettingsService) {
+        await this.audioSettingsService.saveSettings({ crossfadeEnabled: enabled });
+      }
+    });
+
+    crossfadeDurationSelect?.addEventListener('change', async () => {
+      const duration = Number(crossfadeDurationSelect.value);
+      if (this.playbackManager) {
+        this.playbackManager.setCrossfade?.(crossfadeEnabledCheckbox?.checked ?? false, duration);
+      }
+      if (this.audioEngine) {
+        this.audioEngine.setCrossfade?.(crossfadeEnabledCheckbox?.checked ?? false, duration);
+      }
+      if (this.audioSettingsService) {
+        await this.audioSettingsService.saveSettings({ crossfadeDurationSec: duration });
       }
     });
   }
