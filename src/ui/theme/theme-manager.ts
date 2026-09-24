@@ -20,6 +20,15 @@ import {
   extractPaletteFromImage
 } from './dynamic-artwork-colors';
 
+import {
+  type PlayerLayoutId,
+  type PlayerLayoutDefinition,
+  DEFAULT_PLAYER_LAYOUT,
+  PLAYER_LAYOUTS,
+  getPlayerLayout,
+  getAllPlayerLayouts
+} from './player-layout';
+
 export type ThemePreference = 'dark' | 'light' | 'system';
 export type ResolvedTheme = 'dark' | 'light';
 
@@ -39,10 +48,15 @@ export interface DynamicArtworkColorsChangeListener {
   (enabled: boolean, palette: ExtractedArtworkPalette | null): void;
 }
 
+export interface PlayerLayoutChangeListener {
+  (layout: PlayerLayoutId, definition: PlayerLayoutDefinition): void;
+}
+
 const STORAGE_KEY = 'mymusicapp_theme_preference';
 const ACCENT_STORAGE_KEY = 'mymusicapp_accent_theme';
 const AMBIENT_STORAGE_KEY = 'mymusicapp_ambient_mode';
 const DYNAMIC_ARTWORK_STORAGE_KEY = 'mymusicapp_dynamic_artwork_colors';
+const PLAYER_LAYOUT_STORAGE_KEY = 'mymusicapp_player_layout';
 
 /**
  * Centralized Theme Manager for MyMusicApp.
@@ -53,6 +67,7 @@ const DYNAMIC_ARTWORK_STORAGE_KEY = 'mymusicapp_dynamic_artwork_colors';
  * - Accent Themes: User-selectable color accents (Purple, Cyan, Blue, Emerald, Amber, Pink, Rose)
  * - Ambient Backgrounds: Optional atmospheric visual backgrounds (Off, Aurora, Gradient Flow, Soft Glow, Static Gradient)
  * - Dynamic Artwork Colors: Optional extraction of album artwork color palette for artwork-aware visual presentation
+ * - Player Layouts: User-selectable presentation layout modes (Standard, Compact, Expanded)
  *
  * Persists preferences and updates documentElement attributes and custom CSS properties.
  */
@@ -63,12 +78,14 @@ export class ThemeManager {
   private ambientMode: AmbientMode = DEFAULT_AMBIENT_MODE;
   private dynamicArtworkColorsEnabled: boolean = false;
   private currentArtworkPalette: ExtractedArtworkPalette | null = null;
+  private playerLayout: PlayerLayoutId = DEFAULT_PLAYER_LAYOUT;
   private mediaQuery: MediaQueryList | null = null;
   private mediaQueryListener: ((e: MediaQueryListEvent) => void) | null = null;
   private listeners: Set<ThemeChangeListener> = new Set();
   private accentListeners: Set<AccentThemeChangeListener> = new Set();
   private ambientListeners: Set<AmbientModeChangeListener> = new Set();
   private dynamicArtworkListeners: Set<DynamicArtworkColorsChangeListener> = new Set();
+  private layoutListeners: Set<PlayerLayoutChangeListener> = new Set();
 
   private constructor() {
     this.loadPreference();
@@ -77,6 +94,7 @@ export class ThemeManager {
     this.applyAccentTheme();
     this.applyAmbientMode();
     this.applyArtworkTokens();
+    this.applyPlayerLayout();
   }
 
   public static getInstance(): ThemeManager {
@@ -235,6 +253,59 @@ export class ThemeManager {
     };
   }
 
+  public getPlayerLayout(): PlayerLayoutId {
+    return this.playerLayout;
+  }
+
+  public getPlayerLayoutDefinition(): PlayerLayoutDefinition {
+    return getPlayerLayout(this.playerLayout);
+  }
+
+  public getAvailablePlayerLayouts(): readonly PlayerLayoutDefinition[] {
+    return getAllPlayerLayouts();
+  }
+
+  public setPlayerLayout(layout: PlayerLayoutId | string): void {
+    const validLayout = (layout && layout in PLAYER_LAYOUTS ? layout : DEFAULT_PLAYER_LAYOUT) as PlayerLayoutId;
+    if (this.playerLayout === validLayout) return;
+    this.playerLayout = validLayout;
+    this.savePlayerLayoutPreference();
+    this.applyPlayerLayout();
+    this.notifyLayoutListeners();
+  }
+
+  public subscribePlayerLayout(listener: PlayerLayoutChangeListener): () => void {
+    this.layoutListeners.add(listener);
+    // Immediately notify current state
+    listener(this.playerLayout, this.getPlayerLayoutDefinition());
+    return () => {
+      this.layoutListeners.delete(listener);
+    };
+  }
+
+  public applyPlayerLayout(): void {
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.setAttribute('data-player-layout', this.playerLayout);
+      const def = this.getPlayerLayoutDefinition();
+      const rootStyle = document.documentElement.style;
+      if (rootStyle) {
+        if (typeof rootStyle.setProperty === 'function') {
+          rootStyle.setProperty('--player-artwork-max-width', def.artworkMaxWidth);
+          rootStyle.setProperty('--player-grid-columns', def.gridColumns);
+          rootStyle.setProperty('--player-grid-gap', def.gridGap);
+          rootStyle.setProperty('--player-layout-padding', def.layoutPadding);
+          rootStyle.setProperty('--player-controls-max-width', def.controlsMaxWidth);
+        } else {
+          (rootStyle as any)['--player-artwork-max-width'] = def.artworkMaxWidth;
+          (rootStyle as any)['--player-grid-columns'] = def.gridColumns;
+          (rootStyle as any)['--player-grid-gap'] = def.gridGap;
+          (rootStyle as any)['--player-layout-padding'] = def.layoutPadding;
+          (rootStyle as any)['--player-controls-max-width'] = def.controlsMaxWidth;
+        }
+      }
+    }
+  }
+
   private loadPreference(): void {
     try {
       if (typeof localStorage !== 'undefined') {
@@ -253,6 +324,14 @@ export class ThemeManager {
         const storedDynamicArtwork = localStorage.getItem(DYNAMIC_ARTWORK_STORAGE_KEY);
         if (storedDynamicArtwork !== null) {
           this.dynamicArtworkColorsEnabled = storedDynamicArtwork === 'true';
+        }
+        const storedLayout = localStorage.getItem(PLAYER_LAYOUT_STORAGE_KEY) as PlayerLayoutId | null;
+        if (storedLayout !== null) {
+          if (storedLayout in PLAYER_LAYOUTS) {
+            this.playerLayout = storedLayout;
+          } else {
+            this.playerLayout = DEFAULT_PLAYER_LAYOUT;
+          }
         }
       }
     } catch (_e) {
@@ -294,6 +373,16 @@ export class ThemeManager {
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(DYNAMIC_ARTWORK_STORAGE_KEY, String(this.dynamicArtworkColorsEnabled));
+      }
+    } catch (_e) {
+      // Ignore storage errors in restricted contexts
+    }
+  }
+
+  private savePlayerLayoutPreference(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(PLAYER_LAYOUT_STORAGE_KEY, this.playerLayout);
       }
     } catch (_e) {
       // Ignore storage errors in restricted contexts
@@ -497,6 +586,17 @@ export class ThemeManager {
         listener(this.dynamicArtworkColorsEnabled, this.currentArtworkPalette);
       } catch (err) {
         console.error('Error in ThemeManager dynamic artwork listener:', err);
+      }
+    }
+  }
+
+  private notifyLayoutListeners(): void {
+    const def = this.getPlayerLayoutDefinition();
+    for (const listener of this.layoutListeners) {
+      try {
+        listener(this.playerLayout, def);
+      } catch (err) {
+        console.error('Error in ThemeManager layout listener:', err);
       }
     }
   }

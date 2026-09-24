@@ -88,6 +88,7 @@ export class SettingsView implements IView {
   private accentUnsub: (() => void) | null = null;
   private ambientUnsub: (() => void) | null = null;
   private dynamicArtworkUnsub: (() => void) | null = null;
+  private playerLayoutUnsub: (() => void) | null = null;
   private eventBusSubs: Disposable[] = [];
   private connectedFolderName: string | null = null;
   private activeSection: SettingsSectionId = 'music-access';
@@ -157,6 +158,10 @@ export class SettingsView implements IView {
     if (this.dynamicArtworkUnsub) {
       this.dynamicArtworkUnsub();
       this.dynamicArtworkUnsub = null;
+    }
+    if (this.playerLayoutUnsub) {
+      this.playerLayoutUnsub();
+      this.playerLayoutUnsub = null;
     }
     for (const sub of this.eventBusSubs) {
       sub.dispose();
@@ -1104,6 +1109,41 @@ export class SettingsView implements IView {
                   />
                 </div>
               </div>
+
+              <!-- Player Layout Mode Selection -->
+              <div style="margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--glass-border);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); flex-wrap: wrap; gap: 8px;">
+                  <div>
+                    <h3 style="font-size: 15px; font-weight: 700; color: var(--color-text-primary); margin: 0;">Player Layout</h3>
+                    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 2px 0 0 0;">Adjust the visual arrangement and scale of the full-screen playback presentation</p>
+                  </div>
+                  <span id="settings-layout-status-badge" style="font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: var(--radius-full); background: var(--color-accent-muted); color: var(--color-accent-primary); border: 1px solid var(--glass-border-highlight);">
+                    ${ThemeManager.getInstance().getPlayerLayoutDefinition().name} Active
+                  </span>
+                </div>
+
+                <div class="settings-ambient-grid" role="radiogroup" aria-label="Player Layout Selection">
+                  ${ThemeManager.getInstance().getAvailablePlayerLayouts().map(layout => `
+                    <div
+                      class="settings-player-layout-option settings-layout-option ${layout.id === ThemeManager.getInstance().getPlayerLayout() ? 'active' : ''}"
+                      data-layout-val="${layout.id}"
+                      role="radio"
+                      tabindex="0"
+                      aria-checked="${layout.id === ThemeManager.getInstance().getPlayerLayout() ? 'true' : 'false'}"
+                      aria-label="Select ${layout.name} Player Layout"
+                    >
+                      <div class="settings-ambient-swatch">
+                        <span style="font-size: 16px;">${getIconSvg(layout.icon as any, { size: 16 })}</span>
+                        <span class="settings-ambient-check" style="display: ${layout.id === ThemeManager.getInstance().getPlayerLayout() ? 'flex' : 'none'};">${getIconSvg('check', { size: 14, color: '#ffffff' })}</span>
+                      </div>
+                      <div class="settings-accent-details">
+                        <span class="settings-accent-name">${layout.name}</span>
+                        <span class="settings-accent-desc">${layout.description}</span>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
             </section>
 
             <!-- 5. Audio Visualizer Preferences Section -->
@@ -1591,6 +1631,49 @@ export class SettingsView implements IView {
 
     this.dynamicArtworkUnsub = themeManager.subscribeDynamicArtworkColors((enabled) => {
       updateDynamicArtworkDisplay(enabled);
+    });
+
+    // Player Layout Listeners
+    const layoutOptions = this.container.querySelectorAll<HTMLElement>('.settings-layout-option');
+    const layoutBadge = this.container.querySelector<HTMLElement>('#settings-layout-status-badge');
+
+    const updateLayoutDisplay = (layoutId: string, def: any) => {
+      layoutOptions.forEach(opt => {
+        const val = opt.getAttribute('data-layout-val');
+        const isActive = val === layoutId;
+        opt.classList.toggle('active', isActive);
+        opt.setAttribute('aria-checked', isActive ? 'true' : 'false');
+        const check = opt.querySelector<HTMLElement>('.settings-ambient-check');
+        if (check) check.style.display = isActive ? 'flex' : 'none';
+      });
+
+      if (layoutBadge) {
+        layoutBadge.textContent = `${def.name} Active`;
+      }
+    };
+
+    updateLayoutDisplay(themeManager.getPlayerLayout(), themeManager.getPlayerLayoutDefinition());
+
+    layoutOptions.forEach(opt => {
+      opt.addEventListener('click', () => {
+        const layout = opt.getAttribute('data-layout-val');
+        if (layout) {
+          themeManager.setPlayerLayout(layout);
+        }
+      });
+      opt.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const layout = opt.getAttribute('data-layout-val');
+          if (layout) {
+            themeManager.setPlayerLayout(layout);
+          }
+        }
+      });
+    });
+
+    this.playerLayoutUnsub = themeManager.subscribePlayerLayout((layoutId, def) => {
+      updateLayoutDisplay(layoutId, def);
     });
   }
 

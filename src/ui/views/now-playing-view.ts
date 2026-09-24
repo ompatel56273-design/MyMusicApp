@@ -163,7 +163,7 @@ export class NowPlayingView implements IView {
     this.container.innerHTML = `
       <style>
         .now-playing-page {
-          padding: var(--space-6) var(--space-8);
+          padding: var(--player-layout-padding, var(--space-6) var(--space-8));
           max-width: 1720px;
           margin: 0 auto;
           box-sizing: border-box;
@@ -179,8 +179,8 @@ export class NowPlayingView implements IView {
         /* 2-Column Responsive Layout (Templates 6 & 7 Desktop) */
         .now-playing-grid-layout {
           display: grid;
-          grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
-          gap: var(--space-8);
+          grid-template-columns: var(--player-grid-columns, minmax(0, 1.1fr) minmax(360px, 0.9fr));
+          gap: var(--player-grid-gap, var(--space-8));
           align-items: start;
           width: 100%;
           min-width: 0;
@@ -195,6 +195,14 @@ export class NowPlayingView implements IView {
           min-width: 0;
           width: 100%;
           box-sizing: border-box;
+        }
+
+        #np-artwork-slot {
+          max-width: var(--player-artwork-max-width, 440px);
+          width: 100%;
+          margin: 0 auto;
+          display: flex;
+          justify-content: center;
         }
 
         .np-side-column {
@@ -346,7 +354,7 @@ export class NowPlayingView implements IView {
             <div id="np-artwork-slot" style="width: 100%; display: flex; justify-content: center;"></div>
 
             <!-- 2. Track Metadata Info -->
-            <div style="text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; max-width: 480px;">
+            <div style="text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; max-width: var(--player-controls-max-width, 480px);">
               <div style="display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;">
                 ${formatBadge}
               </div>
@@ -400,7 +408,7 @@ export class NowPlayingView implements IView {
             </div>
 
             <!-- 3. Player Controls Component -->
-            <div id="np-controls-slot" style="width: 100%;"></div>
+            <div id="np-controls-slot" style="width: 100%; max-width: var(--player-controls-max-width, 480px);"></div>
           </div>
 
           <!-- Right Column: Tabs (Up Next, Synced Lyrics, Audio Info) -->
