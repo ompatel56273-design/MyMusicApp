@@ -211,19 +211,27 @@ export class QueuePanelComponent {
           },
           onRemove: async i => {
             if ('removeFromQueue' in this.playbackManager) {
-              await (this.playbackManager as any).removeFromQueue(i);
+              await this.playbackManager.removeFromQueue(i);
               this.updateQueue();
             }
           },
           onMoveUp: async i => {
-            if (i > 0 && 'reorderQueue' in this.playbackManager) {
-              await (this.playbackManager as any).reorderQueue(i, i - 1);
+            if (i > 0) {
+              if ('moveQueueItemUp' in this.playbackManager) {
+                await this.playbackManager.moveQueueItemUp(i);
+              } else if ('reorderQueue' in this.playbackManager) {
+                await (this.playbackManager as any).reorderQueue(i, i - 1);
+              }
               this.updateQueue();
             }
           },
           onMoveDown: async i => {
-            if (i < this.queueTracks.length - 1 && 'reorderQueue' in this.playbackManager) {
-              await (this.playbackManager as any).reorderQueue(i, i + 1);
+            if (i < this.queueTracks.length - 1) {
+              if ('moveQueueItemDown' in this.playbackManager) {
+                await this.playbackManager.moveQueueItemDown(i);
+              } else if ('reorderQueue' in this.playbackManager) {
+                await (this.playbackManager as any).reorderQueue(i, i + 1);
+              }
               this.updateQueue();
             }
           }
@@ -238,7 +246,7 @@ export class QueuePanelComponent {
     const clearBtn = this.container.querySelector<HTMLButtonElement>('#queue-clear-btn');
     clearBtn?.addEventListener('click', async () => {
       if ('clearQueue' in this.playbackManager) {
-        await (this.playbackManager as any).clearQueue();
+        await this.playbackManager.clearQueue(true);
         this.updateQueue();
       }
     });

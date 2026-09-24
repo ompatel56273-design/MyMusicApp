@@ -630,8 +630,9 @@ export class PlaybackManager implements IPlaybackManager {
     }
   }
 
-  public async addToQueue(tracks: readonly Track[], playNext = false): Promise<void> {
-    this.queueManager.addTracks(tracks, playNext);
+  public async addToQueue(tracks: readonly Track[] | Track, playNext = false): Promise<void> {
+    const trackList = Array.isArray(tracks) ? tracks : [tracks];
+    this.queueManager.addTracks(trackList, playNext);
     this.emitQueueChanged();
     await this.syncQueueToRepository();
 
@@ -639,6 +640,18 @@ export class PlaybackManager implements IPlaybackManager {
     if (this.currentState === 'playing' || this.currentState === 'ready') {
       this.preloadPromise = this.preloadNextTrack();
     }
+  }
+
+  public async playNext(tracks: readonly Track[] | Track): Promise<void> {
+    await this.addToQueue(tracks, true);
+  }
+
+  public getQueue(): readonly QueueItem[] {
+    return this.queueManager.getItems();
+  }
+
+  public getUpcomingTracks(): readonly Track[] {
+    return this.queueManager.getUpcomingTracks();
   }
 
   public async playQueueIndex(index: number): Promise<void> {
@@ -655,7 +668,11 @@ export class PlaybackManager implements IPlaybackManager {
   }
 
   public async removeFromQueue(index: number): Promise<void> {
+    const wasActive = index === this.queueManager.getActiveIndex();
     this.queueManager.removeTrack(index);
+    if (wasActive) {
+      this.currentTrackEntity = this.queueManager.getActiveTrack();
+    }
     this.emitQueueChanged();
     await this.syncQueueToRepository();
 
@@ -676,9 +693,60 @@ export class PlaybackManager implements IPlaybackManager {
     }
   }
 
-  public async clearQueue(): Promise<void> {
+  public async moveQueueItemUp(index: number): Promise<void> {
+    if (this.queueManager.moveUp(index)) {
+      this.emitQueueChanged();
+      await this.syncQueueToRepository();
+
+      this.cancelPreload();
+      if (this.currentState === 'playing' || this.currentState === 'ready') {
+        this.preloadPromise = this.preloadNextTrack();
+      }
+    }
+  }
+
+  public async moveQueueItemDown(index: number): Promise<void> {
+    if (this.queueManager.moveDown(index)) {
+      this.emitQueueChanged();
+      await this.syncQueueToRepository();
+
+      this.cancelPreload();
+      if (this.currentState === 'playing' || this.currentState === 'ready') {
+        this.preloadPromise = this.preloadNextTrack();
+      }
+    }
+  }
+
+  public async moveQueueItemToTop(index: number): Promise<void> {
+    if (this.queueManager.moveToTop(index)) {
+      this.emitQueueChanged();
+      await this.syncQueueToRepository();
+
+      this.cancelPreload();
+      if (this.currentState === 'playing' || this.currentState === 'ready') {
+        this.preloadPromise = this.preloadNextTrack();
+      }
+    }
+  }
+
+  public async moveQueueItemToBottom(index: number): Promise<void> {
+    if (this.queueManager.moveToBottom(index)) {
+      this.emitQueueChanged();
+      await this.syncQueueToRepository();
+
+      this.cancelPreload();
+      if (this.currentState === 'playing' || this.currentState === 'ready') {
+        this.preloadPromise = this.preloadNextTrack();
+      }
+    }
+  }
+
+  public async clearQueue(preserveCurrent = false): Promise<void> {
     this.cancelPreload();
-    this.queueManager.clear();
+    this.queueManager.clear(preserveCurrent);
+    if (!preserveCurrent) {
+      // If full clear, keep current state intact or update
+    }
     this.emitQueueChanged();
     await this.syncQueueToRepository();
   }
