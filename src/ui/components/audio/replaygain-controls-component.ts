@@ -86,6 +86,25 @@ export class ReplayGainControlsComponent {
               </button>
             `).join('')}
           </div>
+
+          <div style="margin-top: var(--space-4); display: flex; align-items: center; justify-content: space-between; background: rgba(0, 0, 0, 0.2); padding: 12px 16px; border-radius: var(--radius-xl); border: 1px solid var(--glass-border);">
+            <div>
+              <span style="font-size: 13px; font-weight: 700; color: var(--color-text-primary); display: block;">
+                Prevent Clipping Peak Limiting
+              </span>
+              <span style="font-size: 11px; color: var(--color-text-muted);">
+                Automatically scales down gain boost if track/album peak exceeds 0 dBFS.
+              </span>
+            </div>
+            <label style="display: flex; align-items: center; cursor: pointer;">
+              <input
+                type="checkbox"
+                id="rg-prevent-clipping-toggle"
+                ${this.currentSettings.preventClipping ? 'checked' : ''}
+                style="accent-color: var(--color-accent-primary); width: 18px; height: 18px; cursor: pointer;"
+              />
+            </label>
+          </div>
         </div>
 
         <!-- Stereo Balance Section -->
@@ -143,6 +162,16 @@ export class ReplayGainControlsComponent {
           this.render();
         }
       });
+    });
+
+    // 2. Prevent Clipping toggle
+    const clippingToggle = this.container.querySelector<HTMLInputElement>('#rg-prevent-clipping-toggle');
+    clippingToggle?.addEventListener('change', async () => {
+      if (!this.currentSettings) return;
+      const enabled = clippingToggle.checked;
+      this.currentSettings = { ...this.currentSettings, preventClipping: enabled };
+      this.audioEngine.setPreventClipping?.(enabled);
+      await this.settingsService.saveSettings({ preventClipping: enabled });
     });
 
     // 2. Stereo Balance slider

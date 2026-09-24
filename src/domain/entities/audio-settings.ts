@@ -13,6 +13,7 @@ export interface AudioSettings {
   readonly equalizerBands: readonly number[]; // Exactly 10 gain values in dB [-12, +12]
   readonly preampGainDb: number; // Preamp gain in dB [-12, +12]
   readonly replayGainMode: ReplayGainMode; // 'off' | 'track' | 'album'
+  readonly preventClipping: boolean;
   readonly selectedPreset: string; // 'flat' | 'rock' | ... | custom preset id
   readonly customPresets: readonly EqualizerPreset[];
   readonly balance: number; // [-1.0 (Left), +1.0 (Right)]
@@ -26,6 +27,7 @@ export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   equalizerBands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   preampGainDb: 0,
   replayGainMode: 'track',
+  preventClipping: true,
   selectedPreset: 'flat',
   customPresets: [],
   balance: 0,

@@ -119,6 +119,9 @@ export class AudioSettingsService implements IAudioSettingsService {
       engine.setEqualizerBands(settings.equalizerBands);
       engine.setPreampGain(settings.preampGainDb);
       engine.setReplayGainMode(settings.replayGainMode);
+      if (engine.setPreventClipping) {
+        engine.setPreventClipping(settings.preventClipping);
+      }
       engine.setBalance(settings.balance);
       engine.setLimiterEnabled(settings.limiterEnabled);
       if (engine.setCrossfade) {
@@ -138,6 +141,7 @@ export class AudioSettingsService implements IAudioSettingsService {
     const equalizerBands = this.sanitizeBands(raw.equalizerBands);
     const preampGainDb = this.clampDb(raw.preampGainDb);
     const replayGainMode = this.sanitizeReplayGainMode(raw.replayGainMode);
+    const preventClipping = typeof raw.preventClipping === 'boolean' ? raw.preventClipping : true;
     const selectedPreset = typeof raw.selectedPreset === 'string' && raw.selectedPreset.trim() ? raw.selectedPreset.trim() : 'flat';
     const balance = this.clampBalance(raw.balance);
     const limiterEnabled = typeof raw.limiterEnabled === 'boolean' ? raw.limiterEnabled : true;
@@ -164,6 +168,7 @@ export class AudioSettingsService implements IAudioSettingsService {
       equalizerBands,
       preampGainDb,
       replayGainMode,
+      preventClipping,
       selectedPreset,
       customPresets,
       balance,

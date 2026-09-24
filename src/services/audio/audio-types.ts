@@ -35,6 +35,7 @@ export interface DspPipelineOptions {
   readonly equalizerEnabled: boolean;
   readonly equalizerBands: readonly number[]; // 10 gain values in dB
   readonly replayGainMode: ReplayGainMode;
+  readonly preventClipping: boolean;
   readonly preampGainDb: number; // Preamp in dB [-12, +12]
   readonly balance: number; // [-1.0, +1.0] (Left to Right)
   readonly limiterEnabled: boolean;

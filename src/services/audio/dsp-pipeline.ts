@@ -21,6 +21,7 @@ export class DspPipeline {
   private preampGainDb = 0;
   private replayGainDb = 0;
   private replayGainMode: ReplayGainMode = 'track';
+  private preventClipping = true;
   private currentReplayGainData: ReplayGainData | null = null;
   private balanceValue = 0;
   private masterVolumeValue = 1.0;
@@ -163,18 +164,42 @@ export class DspPipeline {
     this.recomputeReplayGain();
   }
 
+  /**
+   * Set Prevent Clipping / Peak Limiting Safety toggle
+   */
+  public setPreventClipping(enabled: boolean): void {
+    this.preventClipping = enabled;
+    this.updatePreampStage();
+  }
+
   private recomputeReplayGain(): void {
     let targetGainDb = 0;
 
     if (this.replayGainMode !== 'off' && this.currentReplayGainData) {
-      if (this.replayGainMode === 'album' && this.currentReplayGainData.albumGainDb !== undefined) {
-        targetGainDb = this.currentReplayGainData.albumGainDb;
-      } else if (this.currentReplayGainData.trackGainDb !== undefined) {
-        targetGainDb = this.currentReplayGainData.trackGainDb;
+      const data = this.currentReplayGainData;
+      const isValid = (v?: number) => typeof v === 'number' && !isNaN(v) && isFinite(v);
+
+      if (this.replayGainMode === 'album') {
+        if (isValid(data.albumGainDb)) {
+          targetGainDb = data.albumGainDb!;
+        } else if (isValid(data.trackGainDb)) {
+          targetGainDb = data.trackGainDb!;
+        }
+      } else if (this.replayGainMode === 'track') {
+        if (isValid(data.trackGainDb)) {
+          targetGainDb = data.trackGainDb!;
+        } else if (isValid(data.albumGainDb)) {
+          targetGainDb = data.albumGainDb!;
+        }
       }
     }
 
-    this.replayGainDb = targetGainDb;
+    if (isNaN(targetGainDb) || !isFinite(targetGainDb)) {
+      targetGainDb = 0;
+    }
+
+    // Clamp gainDb to safe bounds [-24.0, +15.0]
+    this.replayGainDb = Math.max(-24.0, Math.min(15.0, targetGainDb));
     this.updatePreampStage();
   }
 
@@ -184,19 +209,30 @@ export class DspPipeline {
     // Linear gain = 10^(dB / 20)
     let linearGain = Math.pow(10, totalGainDb / 20);
 
-    // Guard against NaN or extreme values
-    if (isNaN(linearGain) || !isFinite(linearGain)) {
+    // Guard against NaN or non-finite or negative values
+    if (isNaN(linearGain) || !isFinite(linearGain) || linearGain < 0) {
       linearGain = 1.0;
     }
 
-    // Safety peak clamp if peak is defined
-    const peak = this.replayGainMode === 'album'
-      ? this.currentReplayGainData?.albumPeak
-      : this.currentReplayGainData?.trackPeak;
+    // Safety peak clamp if peak is defined and preventClipping is active
+    if (this.preventClipping && this.currentReplayGainData && this.replayGainMode !== 'off') {
+      const data = this.currentReplayGainData;
+      const isValidPeak = (p?: number) => typeof p === 'number' && !isNaN(p) && isFinite(p) && p > 0;
 
-    if (peak !== undefined && peak > 0 && linearGain * peak > 1.0) {
-      linearGain = 1.0 / peak;
+      let peak: number | undefined;
+      if (this.replayGainMode === 'album') {
+        peak = isValidPeak(data.albumPeak) ? data.albumPeak : (isValidPeak(data.trackPeak) ? data.trackPeak : undefined);
+      } else {
+        peak = isValidPeak(data.trackPeak) ? data.trackPeak : (isValidPeak(data.albumPeak) ? data.albumPeak : undefined);
+      }
+
+      if (peak !== undefined && peak > 0 && linearGain * peak > 1.0) {
+        linearGain = 1.0 / peak;
+      }
     }
+
+    // Upper bound clamp to prevent uncontrolled positive amplification
+    linearGain = Math.min(linearGain, 4.0);
 
     this.preampNode.gain.setValueAtTime(linearGain, this.context.currentTime);
   }
@@ -324,12 +360,25 @@ export class DspPipeline {
       equalizerEnabled: this.isEqEnabled,
       equalizerBands: [...this.eqGainsDb],
       replayGainMode: this.replayGainMode,
+      preventClipping: this.preventClipping,
       preampGainDb: this.preampGainDb,
       balance: this.balanceValue,
       limiterEnabled: this.isLimiterEnabled,
       masterVolume: this.masterVolumeValue,
       isMuted: this.isMutedValue
     };
+  }
+
+  public getEffectiveReplayGainDb(): number {
+    return this.replayGainDb;
+  }
+
+  public getEffectiveLinearGain(): number {
+    return this.preampNode.gain.value;
+  }
+
+  public getAnalyserNode(): AnalyserNode {
+    return this.analyserNode;
   }
 
   /**

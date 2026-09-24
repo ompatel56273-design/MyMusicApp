@@ -42,6 +42,7 @@ export class AudioEngine implements IAudioEngine {
   private crossfadeOldElement: HTMLAudioElement | null = null;
   private crossfadeOldObjectUrl: string | null = null;
   private crossfadeConfig = { enabled: false, durationSec: 3 };
+  private preventClipping = true;
 
   private callbacks: AudioEngineCallbacks = {};
   private currentGeneration = 0;
@@ -75,6 +76,7 @@ export class AudioEngine implements IAudioEngine {
 
     this.context = new AudioContextClass();
     this.dspPipeline = new DspPipeline(this.context);
+    this.dspPipeline.setPreventClipping(this.preventClipping);
     this.initAudioElements();
 
     this.logger.info(`AudioContext initialized (SampleRate: ${this.context.sampleRate}Hz, State: ${this.context.state})`);
@@ -749,6 +751,13 @@ export class AudioEngine implements IAudioEngine {
     }
   }
 
+  public setPreventClipping(enabled: boolean): void {
+    this.preventClipping = enabled;
+    if (this.dspPipeline) {
+      this.dspPipeline.setPreventClipping(enabled);
+    }
+  }
+
   public setBalance(balance: number): void {
     if (this.dspPipeline) {
       this.dspPipeline.setBalance(balance);
@@ -769,6 +778,7 @@ export class AudioEngine implements IAudioEngine {
       equalizerEnabled: true,
       equalizerBands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       replayGainMode: 'track',
+      preventClipping: this.preventClipping,
       preampGainDb: 0,
       balance: 0,
       limiterEnabled: true,

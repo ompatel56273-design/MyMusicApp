@@ -214,6 +214,7 @@ export interface IAudioEngine {
   setEqualizerBandGain(bandIndex: number, gainDb: number): void;
   setPreampGain(gainDb: number): void;
   setReplayGainMode(mode: ReplayGainMode): void;
+  setPreventClipping?(enabled: boolean): void;
   setBalance(balance: number): void;
   setLimiterEnabled(enabled: boolean): void;
   getDspOptions(): DspPipelineOptions;
