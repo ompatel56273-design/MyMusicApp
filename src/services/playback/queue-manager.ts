@@ -124,6 +124,14 @@ export class QueueManager {
     }
   }
 
+  /**
+   * Insert tracks immediately after the active track (or at top if no active track).
+   */
+  public insertNext(tracks: readonly Track[] | Track): void {
+    const list = Array.isArray(tracks) ? tracks : [tracks];
+    this.addTracks(list, true);
+  }
+
   public removeTrack(index: number): void {
     if (index < 0 || index >= this.tracks.length) return;
 
@@ -166,11 +174,52 @@ export class QueueManager {
     }
   }
 
-  public clear(): void {
-    this.tracks = [];
-    this.items = [];
-    this.activeIndex = -1;
-    this.shuffleIndices = [];
+  public getUpcomingTracks(): readonly Track[] {
+    if (this.activeIndex < 0) return [...this.tracks];
+    return this.tracks.slice(this.activeIndex + 1);
+  }
+
+  public moveUp(index: number): boolean {
+    if (index <= 0 || index >= this.tracks.length) return false;
+    this.reorder(index, index - 1);
+    return true;
+  }
+
+  public moveDown(index: number): boolean {
+    if (index < 0 || index >= this.tracks.length - 1) return false;
+    this.reorder(index, index + 1);
+    return true;
+  }
+
+  public moveToTop(index: number): boolean {
+    if (index < 0 || index >= this.tracks.length) return false;
+    const target = this.activeIndex >= 0 ? (index > this.activeIndex ? this.activeIndex + 1 : 0) : 0;
+    if (target === index) return false;
+    this.reorder(index, target);
+    return true;
+  }
+
+  public moveToBottom(index: number): boolean {
+    if (index < 0 || index >= this.tracks.length) return false;
+    const target = this.tracks.length - 1;
+    if (target === index) return false;
+    this.reorder(index, target);
+    return true;
+  }
+
+  public clear(preserveActive = false): void {
+    if (preserveActive && this.activeIndex >= 0 && this.tracks[this.activeIndex]) {
+      const activeTrack = this.tracks[this.activeIndex]!;
+      this.tracks = [activeTrack];
+      this.activeIndex = 0;
+      this.rebuildQueueItems();
+      this.shuffleIndices = [0];
+    } else {
+      this.tracks = [];
+      this.items = [];
+      this.activeIndex = -1;
+      this.shuffleIndices = [];
+    }
   }
 
   public setActiveIndex(index: number): void {
