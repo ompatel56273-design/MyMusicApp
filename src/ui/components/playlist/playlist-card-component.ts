@@ -52,6 +52,13 @@ export class PlaylistCardComponent {
 
     card.innerHTML = `
       <div class="playlist-art-wrap" style="position: relative; width: 100%; aspect-ratio: 1; border-radius: var(--radius-xl); overflow: hidden; background: linear-gradient(135deg, rgba(168, 85, 247, 0.3) 0%, rgba(236, 72, 153, 0.25) 50%, rgba(6, 182, 212, 0.2) 100%); margin-bottom: var(--space-3); display: flex; align-items: center; justify-content: center; border: 1px solid var(--glass-border);">
+        ${
+          playlist.isSmart
+            ? `<span class="smart-badge" style="position: absolute; top: 8px; left: 8px; background: rgba(124, 58, 237, 0.85); backdrop-filter: blur(4px); color: #ffffff; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-full); display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255, 255, 255, 0.2); z-index: 2;">
+                ${getIconSvg('sparkles', { size: 10, color: '#ffffff' })} Smart
+              </span>`
+            : ''
+        }
         <div class="playlist-art-img" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--color-accent-purple-glow);">
           ${getIconSvg('playlist', { size: 44, color: 'var(--color-accent-purple-glow)' })}
         </div>

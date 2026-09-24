@@ -7,6 +7,7 @@ import type {
 } from '../../../services/contracts/service-contracts';
 import type { Track } from '../../../domain/entities/models';
 import { PlaylistModalComponent } from './playlist-modal-component';
+import { SmartPlaylistModalComponent } from './smart-playlist-modal-component';
 import { escapeHtml } from '../../../core/security/html-sanitizer';
 import { getIconSvg } from '../../icons/icon-registry';
 
@@ -174,14 +175,33 @@ export class PlaylistDetailComponent {
       }
     });
 
-    header.querySelector('.pl-edit-btn')?.addEventListener('click', () => {
-      PlaylistModalComponent.show({
-        playlist,
-        onSave: async (name, description) => {
-          await services.playlistService.updatePlaylist(playlist.id, { name, description });
-          callbacks.onRefresh();
-        }
-      });
+    header.querySelector('.pl-edit-btn')?.addEventListener('click', async () => {
+      if (playlist.isSmart) {
+        const def = await services.playlistService.getSmartPlaylistDefinition?.(playlist.id);
+        SmartPlaylistModalComponent.show({
+          playlist,
+          definition: def || undefined,
+          onSave: async (name, description, rules, matchMode, sort, limit) => {
+            await services.playlistService.updateSmartPlaylist?.(playlist.id, {
+              name,
+              description,
+              rules,
+              matchMode,
+              sort,
+              limit
+            });
+            callbacks.onRefresh();
+          }
+        });
+      } else {
+        PlaylistModalComponent.show({
+          playlist,
+          onSave: async (name, description) => {
+            await services.playlistService.updatePlaylist(playlist.id, { name, description });
+            callbacks.onRefresh();
+          }
+        });
+      }
     });
 
     header.querySelector('.pl-delete-btn')?.addEventListener('click', async () => {

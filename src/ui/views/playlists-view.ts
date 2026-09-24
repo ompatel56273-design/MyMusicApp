@@ -13,6 +13,7 @@ import type { RouterService } from '../navigation/router-service';
 import { DomainEvents, type PlaylistUpdatedEvent } from '../../domain/events/domain-events';
 import { PlaylistCardComponent } from '../components/playlist/playlist-card-component';
 import { PlaylistModalComponent } from '../components/playlist/playlist-modal-component';
+import { SmartPlaylistModalComponent } from '../components/playlist/smart-playlist-modal-component';
 import { PlaylistDetailComponent } from '../components/playlist/playlist-detail-component';
 import { escapeHtml } from '../../core/security/html-sanitizer';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
@@ -383,6 +384,28 @@ export class PlaylistsView implements IView {
           <!-- Action Buttons -->
           <div style="display: flex; gap: var(--space-3); align-items: center; z-index: 1;">
             <button
+              class="create-smart-playlist-btn"
+              style="
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 20px;
+                background: rgba(124, 58, 237, 0.25);
+                border: 1px solid var(--color-accent-purple);
+                border-radius: var(--radius-full);
+                color: #ffffff;
+                font-size: var(--font-size-xs);
+                font-weight: var(--font-weight-bold);
+                cursor: pointer;
+                box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);
+                transition: all var(--duration-fast) var(--ease-smooth);
+                min-height: 44px;
+              "
+            >
+              <span style="display: flex;">${getIconSvg('sparkles', { size: 16, color: '#ffffff' })}</span>
+              <span>+ Smart Playlist</span>
+            </button>
+            <button
               class="create-playlist-btn btn-primary"
               style="
                 display: inline-flex;
@@ -585,7 +608,18 @@ export class PlaylistsView implements IView {
       });
     };
 
+    const openCreateSmartModal = () => {
+      SmartPlaylistModalComponent.show({
+        onSave: async (name, description, rules, matchMode, sort, limit) => {
+          if (this.deps?.playlistService.createSmartPlaylist) {
+            await this.deps.playlistService.createSmartPlaylist(name, description, rules, matchMode, sort, limit);
+          }
+        }
+      });
+    };
+
     this.container.querySelector<HTMLButtonElement>('.create-playlist-btn')?.addEventListener('click', openCreateModal);
+    this.container.querySelector<HTMLButtonElement>('.create-smart-playlist-btn')?.addEventListener('click', openCreateSmartModal);
     this.container.querySelector<HTMLButtonElement>('#quick-create-playlist-side-btn')?.addEventListener('click', openCreateModal);
 
     const gridSlot = this.container.querySelector<HTMLElement>('.playlists-grid-slot');
@@ -605,16 +639,23 @@ export class PlaylistsView implements IView {
           </p>
           ${
             !this.searchQuery
-              ? `<button class="empty-create-btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 24px; background: linear-gradient(135deg, var(--color-accent-purple) 0%, #9333ea 100%); border: 1px solid var(--glass-border-interactive); border-radius: var(--radius-full); color: #ffffff; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.5); min-height: 44px;">
-                  <span style="display: flex;">${getIconSvg('plus', { size: 16, color: '#ffffff' })}</span>
-                  <span>+ Create Playlist</span>
-                </button>`
+              ? `<div style="display: flex; gap: 12px; justify-content: center;">
+                  <button class="empty-create-smart-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; background: rgba(124, 58, 237, 0.25); border: 1px solid var(--color-accent-purple); border-radius: var(--radius-full); color: #ffffff; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; min-height: 44px;">
+                    <span style="display: flex;">${getIconSvg('sparkles', { size: 16, color: '#ffffff' })}</span>
+                    <span>+ Smart Playlist</span>
+                  </button>
+                  <button class="empty-create-btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 24px; background: linear-gradient(135deg, var(--color-accent-purple) 0%, #9333ea 100%); border: 1px solid var(--glass-border-interactive); border-radius: var(--radius-full); color: #ffffff; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.5); min-height: 44px;">
+                    <span style="display: flex;">${getIconSvg('plus', { size: 16, color: '#ffffff' })}</span>
+                    <span>+ Create Playlist</span>
+                  </button>
+                </div>`
               : ''
           }
         </div>
       `;
 
       gridSlot.querySelector('.empty-create-btn')?.addEventListener('click', openCreateModal);
+      gridSlot.querySelector('.empty-create-smart-btn')?.addEventListener('click', openCreateSmartModal);
     } else {
       const grid = document.createElement('div');
       grid.className = 'playlists-grid';
@@ -646,15 +687,35 @@ export class PlaylistsView implements IView {
                 }
               }
             },
-            onEdit: p => {
-              PlaylistModalComponent.show({
-                playlist: p,
-                onSave: async (name, description) => {
-                  if (this.deps) {
-                    await this.deps.playlistService.updatePlaylist(p.id, { name, description });
+            onEdit: async p => {
+              if (p.isSmart && this.deps?.playlistService.getSmartPlaylistDefinition) {
+                const def = await this.deps.playlistService.getSmartPlaylistDefinition(p.id);
+                SmartPlaylistModalComponent.show({
+                  playlist: p,
+                  definition: def || undefined,
+                  onSave: async (name, description, rules, matchMode, sort, limit) => {
+                    if (this.deps?.playlistService.updateSmartPlaylist) {
+                      await this.deps.playlistService.updateSmartPlaylist(p.id, {
+                        name,
+                        description,
+                        rules,
+                        matchMode,
+                        sort,
+                        limit
+                      });
+                    }
                   }
-                }
-              });
+                });
+              } else {
+                PlaylistModalComponent.show({
+                  playlist: p,
+                  onSave: async (name, description) => {
+                    if (this.deps) {
+                      await this.deps.playlistService.updatePlaylist(p.id, { name, description });
+                    }
+                  }
+                });
+              }
             },
             onDelete: async p => {
               if (this.deps) {
