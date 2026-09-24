@@ -1,5 +1,5 @@
 import type { Track, Playlist, QueueItem } from '../entities/models';
-import type { PlaybackState, RepeatMode, ShuffleMode } from '../value-objects/audio-types';
+import type { PlaybackState, RepeatMode, ShuffleMode, AbLoopState } from '../value-objects/audio-types';
 
 /**
  * Strongly-typed domain events broadcasted across application boundaries.
@@ -26,6 +26,10 @@ export interface PlaybackTimeUpdatedEvent {
 export interface PlaybackModesChangedEvent {
   readonly repeat: RepeatMode;
   readonly shuffle: ShuffleMode;
+}
+
+export interface AbLoopChangedEvent {
+  readonly abLoop: AbLoopState;
 }
 
 export interface QueueChangedEvent {
@@ -79,6 +83,7 @@ export const DomainEvents = {
   PLAYBACK_STATE_CHANGED: 'playback:state-changed',
   PLAYBACK_TIME_UPDATED: 'playback:time-updated',
   PLAYBACK_MODES_CHANGED: 'playback:modes-changed',
+  AB_LOOP_CHANGED: 'playback:ab-loop-changed',
   QUEUE_CHANGED: 'queue:changed',
   FAVORITE_CHANGED: 'library:favorite-changed',
   SCAN_PROGRESS: 'scanner:progress',

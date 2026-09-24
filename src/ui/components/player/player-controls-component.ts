@@ -294,6 +294,32 @@ export class PlayerControlsComponent {
           >
             ${getIconSvg('repeat', { size: 18, color: isRepeat ? 'var(--color-accent-purple-glow)' : 'currentColor' })}
           </button>
+
+          <!-- A/B Loop Button -->
+          <button
+            id="np-ab-loop-btn"
+            aria-label="A/B Loop"
+            title="Set A/B Loop (Off / A- / A-B)"
+            style="
+              background: transparent;
+              border: none;
+              color: ${this.playbackManager.abLoop?.isActive || this.playbackManager.abLoop?.pointA !== null ? 'var(--color-accent-cyan)' : 'var(--color-text-muted)'};
+              cursor: pointer;
+              padding: 4px 8px;
+              border-radius: 12px;
+              font-size: 12px;
+              font-weight: 700;
+              letter-spacing: 0.5px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-width: 40px;
+              min-height: 44px;
+              transition: all var(--duration-fast);
+            "
+          >
+            ${this.getAbLoopLabel()}
+          </button>
         </div>
 
         <!-- 3. Bottom Utility Bar: Favorite + Volume -->
@@ -372,6 +398,26 @@ export class PlayerControlsComponent {
     this.bindEvents();
   }
 
+  private getAbLoopLabel(): string {
+    const abLoop = this.playbackManager.abLoop;
+    if (abLoop?.isActive) return 'A-B';
+    if (abLoop?.pointA !== null && abLoop?.pointA !== undefined) return 'A-';
+    return 'A/B';
+  }
+
+  public updateAbLoop(): void {
+    if (!this.container) return;
+    const btn = this.container.querySelector<HTMLButtonElement>('#np-ab-loop-btn');
+    if (!btn) return;
+
+    const label = this.getAbLoopLabel();
+    const isHighlight = label !== 'A/B';
+
+    btn.textContent = label;
+    btn.style.color = isHighlight ? 'var(--color-accent-cyan)' : 'var(--color-text-muted)';
+    btn.setAttribute('aria-label', `A/B Loop (${label})`);
+  }
+
   private bindEvents(): void {
     if (!this.container) return;
 
@@ -413,6 +459,20 @@ export class PlayerControlsComponent {
       else if (this.playbackManager.repeatMode === 'all') nextMode = 'one';
       this.playbackManager.setRepeatMode(nextMode);
       this.updateModes(nextMode, this.playbackManager.shuffleMode);
+    });
+
+    // A/B Loop
+    const abLoopBtn = this.container.querySelector<HTMLButtonElement>('#np-ab-loop-btn');
+    abLoopBtn?.addEventListener('click', () => {
+      const abLoop = this.playbackManager.abLoop;
+      if (!abLoop || (!abLoop.isActive && abLoop.pointA === null)) {
+        this.playbackManager.setLoopA?.();
+      } else if (abLoop.pointA !== null && abLoop.pointB === null) {
+        this.playbackManager.setLoopB?.();
+      } else {
+        this.playbackManager.clearAbLoop?.();
+      }
+      this.updateAbLoop();
     });
 
     // Favorite
