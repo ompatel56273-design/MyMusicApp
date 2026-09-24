@@ -118,12 +118,19 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* --- Layout Sizing --- */
+  /* --- Layout Sizing & Player Layout Tokens --- */
   --sidebar-width: 250px;
   --sidebar-collapsed-width: 72px;
   --mini-player-height: 88px;
   --header-height: 68px;
   --bottom-nav-height: 64px;
+
+  /* --- Player Layout Custom Properties --- */
+  --player-artwork-max-width: 440px;
+  --player-grid-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  --player-grid-gap: var(--space-8);
+  --player-layout-padding: var(--space-6) var(--space-8);
+  --player-controls-max-width: 480px;
 
   /* --- Animation & Transitions --- */
   --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -1672,3 +1679,29 @@ html, body {
   }
 }
 
+/* ==========================================================================
+   PLAYER LAYOUT VARIANTS (Standard, Compact, Expanded)
+   ========================================================================== */
+[data-player-layout="standard"] {
+  --player-artwork-max-width: 440px;
+  --player-grid-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  --player-grid-gap: var(--space-8);
+  --player-layout-padding: var(--space-6) var(--space-8);
+  --player-controls-max-width: 480px;
+}
+
+[data-player-layout="compact"] {
+  --player-artwork-max-width: 260px;
+  --player-grid-columns: minmax(0, 0.85fr) minmax(320px, 1.15fr);
+  --player-grid-gap: var(--space-4);
+  --player-layout-padding: var(--space-4) var(--space-6);
+  --player-controls-max-width: 400px;
+}
+
+[data-player-layout="expanded"] {
+  --player-artwork-max-width: 540px;
+  --player-grid-columns: minmax(0, 1.25fr) minmax(380px, 0.75fr);
+  --player-grid-gap: var(--space-10);
+  --player-layout-padding: var(--space-8) var(--space-10);
+  --player-controls-max-width: 560px;
+}
