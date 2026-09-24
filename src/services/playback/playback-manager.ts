@@ -2,7 +2,7 @@ import { Logger } from '../../core/logging/logger';
 import { EventBus } from '../../core/events/event-bus';
 import { AudioEngineError } from '../../core/errors/app-error';
 import { DomainEvents } from '../../domain/events/domain-events';
-import type { PlaybackState, RepeatMode, ShuffleMode } from '../../domain/value-objects/audio-types';
+import type { PlaybackState, RepeatMode, ShuffleMode, AbLoopState } from '../../domain/value-objects/audio-types';
 import type { Track, QueueItem, PlaybackHistoryItem, PlaybackPosition } from '../../domain/entities/models';
 import type {
   ITrackRepository,
@@ -66,6 +66,15 @@ export class PlaybackManager implements IPlaybackManager {
   private sessionListenStartMs = 0;
   private sessionListenedMs = 0;
   private hasCountedPlay = false;
+
+  // A/B Loop State
+  private abLoopState: AbLoopState = {
+    enabled: true,
+    pointA: null,
+    pointB: null,
+    trackId: null,
+    isActive: false
+  };
 
   constructor(deps: PlaybackManagerDependencies) {
     this.logger = deps.logger ?? new Logger('PlaybackManager');
@@ -146,6 +155,96 @@ export class PlaybackManager implements IPlaybackManager {
 
   public get shuffleMode(): ShuffleMode {
     return this.queueManager.getShuffleMode();
+  }
+
+  public get abLoop(): AbLoopState {
+    return { ...this.abLoopState };
+  }
+
+  private updateAbLoopState(updates: Partial<AbLoopState>): void {
+    const currentTrackId = this.currentTrackEntity?.id ?? null;
+    const durMs = this.currentDurationMs || 0;
+
+    let enabled = updates.enabled !== undefined ? updates.enabled : this.abLoopState.enabled;
+    let pointA = updates.pointA !== undefined ? updates.pointA : this.abLoopState.pointA;
+    let pointB = updates.pointB !== undefined ? updates.pointB : this.abLoopState.pointB;
+    let trackId = updates.trackId !== undefined ? updates.trackId : (this.abLoopState.trackId ?? currentTrackId);
+
+    if (pointA !== null) {
+      if (typeof pointA !== 'number' || isNaN(pointA) || !isFinite(pointA)) {
+        pointA = null;
+      } else {
+        pointA = Math.max(0, Math.min(durMs > 0 ? durMs : Infinity, Math.round(pointA)));
+      }
+    }
+
+    if (pointB !== null) {
+      if (typeof pointB !== 'number' || isNaN(pointB) || !isFinite(pointB)) {
+        pointB = null;
+      } else {
+        pointB = Math.max(0, Math.min(durMs > 0 ? durMs : Infinity, Math.round(pointB)));
+      }
+    }
+
+    // Point B set without Point A -> Point A defaults to 0
+    if (pointB !== null && pointA === null) {
+      pointA = 0;
+    }
+
+    let isActive = false;
+    if (enabled && pointA !== null && pointB !== null && trackId && currentTrackId === trackId) {
+      if (pointB - pointA >= 100) {
+        isActive = true;
+      }
+    }
+
+    this.abLoopState = {
+      enabled,
+      pointA,
+      pointB,
+      trackId: trackId ?? currentTrackId,
+      isActive
+    };
+
+    this.eventBus.publish(DomainEvents.AB_LOOP_CHANGED, {
+      abLoop: this.abLoop
+    });
+  }
+
+  public setLoopA(positionMs?: number): void {
+    const targetPos = positionMs !== undefined ? positionMs : this.currentPositionMs;
+    const trackId = this.currentTrackEntity?.id ?? null;
+    this.updateAbLoopState({
+      pointA: targetPos,
+      trackId
+    });
+  }
+
+  public setLoopB(positionMs?: number): void {
+    const targetPos = positionMs !== undefined ? positionMs : this.currentPositionMs;
+    const trackId = this.currentTrackEntity?.id ?? null;
+    this.updateAbLoopState({
+      pointB: targetPos,
+      trackId
+    });
+  }
+
+  public toggleAbLoop(enabled?: boolean): void {
+    const newEnabled = enabled !== undefined ? enabled : !this.abLoopState.enabled;
+    this.updateAbLoopState({ enabled: newEnabled });
+  }
+
+  public clearAbLoop(): void {
+    this.abLoopState = {
+      enabled: this.abLoopState.enabled,
+      pointA: null,
+      pointB: null,
+      trackId: null,
+      isActive: false
+    };
+    this.eventBus.publish(DomainEvents.AB_LOOP_CHANGED, {
+      abLoop: this.abLoop
+    });
   }
 
   public get queue(): readonly QueueItem[] {
@@ -333,6 +432,9 @@ export class PlaybackManager implements IPlaybackManager {
     }
 
     const previousTrack = this.currentTrackEntity;
+    if (previousTrack?.id !== track.id) {
+      this.clearAbLoop();
+    }
     this.currentTrackEntity = track;
     this.currentDurationMs = track.durationMs || 0;
     this.currentPositionMs = 0;
@@ -415,7 +517,12 @@ export class PlaybackManager implements IPlaybackManager {
   }
 
   public async seek(positionMs: number): Promise<void> {
-    const clamped = Math.max(0, Math.min(this.currentDurationMs || Infinity, positionMs));
+    let clamped = Math.max(0, Math.min(this.currentDurationMs || Infinity, positionMs));
+    if (this.abLoopState.isActive && this.abLoopState.pointB !== null && this.abLoopState.pointA !== null) {
+      if (clamped >= this.abLoopState.pointB) {
+        clamped = this.abLoopState.pointA;
+      }
+    }
     this.currentPositionMs = clamped;
     this.cancelPreload();
     this.audioEngine.seek(clamped / 1000.0);
@@ -433,6 +540,7 @@ export class PlaybackManager implements IPlaybackManager {
   }
 
   public async next(): Promise<void> {
+    this.clearAbLoop();
     this.cancelPreload();
     const nextIdx = this.queueManager.getNextIndex();
     if (nextIdx !== null) {
@@ -452,6 +560,7 @@ export class PlaybackManager implements IPlaybackManager {
   }
 
   public async previous(): Promise<void> {
+    this.clearAbLoop();
     this.cancelPreload();
     const currentSec = this.currentPositionMs / 1000.0;
     const prevIdx = this.queueManager.getPreviousIndex(currentSec, 3.0);
@@ -667,6 +776,24 @@ export class PlaybackManager implements IPlaybackManager {
       this.currentDurationMs = Math.round(durSec * 1000);
     }
 
+    // A/B Loop Boundary Check: takes immediate precedence over Crossfade and Gapless
+    if (
+      this.abLoopState.isActive &&
+      this.abLoopState.pointB !== null &&
+      this.abLoopState.pointA !== null &&
+      this.currentPositionMs >= this.abLoopState.pointB
+    ) {
+      const targetSec = this.abLoopState.pointA / 1000.0;
+      this.audioEngine.seek(targetSec);
+      this.currentPositionMs = this.abLoopState.pointA;
+
+      this.eventBus.publish(DomainEvents.PLAYBACK_TIME_UPDATED, {
+        positionMs: this.currentPositionMs,
+        durationMs: this.currentDurationMs
+      });
+      return;
+    }
+
     this.eventBus.publish(DomainEvents.PLAYBACK_TIME_UPDATED, {
       positionMs: this.currentPositionMs,
       durationMs: this.currentDurationMs
@@ -681,8 +808,9 @@ export class PlaybackManager implements IPlaybackManager {
       void this.persistCurrentPosition();
     }
 
-    // Trigger crossfade transition if enabled and threshold reached
+    // Trigger crossfade transition if enabled and threshold reached (disabled if A/B loop is active)
     if (
+      !this.abLoopState.isActive &&
       this.crossfadeEnabledValue &&
       !this.isCrossfadingActive &&
       this.currentState === 'playing' &&
@@ -775,6 +903,15 @@ export class PlaybackManager implements IPlaybackManager {
     // The incoming track is already playing as active track, so ignore onEnded from the old track.
     if (this.isCrossfadingActive || (this.audioEngine.isCrossfading)) {
       this.isCrossfadingActive = false;
+      return;
+    }
+
+    // If A/B loop is active, loop back to Point A and do not advance queue or trigger gapless transition
+    if (this.abLoopState.isActive && this.abLoopState.pointA !== null) {
+      const targetSec = this.abLoopState.pointA / 1000.0;
+      this.audioEngine.seek(targetSec);
+      this.currentPositionMs = this.abLoopState.pointA;
+      void this.audioEngine.play();
       return;
     }
 

@@ -3,7 +3,8 @@ import type {
   PlaybackState,
   RepeatMode,
   ShuffleMode,
-  ReplayGainData
+  ReplayGainData,
+  AbLoopState
 } from '../../domain/value-objects/audio-types';
 import type {
   Track,
@@ -61,6 +62,11 @@ export interface IPlaybackManager {
   setCrossfade?(enabled: boolean, durationSec?: number): void;
   readonly crossfadeEnabled?: boolean;
   readonly crossfadeDurationSec?: number;
+  readonly abLoop?: AbLoopState;
+  setLoopA?(positionMs?: number): void;
+  setLoopB?(positionMs?: number): void;
+  toggleAbLoop?(enabled?: boolean): void;
+  clearAbLoop?(): void;
 }
 
 /**
