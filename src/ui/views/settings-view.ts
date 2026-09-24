@@ -14,6 +14,7 @@ import type { RepeatMode, ShuffleMode } from '../../domain/value-objects/audio-t
 import { EqualizerComponent } from '../components/audio/equalizer-component';
 import { ReplayGainControlsComponent } from '../components/audio/replaygain-controls-component';
 import { ThemeManager, type ThemePreference, type ResolvedTheme } from '../theme/theme-manager';
+import type { AccentThemeId, AccentThemeDefinition } from '../theme/accent-theme';
 import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-filesystem-adapter';
 import type { IDatabaseAdapter } from '../../data/db/database-adapter';
 import { STORES } from '../../data/db/schema';
@@ -84,6 +85,7 @@ export class SettingsView implements IView {
   private equalizerComponent: EqualizerComponent | null = null;
   private replayGainComponent: ReplayGainControlsComponent | null = null;
   private themeUnsub: (() => void) | null = null;
+  private accentUnsub: (() => void) | null = null;
   private eventBusSubs: Disposable[] = [];
   private connectedFolderName: string | null = null;
   private activeSection: SettingsSectionId = 'music-access';
@@ -141,6 +143,10 @@ export class SettingsView implements IView {
     if (this.themeUnsub) {
       this.themeUnsub();
       this.themeUnsub = null;
+    }
+    if (this.accentUnsub) {
+      this.accentUnsub();
+      this.accentUnsub = null;
     }
     for (const sub of this.eventBusSubs) {
       sub.dispose();
@@ -404,8 +410,86 @@ export class SettingsView implements IView {
 
         .settings-theme-option.active {
           border-color: var(--color-accent-primary);
-          background: rgba(168, 85, 247, 0.12);
-          box-shadow: var(--shadow-glow-purple);
+          background: var(--color-accent-subtle);
+          box-shadow: var(--shadow-glow);
+        }
+
+        /* Accent Theme Selection Grid */
+        .settings-accent-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+          gap: var(--space-3);
+          width: 100%;
+        }
+
+        .settings-accent-option {
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid var(--glass-border);
+          border-radius: var(--radius-lg);
+          padding: 12px 14px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: var(--space-3);
+          transition: all var(--duration-fast) var(--ease-smooth);
+          outline: none;
+        }
+
+        .settings-accent-option:hover {
+          background: var(--glass-bg-subtle-hover);
+          border-color: var(--glass-border-interactive);
+          transform: translateY(-1px);
+        }
+
+        .settings-accent-option:focus-visible {
+          border-color: var(--color-accent-primary);
+          box-shadow: var(--shadow-glow);
+        }
+
+        .settings-accent-option.active {
+          background: var(--color-accent-subtle);
+          border-color: var(--color-accent-primary);
+          box-shadow: 0 0 16px var(--color-accent-muted);
+        }
+
+        .settings-accent-swatch {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: transform var(--duration-fast);
+        }
+
+        .settings-accent-option:hover .settings-accent-swatch {
+          transform: scale(1.08);
+        }
+
+        .settings-accent-details {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          min-width: 0;
+        }
+
+        .settings-accent-name {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--color-text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .settings-accent-desc {
+          font-size: 11px;
+          color: var(--color-text-muted);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          margin-top: 1px;
         }
 
         .settings-form-row {
@@ -858,6 +942,40 @@ export class SettingsView implements IView {
                   <span style="font-size: 11px; color: var(--color-text-muted);">Dynamically syncs with OS color mode</span>
                 </div>
               </div>
+
+              <!-- Accent Color Theme Selection -->
+              <div style="margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--glass-border);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); flex-wrap: wrap; gap: 8px;">
+                  <div>
+                    <h3 style="font-size: 15px; font-weight: 700; color: var(--color-text-primary); margin: 0;">Accent Color</h3>
+                    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 2px 0 0 0;">Personalize highlights, glows, sliders, and interactive controls across the app</p>
+                  </div>
+                  <span id="settings-accent-status-badge" style="font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: var(--radius-full); background: var(--color-accent-muted); color: var(--color-accent-primary); border: 1px solid var(--glass-border-highlight);">
+                    Neon Purple Active
+                  </span>
+                </div>
+
+                <div class="settings-accent-grid" role="radiogroup" aria-label="Accent Color Selection">
+                  ${ThemeManager.getInstance().getAvailableAccentThemes().map(theme => `
+                    <div
+                      class="settings-accent-option ${theme.id === ThemeManager.getInstance().getAccentTheme() ? 'active' : ''}"
+                      data-accent-val="${theme.id}"
+                      role="radio"
+                      tabindex="0"
+                      aria-checked="${theme.id === ThemeManager.getInstance().getAccentTheme() ? 'true' : 'false'}"
+                      aria-label="Select ${theme.name} Accent Theme"
+                    >
+                      <div class="settings-accent-swatch" style="background: ${theme.gradient}; box-shadow: 0 0 12px ${theme.glowColor}66;">
+                        <span class="settings-accent-check" style="display: ${theme.id === ThemeManager.getInstance().getAccentTheme() ? 'flex' : 'none'};">${getIconSvg('check', { size: 14, color: '#ffffff' })}</span>
+                      </div>
+                      <div class="settings-accent-details">
+                        <span class="settings-accent-name">${theme.name}</span>
+                        <span class="settings-accent-desc">${theme.description}</span>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
             </section>
 
             <!-- 5. Audio Visualizer Preferences Section -->
@@ -1233,6 +1351,52 @@ export class SettingsView implements IView {
 
     this.themeUnsub = themeManager.subscribe((resolved, pref) => {
       updateThemeDisplay(pref, resolved);
+    });
+
+    // Accent Theme Listeners
+    const accentOptions = this.container.querySelectorAll<HTMLElement>('.settings-accent-option');
+    const accentBadge = this.container.querySelector<HTMLElement>('#settings-accent-status-badge');
+
+    const updateAccentDisplay = (accentId: AccentThemeId, def: AccentThemeDefinition) => {
+      accentOptions.forEach(opt => {
+        const val = opt.getAttribute('data-accent-val');
+        const isActive = val === accentId;
+        opt.classList.toggle('active', isActive);
+        opt.setAttribute('aria-checked', isActive ? 'true' : 'false');
+        const check = opt.querySelector<HTMLElement>('.settings-accent-check');
+        if (check) check.style.display = isActive ? 'flex' : 'none';
+      });
+
+      if (accentBadge) {
+        accentBadge.textContent = `${def.name} Active`;
+        accentBadge.style.background = def.mutedBackground;
+        accentBadge.style.color = def.primaryColor;
+        accentBadge.style.borderColor = def.borderHighlight;
+      }
+    };
+
+    updateAccentDisplay(themeManager.getAccentTheme(), themeManager.getAccentThemeDefinition());
+
+    accentOptions.forEach(opt => {
+      opt.addEventListener('click', () => {
+        const accent = opt.getAttribute('data-accent-val') as AccentThemeId;
+        if (accent) {
+          themeManager.setAccentTheme(accent);
+        }
+      });
+      opt.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const accent = opt.getAttribute('data-accent-val') as AccentThemeId;
+          if (accent) {
+            themeManager.setAccentTheme(accent);
+          }
+        }
+      });
+    });
+
+    this.accentUnsub = themeManager.subscribeAccent((accentId, def) => {
+      updateAccentDisplay(accentId, def);
     });
   }
 
