@@ -3,6 +3,7 @@ import type { ILibraryService, IPlaybackManager, IArtworkService } from '../../.
 import { VirtualScroller } from '../../components/virtual-scroller/virtual-scroller';
 import { TrackRowComponent } from '../../components/library/track-row-component';
 import type { LibraryToolbarState } from '../../components/library/library-toolbar';
+import { ThemeManager } from '../../theme/theme-manager';
 
 export interface SongsTabViewDependencies {
   libraryService: ILibraryService;
@@ -19,6 +20,7 @@ export class SongsTabView {
   private allTracks: Track[] = [];
   private filteredTracks: Track[] = [];
   private scroller: VirtualScroller<Track> | null = null;
+  private densityUnsub: (() => void) | null = null;
   private filterState: LibraryToolbarState = {
     searchQuery: '',
     sortBy: 'title',
@@ -80,6 +82,10 @@ export class SongsTabView {
   }
 
   public unmount(): void {
+    if (this.densityUnsub) {
+      this.densityUnsub();
+      this.densityUnsub = null;
+    }
     if (this.scroller) {
       this.scroller.dispose();
       this.scroller = null;
@@ -138,10 +144,12 @@ export class SongsTabView {
       return;
     }
 
+    const currentDensityDef = ThemeManager.getInstance().getLibraryDensityDefinition();
+
     this.scroller = new VirtualScroller<Track>({
       container: viewport,
       items: this.filteredTracks,
-      itemHeight: 56,
+      itemHeight: currentDensityDef.rowHeight,
       overscan: 5,
       renderItem: (track, index) => {
         return TrackRowComponent.create(
@@ -155,6 +163,14 @@ export class SongsTabView {
         );
       }
     });
+
+    if (!this.densityUnsub) {
+      this.densityUnsub = ThemeManager.getInstance().subscribeLibraryDensity((_density, def) => {
+        if (this.scroller) {
+          this.scroller.setItemHeight(def.rowHeight);
+        }
+      });
+    }
   }
 
   private applyFilteringAndSorting(): void {

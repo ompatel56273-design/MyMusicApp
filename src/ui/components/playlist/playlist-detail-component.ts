@@ -316,7 +316,8 @@ export class PlaylistDetailComponent {
     row.style.display = 'grid';
     row.style.gridTemplateColumns = '40px minmax(180px, 2fr) minmax(120px, 1.5fr) 70px 80px';
     row.style.alignItems = 'center';
-    row.style.padding = '8px 14px';
+    row.style.padding = 'var(--library-item-padding, 8px 14px)';
+    row.style.minHeight = 'var(--library-row-height, 56px)';
     row.style.borderRadius = 'var(--radius-lg)';
     row.style.gap = 'var(--space-3)';
     row.style.transition = 'background var(--duration-fast) var(--ease-smooth)';
@@ -331,7 +332,7 @@ export class PlaylistDetailComponent {
       </div>
 
       <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
-        <div class="row-art" style="width: 38px; height: 38px; border-radius: var(--radius-md); background: rgba(255, 255, 255, 0.05); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; border: 1px solid var(--glass-border);">
+        <div class="row-art" style="width: var(--library-artwork-size, 38px); height: var(--library-artwork-size, 38px); border-radius: var(--radius-md); background: rgba(255, 255, 255, 0.05); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; border: 1px solid var(--glass-border);">
           <span style="display: flex; color: var(--color-text-muted);">${getIconSvg('music', { size: 16 })}</span>
         </div>
         <div style="display: flex; flex-direction: column; min-width: 0; gap: 2px;">

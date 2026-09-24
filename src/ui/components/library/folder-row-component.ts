@@ -16,17 +16,17 @@ export class FolderRowComponent {
     row.style.display = 'flex';
     row.style.alignItems = 'center';
     row.style.gap = 'var(--space-3)';
-    row.style.padding = '12px 18px';
+    row.style.padding = 'var(--library-item-padding, 12px 18px)';
     row.style.borderRadius = 'var(--radius-lg)';
     row.style.cursor = 'pointer';
-    row.style.height = '60px';
+    row.style.height = 'var(--library-row-height, 60px)';
     row.style.boxSizing = 'border-box';
     row.style.background = 'rgba(255, 255, 255, 0.03)';
     row.style.border = '1px solid var(--glass-border)';
     row.style.transition = 'all var(--duration-fast) var(--ease-smooth)';
 
     row.innerHTML = `
-      <div style="width: 38px; height: 38px; border-radius: var(--radius-sm); background: linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; border: 1px solid rgba(255, 255, 255, 0.08);">
+      <div style="width: var(--library-artwork-size, 38px); height: var(--library-artwork-size, 38px); border-radius: var(--radius-sm); background: linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; border: 1px solid rgba(255, 255, 255, 0.08);">
         <span style="font-size: 18px;">📁</span>
       </div>
       <div style="display: flex; flex-direction: column; overflow: hidden; flex: 1;">

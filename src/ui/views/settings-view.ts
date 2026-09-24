@@ -89,6 +89,7 @@ export class SettingsView implements IView {
   private ambientUnsub: (() => void) | null = null;
   private dynamicArtworkUnsub: (() => void) | null = null;
   private playerLayoutUnsub: (() => void) | null = null;
+  private densityUnsub: (() => void) | null = null;
   private eventBusSubs: Disposable[] = [];
   private connectedFolderName: string | null = null;
   private activeSection: SettingsSectionId = 'music-access';
@@ -162,6 +163,10 @@ export class SettingsView implements IView {
     if (this.playerLayoutUnsub) {
       this.playerLayoutUnsub();
       this.playerLayoutUnsub = null;
+    }
+    if (this.densityUnsub) {
+      this.densityUnsub();
+      this.densityUnsub = null;
     }
     for (const sub of this.eventBusSubs) {
       sub.dispose();
@@ -1144,6 +1149,41 @@ export class SettingsView implements IView {
                   `).join('')}
                 </div>
               </div>
+
+              <!-- Library Information Density Selection -->
+              <div style="margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--glass-border);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); flex-wrap: wrap; gap: 8px;">
+                  <div>
+                    <h3 style="font-size: 15px; font-weight: 700; color: var(--color-text-primary); margin: 0;">Library Information Density</h3>
+                    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 2px 0 0 0;">Adjust row heights, artwork sizing, and spacing across tracks, albums, artists, playlists, and folders</p>
+                  </div>
+                  <span id="settings-density-status-badge" style="font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: var(--radius-full); background: var(--color-accent-muted); color: var(--color-accent-primary); border: 1px solid var(--glass-border-highlight);">
+                    ${ThemeManager.getInstance().getLibraryDensityDefinition().name} Active
+                  </span>
+                </div>
+
+                <div class="settings-ambient-grid" role="radiogroup" aria-label="Library Density Selection">
+                  ${ThemeManager.getInstance().getAvailableLibraryDensities().map(density => `
+                    <div
+                      class="settings-density-option settings-library-density-option ${density.id === ThemeManager.getInstance().getLibraryDensity() ? 'active' : ''}"
+                      data-density-val="${density.id}"
+                      role="radio"
+                      tabindex="0"
+                      aria-checked="${density.id === ThemeManager.getInstance().getLibraryDensity() ? 'true' : 'false'}"
+                      aria-label="Select ${density.name} Library Density"
+                    >
+                      <div class="settings-ambient-swatch">
+                        <span style="font-size: 16px;">${getIconSvg(density.icon as any, { size: 16 })}</span>
+                        <span class="settings-ambient-check" style="display: ${density.id === ThemeManager.getInstance().getLibraryDensity() ? 'flex' : 'none'};">${getIconSvg('check', { size: 14, color: '#ffffff' })}</span>
+                      </div>
+                      <div class="settings-accent-details">
+                        <span class="settings-accent-name">${density.name}</span>
+                        <span class="settings-accent-desc">${density.description}</span>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
             </section>
 
             <!-- 5. Audio Visualizer Preferences Section -->
@@ -1674,6 +1714,49 @@ export class SettingsView implements IView {
 
     this.playerLayoutUnsub = themeManager.subscribePlayerLayout((layoutId, def) => {
       updateLayoutDisplay(layoutId, def);
+    });
+
+    // Library Density Listeners
+    const densityOptions = this.container.querySelectorAll<HTMLElement>('.settings-density-option');
+    const densityBadge = this.container.querySelector<HTMLElement>('#settings-density-status-badge');
+
+    const updateDensityDisplay = (densityId: string, def: any) => {
+      densityOptions.forEach(opt => {
+        const val = opt.getAttribute('data-density-val');
+        const isActive = val === densityId;
+        opt.classList.toggle('active', isActive);
+        opt.setAttribute('aria-checked', isActive ? 'true' : 'false');
+        const check = opt.querySelector<HTMLElement>('.settings-ambient-check');
+        if (check) check.style.display = isActive ? 'flex' : 'none';
+      });
+
+      if (densityBadge) {
+        densityBadge.textContent = `${def.name} Active`;
+      }
+    };
+
+    updateDensityDisplay(themeManager.getLibraryDensity(), themeManager.getLibraryDensityDefinition());
+
+    densityOptions.forEach(opt => {
+      opt.addEventListener('click', () => {
+        const density = opt.getAttribute('data-density-val');
+        if (density) {
+          themeManager.setLibraryDensity(density);
+        }
+      });
+      opt.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const density = opt.getAttribute('data-density-val');
+          if (density) {
+            themeManager.setLibraryDensity(density);
+          }
+        }
+      });
+    });
+
+    this.densityUnsub = themeManager.subscribeLibraryDensity((densityId, def) => {
+      updateDensityDisplay(densityId, def);
     });
   }
 
