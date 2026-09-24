@@ -15,6 +15,7 @@ import { HeaderComponent } from './header-component';
 import { SidebarComponent } from './sidebar-component';
 import { MiniPlayerComponent } from './mini-player-component';
 import { KeyboardManager } from '../keyboard/keyboard-manager';
+import { MediaSessionService } from '../../services/playback/media-session-service';
 import type {
   IPlaybackManager,
   ILibraryService,
@@ -66,6 +67,7 @@ export class AppShell {
   private readonly sidebar: SidebarComponent;
   private readonly miniPlayer: MiniPlayerComponent;
   private readonly keyboardManager: KeyboardManager;
+  private readonly mediaSessionService: MediaSessionService;
 
   private views: Map<AppRoute, IView>;
   private activeView: IView | null = null;
@@ -98,6 +100,11 @@ export class AppShell {
     this.keyboardManager = new KeyboardManager({
       playbackManager: deps.playbackManager,
       router: this.router
+    });
+    this.mediaSessionService = new MediaSessionService({
+      playbackManager: deps.playbackManager,
+      eventBus: deps.eventBus,
+      artworkService: deps.artworkService
     });
 
     const playlistsView = deps.playlistService
@@ -229,6 +236,7 @@ export class AppShell {
 
     this.bindMobileNav();
     this.keyboardManager.init();
+    this.mediaSessionService.init();
 
     // Subscribe to route changes
     this.routerSub = this.router.subscribe(state => {
@@ -278,6 +286,7 @@ export class AppShell {
     this.sidebar.unmount();
     this.miniPlayer.unmount();
     this.keyboardManager.dispose();
+    this.mediaSessionService.dispose();
 
     if (this.container) {
       this.container.innerHTML = '';
