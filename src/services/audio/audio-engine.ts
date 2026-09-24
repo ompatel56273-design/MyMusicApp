@@ -37,6 +37,12 @@ export class AudioEngine implements IAudioEngine {
   private standbyGeneration = 0;
   private isStandbyPrepared = false;
 
+  private isCrossfadingActive = false;
+  private crossfadeTimeoutId: any = null;
+  private crossfadeOldElement: HTMLAudioElement | null = null;
+  private crossfadeOldObjectUrl: string | null = null;
+  private crossfadeConfig = { enabled: false, durationSec: 3 };
+
   private callbacks: AudioEngineCallbacks = {};
   private currentGeneration = 0;
   private isDisposed = false;
@@ -59,7 +65,10 @@ export class AudioEngine implements IAudioEngine {
       return this.context;
     }
 
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const AudioContextClass =
+      (typeof window !== 'undefined' ? window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext : undefined) ||
+      (globalThis as unknown as { AudioContext?: typeof AudioContext }).AudioContext ||
+      (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) {
       throw new AudioEngineError('Web Audio API is not supported in this runtime environment.', 'WEB_AUDIO_UNSUPPORTED');
     }
@@ -182,7 +191,8 @@ export class AudioEngine implements IAudioEngine {
     const generation = ++this.currentGeneration;
     this.ensureContext();
 
-    // Cancel any pending/prepared standby preload
+    // Cancel any active crossfade and pending standby preload
+    this.cancelCrossfade();
     this.cancelPreload();
 
     // Revoke previous blob Object URL
@@ -207,12 +217,26 @@ export class AudioEngine implements IAudioEngine {
     const activeGain = this.activeChannel === 'A' ? this.gainNodeA : this.gainNodeB;
     const standbyGain = this.activeChannel === 'A' ? this.gainNodeB : this.gainNodeA;
     if (activeGain && this.context) {
-      activeGain.gain.setValueAtTime(1.0, this.context.currentTime);
+      if (typeof activeGain.gain.cancelScheduledValues === 'function') {
+        activeGain.gain.cancelScheduledValues(this.context.currentTime);
+      }
+      if (typeof activeGain.gain.setValueAtTime === 'function') {
+        activeGain.gain.setValueAtTime(1.0, this.context.currentTime);
+      } else {
+        activeGain.gain.value = 1.0;
+      }
     } else if (activeGain) {
       activeGain.gain.value = 1.0;
     }
     if (standbyGain && this.context) {
-      standbyGain.gain.setValueAtTime(0.0, this.context.currentTime);
+      if (typeof standbyGain.gain.cancelScheduledValues === 'function') {
+        standbyGain.gain.cancelScheduledValues(this.context.currentTime);
+      }
+      if (typeof standbyGain.gain.setValueAtTime === 'function') {
+        standbyGain.gain.setValueAtTime(0.0, this.context.currentTime);
+      } else {
+        standbyGain.gain.value = 0.0;
+      }
     } else if (standbyGain) {
       standbyGain.gain.value = 0.0;
     }
@@ -417,6 +441,206 @@ export class AudioEngine implements IAudioEngine {
     this.logger.debug(`Seamlessly transitioned playback to Channel ${newChannel}.`);
   }
 
+  public get isCrossfading(): boolean {
+    return this.isCrossfadingActive;
+  }
+
+  public setCrossfade(enabled: boolean, durationSec = 3): void {
+    this.crossfadeConfig = {
+      enabled,
+      durationSec: Math.max(1.0, Math.min(12.0, durationSec))
+    };
+  }
+
+  /**
+   * Starts a smooth Web Audio gain ramp crossfade into the prepared standby channel.
+   */
+  public async startCrossfadeToNext(durationSec?: number): Promise<void> {
+    if (!this.isStandbyPrepared || !this.context) {
+      throw new AudioEngineError('No prepared track to crossfade to.', 'NO_PREPARED_TRACK');
+    }
+
+    // Cancel previous crossfade if still pending
+    this.cancelCrossfade();
+
+    const oldActiveElement = this.activeElement;
+    const oldObjectUrl = this.currentObjectUrl;
+    const oldChannel = this.activeChannel;
+
+    const newChannel: 'A' | 'B' = oldChannel === 'A' ? 'B' : 'A';
+    const newActiveElement = newChannel === 'A' ? this.audioElementA : this.audioElementB;
+    const oldGain = oldChannel === 'A' ? this.gainNodeA : this.gainNodeB;
+    const newGain = newChannel === 'A' ? this.gainNodeA : this.gainNodeB;
+
+    if (!newActiveElement) {
+      throw new AudioEngineError('Standby audio element unavailable.', 'NO_AUDIO_ELEMENT');
+    }
+
+    const D = Math.max(0.5, Math.min(12.0, durationSec ?? this.crossfadeConfig.durationSec));
+
+    // Apply ReplayGain to DSP pipeline for the incoming track
+    if (this.dspPipeline) {
+      this.dspPipeline.setReplayGainData(this.standbyOptions?.replayGain ?? null);
+    }
+
+    // Schedule linear gain ramps across AudioContext timeline
+    const now = this.context.currentTime;
+    if (oldGain) {
+      if (typeof oldGain.gain.cancelScheduledValues === 'function') {
+        oldGain.gain.cancelScheduledValues(now);
+      }
+      if (typeof oldGain.gain.setValueAtTime === 'function') {
+        oldGain.gain.setValueAtTime(oldGain.gain.value, now);
+      }
+      if (typeof oldGain.gain.linearRampToValueAtTime === 'function') {
+        oldGain.gain.linearRampToValueAtTime(0.0, now + D);
+      } else {
+        oldGain.gain.value = 0.0;
+      }
+    }
+    if (newGain) {
+      if (typeof newGain.gain.cancelScheduledValues === 'function') {
+        newGain.gain.cancelScheduledValues(now);
+      }
+      if (typeof newGain.gain.setValueAtTime === 'function') {
+        newGain.gain.setValueAtTime(0.0, now);
+      }
+      if (typeof newGain.gain.linearRampToValueAtTime === 'function') {
+        newGain.gain.linearRampToValueAtTime(1.0, now + D);
+      } else {
+        newGain.gain.value = 1.0;
+      }
+    }
+
+    // Flip active channel & element
+    this.activeElement = newActiveElement;
+    this.activeChannel = newChannel;
+    this.currentObjectUrl = this.standbyObjectUrl;
+    this.standbyObjectUrl = null;
+    this.isStandbyPrepared = false;
+    this.standbyOptions = null;
+    this.isCrossfadingActive = true;
+    this.crossfadeOldElement = oldActiveElement;
+    this.crossfadeOldObjectUrl = oldObjectUrl;
+
+    if (this.context.state === 'suspended') {
+      try {
+        await this.context.resume();
+      } catch (err) {
+        this.logger.warn('AudioContext resume failed during crossfade:', { error: String(err) });
+      }
+    }
+
+    try {
+      await this.activeElement.play();
+    } catch (err) {
+      this.cancelCrossfade();
+      throw new AudioEngineError('Crossfade transition playback failed.', 'PLAY_FAILED', undefined, err as Error);
+    }
+
+    // Schedule cleanup of the faded-out track once ramp completes
+    const timeoutMs = Math.round(D * 1000) + 50;
+    this.crossfadeTimeoutId = setTimeout(() => {
+      this.completeCrossfade();
+    }, timeoutMs);
+
+    this.logger.debug(`Initiated crossfade (${D}s) to Channel ${newChannel}.`);
+  }
+
+  /**
+   * Completes the crossfade by tearing down the previous channel resources.
+   */
+  private completeCrossfade(): void {
+    if (this.crossfadeTimeoutId) {
+      clearTimeout(this.crossfadeTimeoutId);
+      this.crossfadeTimeoutId = null;
+    }
+
+    if (this.crossfadeOldElement) {
+      this.crossfadeOldElement.pause();
+      this.crossfadeOldElement.src = '';
+      this.crossfadeOldElement = null;
+    }
+
+    if (this.crossfadeOldObjectUrl) {
+      URL.revokeObjectURL(this.crossfadeOldObjectUrl);
+      this.crossfadeOldObjectUrl = null;
+    }
+
+    if (this.context) {
+      const activeGain = this.activeChannel === 'A' ? this.gainNodeA : this.gainNodeB;
+      const standbyGain = this.activeChannel === 'A' ? this.gainNodeB : this.gainNodeA;
+      if (activeGain) {
+        if (typeof activeGain.gain.cancelScheduledValues === 'function') {
+          activeGain.gain.cancelScheduledValues(this.context.currentTime);
+        }
+        if (typeof activeGain.gain.setValueAtTime === 'function') {
+          activeGain.gain.setValueAtTime(1.0, this.context.currentTime);
+        } else {
+          activeGain.gain.value = 1.0;
+        }
+      }
+      if (standbyGain) {
+        if (typeof standbyGain.gain.cancelScheduledValues === 'function') {
+          standbyGain.gain.cancelScheduledValues(this.context.currentTime);
+        }
+        if (typeof standbyGain.gain.setValueAtTime === 'function') {
+          standbyGain.gain.setValueAtTime(0.0, this.context.currentTime);
+        } else {
+          standbyGain.gain.value = 0.0;
+        }
+      }
+    }
+
+    this.isCrossfadingActive = false;
+  }
+
+  /**
+   * Cancels in-flight crossfade, resets audio gains, and purges faded element.
+   */
+  public cancelCrossfade(): void {
+    if (this.crossfadeTimeoutId) {
+      clearTimeout(this.crossfadeTimeoutId);
+      this.crossfadeTimeoutId = null;
+    }
+
+    if (this.context) {
+      if (this.gainNodeA) {
+        if (typeof this.gainNodeA.gain.cancelScheduledValues === 'function') {
+          this.gainNodeA.gain.cancelScheduledValues(this.context.currentTime);
+        }
+        if (typeof this.gainNodeA.gain.setValueAtTime === 'function') {
+          this.gainNodeA.gain.setValueAtTime(this.activeChannel === 'A' ? 1.0 : 0.0, this.context.currentTime);
+        } else {
+          this.gainNodeA.gain.value = this.activeChannel === 'A' ? 1.0 : 0.0;
+        }
+      }
+      if (this.gainNodeB) {
+        if (typeof this.gainNodeB.gain.cancelScheduledValues === 'function') {
+          this.gainNodeB.gain.cancelScheduledValues(this.context.currentTime);
+        }
+        if (typeof this.gainNodeB.gain.setValueAtTime === 'function') {
+          this.gainNodeB.gain.setValueAtTime(this.activeChannel === 'B' ? 1.0 : 0.0, this.context.currentTime);
+        } else {
+          this.gainNodeB.gain.value = this.activeChannel === 'B' ? 1.0 : 0.0;
+        }
+      }
+    }
+
+    if (this.crossfadeOldElement) {
+      this.crossfadeOldElement.pause();
+      this.crossfadeOldElement.src = '';
+      this.crossfadeOldElement = null;
+    }
+
+    if (this.crossfadeOldObjectUrl) {
+      URL.revokeObjectURL(this.crossfadeOldObjectUrl);
+      this.crossfadeOldObjectUrl = null;
+    }
+
+    this.isCrossfadingActive = false;
+  }
+
   public async play(): Promise<void> {
     if (!this.activeElement) return;
 
@@ -439,9 +663,13 @@ export class AudioEngine implements IAudioEngine {
     if (this.activeElement && !this.activeElement.paused) {
       this.activeElement.pause();
     }
+    if (this.crossfadeOldElement && !this.crossfadeOldElement.paused) {
+      this.crossfadeOldElement.pause();
+    }
   }
 
   public stop(): void {
+    this.cancelCrossfade();
     if (this.activeElement) {
       this.activeElement.pause();
       this.activeElement.currentTime = 0;
@@ -450,6 +678,7 @@ export class AudioEngine implements IAudioEngine {
 
   public seek(timeSec: number): void {
     if (!this.activeElement) return;
+    this.cancelCrossfade();
 
     const maxDuration = isNaN(this.activeElement.duration) ? Infinity : this.activeElement.duration;
     const clamped = Math.max(0, Math.min(maxDuration, isNaN(timeSec) ? 0 : timeSec));

@@ -217,6 +217,15 @@ export class AppBootstrap {
       logger: this.logger
     });
 
+    // 4.1 Apply Audio Settings to Engine & PlaybackManager
+    try {
+      const audioSettings = await audioSettingsService.getSettings();
+      await audioSettingsService.applyToAudioEngine(audioEngine);
+      playbackManager.setCrossfade?.(audioSettings.crossfadeEnabled, audioSettings.crossfadeDurationSec);
+    } catch (settingsErr) {
+      this.logger.warn('Could not restore audio settings:', { error: String(settingsErr) });
+    }
+
     // 5. Check Persistent Directory Handle
     const capabilityService = FileAccessCapabilityService.getInstance();
     try {

@@ -17,6 +17,8 @@ export interface AudioSettings {
   readonly customPresets: readonly EqualizerPreset[];
   readonly balance: number; // [-1.0 (Left), +1.0 (Right)]
   readonly limiterEnabled: boolean;
+  readonly crossfadeEnabled: boolean;
+  readonly crossfadeDurationSec: number; // [1.0, 12.0]
 }
 
 export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
@@ -27,5 +29,7 @@ export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   selectedPreset: 'flat',
   customPresets: [],
   balance: 0,
-  limiterEnabled: true
+  limiterEnabled: true,
+  crossfadeEnabled: false,
+  crossfadeDurationSec: 3
 };

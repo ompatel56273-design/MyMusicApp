@@ -58,6 +58,9 @@ export interface IPlaybackManager {
   removeFromQueue(index: number): Promise<void>;
   reorderQueue(fromIndex: number, toIndex: number): Promise<void>;
   clearQueue(): Promise<void>;
+  setCrossfade?(enabled: boolean, durationSec?: number): void;
+  readonly crossfadeEnabled?: boolean;
+  readonly crossfadeDurationSec?: number;
 }
 
 /**
@@ -215,9 +218,13 @@ export interface IAudioEngine {
   setLimiterEnabled(enabled: boolean): void;
   getDspOptions(): DspPipelineOptions;
 
-  // Gapless Playback
+  // Gapless & Crossfade Playback
   prepareNext?(urlOrBlob: string | Blob, options?: { replayGain?: ReplayGainData | undefined }): Promise<void>;
   hasPreparedNext?(): boolean;
   transitionToNext?(): Promise<void>;
   cancelPreload?(): void;
+  startCrossfadeToNext?(durationSec: number): Promise<void>;
+  cancelCrossfade?(): void;
+  setCrossfade?(enabled: boolean, durationSec?: number): void;
+  readonly isCrossfading?: boolean;
 }
