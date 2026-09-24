@@ -87,6 +87,7 @@ export class SettingsView implements IView {
   private themeUnsub: (() => void) | null = null;
   private accentUnsub: (() => void) | null = null;
   private ambientUnsub: (() => void) | null = null;
+  private dynamicArtworkUnsub: (() => void) | null = null;
   private eventBusSubs: Disposable[] = [];
   private connectedFolderName: string | null = null;
   private activeSection: SettingsSectionId = 'music-access';
@@ -152,6 +153,10 @@ export class SettingsView implements IView {
     if (this.ambientUnsub) {
       this.ambientUnsub();
       this.ambientUnsub = null;
+    }
+    if (this.dynamicArtworkUnsub) {
+      this.dynamicArtworkUnsub();
+      this.dynamicArtworkUnsub = null;
     }
     for (const sub of this.eventBusSubs) {
       sub.dispose();
@@ -1077,6 +1082,28 @@ export class SettingsView implements IView {
                   `).join('')}
                 </div>
               </div>
+
+              <!-- Dynamic Artwork Colors Toggle -->
+              <div style="margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--glass-border);">
+                <div class="settings-form-row" style="background: transparent; border: none; padding: 0;">
+                  <div class="settings-form-row-label">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span class="settings-form-row-title">Dynamic Artwork Colors</span>
+                      <span id="settings-dynamic-artwork-status-badge" style="font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: var(--radius-full); background: ${ThemeManager.getInstance().isDynamicArtworkColorsEnabled() ? 'var(--color-accent-muted)' : 'rgba(255, 255, 255, 0.05)'}; color: ${ThemeManager.getInstance().isDynamicArtworkColorsEnabled() ? 'var(--color-accent-primary)' : 'var(--color-text-muted)'}; border: 1px solid var(--glass-border);">
+                        ${ThemeManager.getInstance().isDynamicArtworkColorsEnabled() ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+                    <span class="settings-form-row-desc">Extract atmospheric color accents dynamically from currently displayed album artwork</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    id="settings-toggle-dynamic-artwork"
+                    style="accent-color: var(--color-accent-primary); width: 22px; height: 22px; cursor: pointer;"
+                    ${ThemeManager.getInstance().isDynamicArtworkColorsEnabled() ? 'checked' : ''}
+                    aria-label="Toggle Dynamic Artwork Colors"
+                  />
+                </div>
+              </div>
             </section>
 
             <!-- 5. Audio Visualizer Preferences Section -->
@@ -1541,6 +1568,29 @@ export class SettingsView implements IView {
 
     this.ambientUnsub = themeManager.subscribeAmbient((modeId, def) => {
       updateAmbientDisplay(modeId, def);
+    });
+
+    // Dynamic Artwork Colors Listeners
+    const dynamicToggle = this.container.querySelector<HTMLInputElement>('#settings-toggle-dynamic-artwork');
+    const dynamicBadge = this.container.querySelector<HTMLElement>('#settings-dynamic-artwork-status-badge');
+
+    const updateDynamicArtworkDisplay = (enabled: boolean) => {
+      if (dynamicToggle) dynamicToggle.checked = enabled;
+      if (dynamicBadge) {
+        dynamicBadge.textContent = enabled ? 'Enabled' : 'Disabled';
+        dynamicBadge.style.background = enabled ? 'var(--color-accent-muted)' : 'rgba(255, 255, 255, 0.05)';
+        dynamicBadge.style.color = enabled ? 'var(--color-accent-primary)' : 'var(--color-text-muted)';
+      }
+    };
+
+    updateDynamicArtworkDisplay(themeManager.isDynamicArtworkColorsEnabled());
+
+    dynamicToggle?.addEventListener('change', () => {
+      themeManager.setDynamicArtworkColorsEnabled(dynamicToggle.checked);
+    });
+
+    this.dynamicArtworkUnsub = themeManager.subscribeDynamicArtworkColors((enabled) => {
+      updateDynamicArtworkDisplay(enabled);
     });
   }
 

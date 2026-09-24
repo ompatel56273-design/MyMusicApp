@@ -15,6 +15,11 @@ import {
   getAllAmbientModes
 } from './ambient-background';
 
+import {
+  type ExtractedArtworkPalette,
+  extractPaletteFromImage
+} from './dynamic-artwork-colors';
+
 export type ThemePreference = 'dark' | 'light' | 'system';
 export type ResolvedTheme = 'dark' | 'light';
 
@@ -30,9 +35,14 @@ export interface AmbientModeChangeListener {
   (mode: AmbientMode, definition: AmbientModeDefinition): void;
 }
 
+export interface DynamicArtworkColorsChangeListener {
+  (enabled: boolean, palette: ExtractedArtworkPalette | null): void;
+}
+
 const STORAGE_KEY = 'mymusicapp_theme_preference';
 const ACCENT_STORAGE_KEY = 'mymusicapp_accent_theme';
 const AMBIENT_STORAGE_KEY = 'mymusicapp_ambient_mode';
+const DYNAMIC_ARTWORK_STORAGE_KEY = 'mymusicapp_dynamic_artwork_colors';
 
 /**
  * Centralized Theme Manager for MyMusicApp.
@@ -42,6 +52,7 @@ const AMBIENT_STORAGE_KEY = 'mymusicapp_ambient_mode';
  * - 'system': Follows OS prefers-color-scheme dynamically via matchMedia
  * - Accent Themes: User-selectable color accents (Purple, Cyan, Blue, Emerald, Amber, Pink, Rose)
  * - Ambient Backgrounds: Optional atmospheric visual backgrounds (Off, Aurora, Gradient Flow, Soft Glow, Static Gradient)
+ * - Dynamic Artwork Colors: Optional extraction of album artwork color palette for artwork-aware visual presentation
  *
  * Persists preferences and updates documentElement attributes and custom CSS properties.
  */
@@ -50,11 +61,14 @@ export class ThemeManager {
   private preference: ThemePreference = 'dark';
   private accentTheme: AccentThemeId = DEFAULT_ACCENT_THEME;
   private ambientMode: AmbientMode = DEFAULT_AMBIENT_MODE;
+  private dynamicArtworkColorsEnabled: boolean = false;
+  private currentArtworkPalette: ExtractedArtworkPalette | null = null;
   private mediaQuery: MediaQueryList | null = null;
   private mediaQueryListener: ((e: MediaQueryListEvent) => void) | null = null;
   private listeners: Set<ThemeChangeListener> = new Set();
   private accentListeners: Set<AccentThemeChangeListener> = new Set();
   private ambientListeners: Set<AmbientModeChangeListener> = new Set();
+  private dynamicArtworkListeners: Set<DynamicArtworkColorsChangeListener> = new Set();
 
   private constructor() {
     this.loadPreference();
@@ -62,6 +76,7 @@ export class ThemeManager {
     this.applyTheme();
     this.applyAccentTheme();
     this.applyAmbientMode();
+    this.applyArtworkTokens();
   }
 
   public static getInstance(): ThemeManager {
@@ -132,6 +147,58 @@ export class ThemeManager {
     this.notifyAmbientListeners();
   }
 
+  public isDynamicArtworkColorsEnabled(): boolean {
+    return this.dynamicArtworkColorsEnabled;
+  }
+
+  public setDynamicArtworkColorsEnabled(enabled: boolean): void {
+    if (this.dynamicArtworkColorsEnabled === enabled) return;
+    this.dynamicArtworkColorsEnabled = enabled;
+    this.saveDynamicArtworkPreference();
+    this.applyArtworkTokens();
+    this.notifyDynamicArtworkListeners();
+  }
+
+  public getArtworkPalette(): ExtractedArtworkPalette | null {
+    return this.currentArtworkPalette;
+  }
+
+  public setArtworkPalette(palette: ExtractedArtworkPalette | null): void {
+    this.currentArtworkPalette = palette;
+    this.applyArtworkTokens();
+    this.notifyDynamicArtworkListeners();
+  }
+
+  public async updateArtworkColors(imageSrc: string | null | undefined, cacheKey?: string): Promise<void> {
+    if (!this.dynamicArtworkColorsEnabled) {
+      this.applyArtworkTokens();
+      return;
+    }
+    if (!imageSrc) {
+      this.setArtworkPalette(null);
+      return;
+    }
+    const palette = await extractPaletteFromImage(imageSrc, cacheKey);
+    this.setArtworkPalette(palette);
+  }
+
+  public bindEventBus(eventBus: any, artworkService?: any): () => void {
+    return eventBus.subscribe('playback:track-changed', async (e: any) => {
+      if (!this.dynamicArtworkColorsEnabled) return;
+      const track = e?.currentTrack;
+      if (!track || !track.artworkId || !artworkService) {
+        this.setArtworkPalette(null);
+        return;
+      }
+      try {
+        const url = await artworkService.getArtworkUrl(track.artworkId, 'medium');
+        await this.updateArtworkColors(url, track.artworkId);
+      } catch (_err) {
+        this.setArtworkPalette(null);
+      }
+    });
+  }
+
   public subscribe(listener: ThemeChangeListener): () => void {
     this.listeners.add(listener);
     // Immediately notify current state
@@ -159,6 +226,15 @@ export class ThemeManager {
     };
   }
 
+  public subscribeDynamicArtworkColors(listener: DynamicArtworkColorsChangeListener): () => void {
+    this.dynamicArtworkListeners.add(listener);
+    // Immediately notify current state
+    listener(this.dynamicArtworkColorsEnabled, this.currentArtworkPalette);
+    return () => {
+      this.dynamicArtworkListeners.delete(listener);
+    };
+  }
+
   private loadPreference(): void {
     try {
       if (typeof localStorage !== 'undefined') {
@@ -173,6 +249,10 @@ export class ThemeManager {
         const storedAmbient = localStorage.getItem(AMBIENT_STORAGE_KEY) as AmbientMode | null;
         if (storedAmbient && storedAmbient in AMBIENT_MODES) {
           this.ambientMode = storedAmbient;
+        }
+        const storedDynamicArtwork = localStorage.getItem(DYNAMIC_ARTWORK_STORAGE_KEY);
+        if (storedDynamicArtwork !== null) {
+          this.dynamicArtworkColorsEnabled = storedDynamicArtwork === 'true';
         }
       }
     } catch (_e) {
@@ -204,6 +284,16 @@ export class ThemeManager {
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(AMBIENT_STORAGE_KEY, this.ambientMode);
+      }
+    } catch (_e) {
+      // Ignore storage errors in restricted contexts
+    }
+  }
+
+  private saveDynamicArtworkPreference(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(DYNAMIC_ARTWORK_STORAGE_KEY, String(this.dynamicArtworkColorsEnabled));
       }
     } catch (_e) {
       // Ignore storage errors in restricted contexts
@@ -291,6 +381,7 @@ export class ThemeManager {
         }
       }
     }
+    this.applyArtworkTokens();
   }
 
   public applyAmbientMode(): void {
@@ -318,6 +409,51 @@ export class ThemeManager {
 
       if (bgContainer) {
         bgContainer.className = `ambient-bg-root ambient-mode-${this.ambientMode}`;
+      }
+    }
+  }
+
+  public applyArtworkTokens(): void {
+    if (typeof document !== 'undefined' && document.documentElement) {
+      const rootStyle = document.documentElement.style;
+      const accentDef = this.getAccentThemeDefinition();
+
+      if (rootStyle) {
+        if (this.dynamicArtworkColorsEnabled && this.currentArtworkPalette) {
+          const p = this.currentArtworkPalette;
+          if (typeof rootStyle.setProperty === 'function') {
+            rootStyle.setProperty('--color-artwork-primary', p.primary);
+            rootStyle.setProperty('--color-artwork-secondary', p.secondary);
+            rootStyle.setProperty('--color-artwork-muted', p.muted);
+            rootStyle.setProperty('--color-artwork-contrast', p.contrast);
+            rootStyle.setProperty('--color-artwork-glow', p.glow);
+            rootStyle.setProperty('--color-artwork-gradient', p.gradient);
+          } else {
+            (rootStyle as any)['--color-artwork-primary'] = p.primary;
+            (rootStyle as any)['--color-artwork-secondary'] = p.secondary;
+            (rootStyle as any)['--color-artwork-muted'] = p.muted;
+            (rootStyle as any)['--color-artwork-contrast'] = p.contrast;
+            (rootStyle as any)['--color-artwork-glow'] = p.glow;
+            (rootStyle as any)['--color-artwork-gradient'] = p.gradient;
+          }
+        } else {
+          // Fallback to active Accent Theme tokens
+          if (typeof rootStyle.setProperty === 'function') {
+            rootStyle.setProperty('--color-artwork-primary', accentDef.primaryColor);
+            rootStyle.setProperty('--color-artwork-secondary', accentDef.hoverColor);
+            rootStyle.setProperty('--color-artwork-muted', accentDef.mutedBackground);
+            rootStyle.setProperty('--color-artwork-contrast', accentDef.contrastText);
+            rootStyle.setProperty('--color-artwork-glow', accentDef.glowColor);
+            rootStyle.setProperty('--color-artwork-gradient', accentDef.gradient);
+          } else {
+            (rootStyle as any)['--color-artwork-primary'] = accentDef.primaryColor;
+            (rootStyle as any)['--color-artwork-secondary'] = accentDef.hoverColor;
+            (rootStyle as any)['--color-artwork-muted'] = accentDef.mutedBackground;
+            (rootStyle as any)['--color-artwork-contrast'] = accentDef.contrastText;
+            (rootStyle as any)['--color-artwork-glow'] = accentDef.glowColor;
+            (rootStyle as any)['--color-artwork-gradient'] = accentDef.gradient;
+          }
+        }
       }
     }
   }
@@ -351,6 +487,16 @@ export class ThemeManager {
         listener(this.ambientMode, def);
       } catch (err) {
         console.error('Error in ThemeManager ambient listener:', err);
+      }
+    }
+  }
+
+  private notifyDynamicArtworkListeners(): void {
+    for (const listener of this.dynamicArtworkListeners) {
+      try {
+        listener(this.dynamicArtworkColorsEnabled, this.currentArtworkPalette);
+      } catch (err) {
+        console.error('Error in ThemeManager dynamic artwork listener:', err);
       }
     }
   }
