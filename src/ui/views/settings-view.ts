@@ -86,6 +86,7 @@ export class SettingsView implements IView {
   private replayGainComponent: ReplayGainControlsComponent | null = null;
   private themeUnsub: (() => void) | null = null;
   private accentUnsub: (() => void) | null = null;
+  private ambientUnsub: (() => void) | null = null;
   private eventBusSubs: Disposable[] = [];
   private connectedFolderName: string | null = null;
   private activeSection: SettingsSectionId = 'music-access';
@@ -147,6 +148,10 @@ export class SettingsView implements IView {
     if (this.accentUnsub) {
       this.accentUnsub();
       this.accentUnsub = null;
+    }
+    if (this.ambientUnsub) {
+      this.ambientUnsub();
+      this.ambientUnsub = null;
     }
     for (const sub of this.eventBusSubs) {
       sub.dispose();
@@ -490,6 +495,67 @@ export class SettingsView implements IView {
           overflow: hidden;
           text-overflow: ellipsis;
           margin-top: 1px;
+        }
+
+        .settings-ambient-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: var(--space-3);
+          width: 100%;
+        }
+
+        .settings-ambient-option {
+          display: flex;
+          align-items: center;
+          gap: var(--space-3);
+          padding: 12px 14px;
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid var(--glass-border);
+          border-radius: var(--radius-lg);
+          cursor: pointer;
+          transition: all var(--duration-fast) var(--ease-smooth);
+          user-select: none;
+          outline: none;
+        }
+
+        .settings-ambient-option:hover {
+          background: rgba(255, 255, 255, 0.05);
+          border-color: var(--glass-border-interactive);
+          transform: translateY(-1px);
+        }
+
+        .settings-ambient-option:focus-visible {
+          border-color: var(--color-accent-primary);
+          box-shadow: var(--shadow-glow);
+        }
+
+        .settings-ambient-option.active {
+          background: var(--color-accent-subtle);
+          border-color: var(--color-accent-primary);
+          box-shadow: 0 0 16px var(--color-accent-muted);
+        }
+
+        .settings-ambient-swatch {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: var(--color-bg-surface-elevated);
+          border: 1px solid var(--glass-border);
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+        }
+
+        .settings-ambient-check {
+          position: absolute;
+          inset: 0;
+          border-radius: 50%;
+          background: var(--color-accent-primary);
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .settings-form-row {
@@ -976,6 +1042,41 @@ export class SettingsView implements IView {
                   `).join('')}
                 </div>
               </div>
+
+              <!-- Ambient Background Mode Selection -->
+              <div style="margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--glass-border);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); flex-wrap: wrap; gap: 8px;">
+                  <div>
+                    <h3 style="font-size: 15px; font-weight: 700; color: var(--color-text-primary); margin: 0;">Ambient Background</h3>
+                    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 2px 0 0 0;">Subtle animated or static atmospheric background visuals behind the application</p>
+                  </div>
+                  <span id="settings-ambient-status-badge" style="font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: var(--radius-full); background: var(--color-accent-muted); color: var(--color-accent-primary); border: 1px solid var(--glass-border-highlight);">
+                    ${ThemeManager.getInstance().getAmbientModeDefinition().name} Active
+                  </span>
+                </div>
+
+                <div class="settings-ambient-grid" role="radiogroup" aria-label="Ambient Background Selection">
+                  ${ThemeManager.getInstance().getAvailableAmbientModes().map(mode => `
+                    <div
+                      class="settings-ambient-option ${mode.id === ThemeManager.getInstance().getAmbientMode() ? 'active' : ''}"
+                      data-ambient-val="${mode.id}"
+                      role="radio"
+                      tabindex="0"
+                      aria-checked="${mode.id === ThemeManager.getInstance().getAmbientMode() ? 'true' : 'false'}"
+                      aria-label="Select ${mode.name} Ambient Mode"
+                    >
+                      <div class="settings-ambient-swatch">
+                        <span style="font-size: 16px;">${mode.animated ? '✨' : '🎨'}</span>
+                        <span class="settings-ambient-check" style="display: ${mode.id === ThemeManager.getInstance().getAmbientMode() ? 'flex' : 'none'};">${getIconSvg('check', { size: 14, color: '#ffffff' })}</span>
+                      </div>
+                      <div class="settings-accent-details">
+                        <span class="settings-accent-name">${mode.name}</span>
+                        <span class="settings-accent-desc">${mode.description}</span>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
             </section>
 
             <!-- 5. Audio Visualizer Preferences Section -->
@@ -1397,6 +1498,49 @@ export class SettingsView implements IView {
 
     this.accentUnsub = themeManager.subscribeAccent((accentId, def) => {
       updateAccentDisplay(accentId, def);
+    });
+
+    // Ambient Background Listeners
+    const ambientOptions = this.container.querySelectorAll<HTMLElement>('.settings-ambient-option');
+    const ambientBadge = this.container.querySelector<HTMLElement>('#settings-ambient-status-badge');
+
+    const updateAmbientDisplay = (modeId: any, def: any) => {
+      ambientOptions.forEach(opt => {
+        const val = opt.getAttribute('data-ambient-val');
+        const isActive = val === modeId;
+        opt.classList.toggle('active', isActive);
+        opt.setAttribute('aria-checked', isActive ? 'true' : 'false');
+        const check = opt.querySelector<HTMLElement>('.settings-ambient-check');
+        if (check) check.style.display = isActive ? 'flex' : 'none';
+      });
+
+      if (ambientBadge) {
+        ambientBadge.textContent = `${def.name} Active`;
+      }
+    };
+
+    updateAmbientDisplay(themeManager.getAmbientMode(), themeManager.getAmbientModeDefinition());
+
+    ambientOptions.forEach(opt => {
+      opt.addEventListener('click', () => {
+        const mode = opt.getAttribute('data-ambient-val');
+        if (mode) {
+          themeManager.setAmbientMode(mode);
+        }
+      });
+      opt.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const mode = opt.getAttribute('data-ambient-val');
+          if (mode) {
+            themeManager.setAmbientMode(mode);
+          }
+        }
+      });
+    });
+
+    this.ambientUnsub = themeManager.subscribeAmbient((modeId, def) => {
+      updateAmbientDisplay(modeId, def);
     });
   }
 
