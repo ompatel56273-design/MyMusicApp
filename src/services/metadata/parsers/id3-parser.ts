@@ -134,9 +134,17 @@ export class ID3Parser {
 
     // Parse ReplayGain from TXXX tags
     let replayGain: ReplayGainData | undefined;
-    if (txxxTags['REPLAYGAIN_TRACK_GAIN'] || txxxTags['REPLAYGAIN_ALBUM_GAIN']) {
-      const parseGain = (v?: string) => v ? parseFloat(v.replace(/dB/i, '').trim()) : undefined;
-      const parsePeak = (v?: string) => v ? parseFloat(v.trim()) : undefined;
+    if (txxxTags['REPLAYGAIN_TRACK_GAIN'] || txxxTags['REPLAYGAIN_ALBUM_GAIN'] || txxxTags['REPLAYGAIN_TRACK_PEAK'] || txxxTags['REPLAYGAIN_ALBUM_PEAK']) {
+      const parseGain = (v?: string) => {
+        if (!v) return undefined;
+        const num = parseFloat(v.replace(/dB/i, '').trim());
+        return isNaN(num) || !isFinite(num) ? undefined : num;
+      };
+      const parsePeak = (v?: string) => {
+        if (!v) return undefined;
+        const num = parseFloat(v.trim());
+        return isNaN(num) || !isFinite(num) ? undefined : num;
+      };
       replayGain = {
         trackGainDb: parseGain(txxxTags['REPLAYGAIN_TRACK_GAIN']),
         trackPeak: parsePeak(txxxTags['REPLAYGAIN_TRACK_PEAK']),
