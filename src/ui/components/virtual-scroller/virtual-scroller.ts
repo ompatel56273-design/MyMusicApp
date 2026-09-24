@@ -8,7 +8,7 @@ import type { VirtualScrollerOptions, VirtualWindow } from './virtual-types';
 export class VirtualScroller<T> {
   private readonly container: HTMLElement;
   private items: readonly T[];
-  private readonly itemHeight: number;
+  private itemHeight: number;
   private readonly overscan: number;
   private readonly renderItem: (item: T, index: number) => HTMLElement;
   private readonly onItemUnmount?: ((element: HTMLElement, item: T, index: number) => void) | undefined;
@@ -67,6 +67,15 @@ export class VirtualScroller<T> {
   public setItems(items: readonly T[]): void {
     this.items = items;
     this.updateWindow(true);
+  }
+
+  public setItemHeight(itemHeight: number): void {
+    this.itemHeight = Math.max(1, itemHeight);
+    this.updateWindow(true);
+  }
+
+  public getItemHeight(): number {
+    return this.itemHeight;
   }
 
   public getItems(): readonly T[] {

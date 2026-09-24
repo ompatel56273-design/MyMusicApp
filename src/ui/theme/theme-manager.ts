@@ -29,6 +29,15 @@ import {
   getAllPlayerLayouts
 } from './player-layout';
 
+import {
+  type LibraryDensityId,
+  type LibraryDensityDefinition,
+  DEFAULT_LIBRARY_DENSITY,
+  LIBRARY_DENSITIES,
+  getLibraryDensity,
+  getAllLibraryDensities
+} from './library-density';
+
 export type ThemePreference = 'dark' | 'light' | 'system';
 export type ResolvedTheme = 'dark' | 'light';
 
@@ -52,11 +61,16 @@ export interface PlayerLayoutChangeListener {
   (layout: PlayerLayoutId, definition: PlayerLayoutDefinition): void;
 }
 
+export interface LibraryDensityChangeListener {
+  (density: LibraryDensityId, definition: LibraryDensityDefinition): void;
+}
+
 const STORAGE_KEY = 'mymusicapp_theme_preference';
 const ACCENT_STORAGE_KEY = 'mymusicapp_accent_theme';
 const AMBIENT_STORAGE_KEY = 'mymusicapp_ambient_mode';
 const DYNAMIC_ARTWORK_STORAGE_KEY = 'mymusicapp_dynamic_artwork_colors';
 const PLAYER_LAYOUT_STORAGE_KEY = 'mymusicapp_player_layout';
+const LIBRARY_DENSITY_STORAGE_KEY = 'mymusicapp_library_density';
 
 /**
  * Centralized Theme Manager for MyMusicApp.
@@ -68,6 +82,7 @@ const PLAYER_LAYOUT_STORAGE_KEY = 'mymusicapp_player_layout';
  * - Ambient Backgrounds: Optional atmospheric visual backgrounds (Off, Aurora, Gradient Flow, Soft Glow, Static Gradient)
  * - Dynamic Artwork Colors: Optional extraction of album artwork color palette for artwork-aware visual presentation
  * - Player Layouts: User-selectable presentation layout modes (Standard, Compact, Expanded)
+ * - Library Density: User-selectable library information density modes (Comfortable, Standard, Compact)
  *
  * Persists preferences and updates documentElement attributes and custom CSS properties.
  */
@@ -79,6 +94,7 @@ export class ThemeManager {
   private dynamicArtworkColorsEnabled: boolean = false;
   private currentArtworkPalette: ExtractedArtworkPalette | null = null;
   private playerLayout: PlayerLayoutId = DEFAULT_PLAYER_LAYOUT;
+  private libraryDensity: LibraryDensityId = DEFAULT_LIBRARY_DENSITY;
   private mediaQuery: MediaQueryList | null = null;
   private mediaQueryListener: ((e: MediaQueryListEvent) => void) | null = null;
   private listeners: Set<ThemeChangeListener> = new Set();
@@ -86,6 +102,7 @@ export class ThemeManager {
   private ambientListeners: Set<AmbientModeChangeListener> = new Set();
   private dynamicArtworkListeners: Set<DynamicArtworkColorsChangeListener> = new Set();
   private layoutListeners: Set<PlayerLayoutChangeListener> = new Set();
+  private densityListeners: Set<LibraryDensityChangeListener> = new Set();
 
   private constructor() {
     this.loadPreference();
@@ -95,6 +112,7 @@ export class ThemeManager {
     this.applyAmbientMode();
     this.applyArtworkTokens();
     this.applyPlayerLayout();
+    this.applyLibraryDensity();
   }
 
   public static getInstance(): ThemeManager {
@@ -306,6 +324,64 @@ export class ThemeManager {
     }
   }
 
+  public getLibraryDensity(): LibraryDensityId {
+    return this.libraryDensity;
+  }
+
+  public getLibraryDensityDefinition(): LibraryDensityDefinition {
+    return getLibraryDensity(this.libraryDensity);
+  }
+
+  public getAvailableLibraryDensities(): readonly LibraryDensityDefinition[] {
+    return getAllLibraryDensities();
+  }
+
+  public setLibraryDensity(density: LibraryDensityId | string): void {
+    const validDensity = (density && density in LIBRARY_DENSITIES ? density : DEFAULT_LIBRARY_DENSITY) as LibraryDensityId;
+    if (this.libraryDensity === validDensity) {
+      this.saveLibraryDensityPreference();
+      return;
+    }
+    this.libraryDensity = validDensity;
+    this.saveLibraryDensityPreference();
+    this.applyLibraryDensity();
+    this.notifyDensityListeners();
+  }
+
+  public subscribeLibraryDensity(listener: LibraryDensityChangeListener): () => void {
+    this.densityListeners.add(listener);
+    // Immediately notify current state
+    listener(this.libraryDensity, this.getLibraryDensityDefinition());
+    return () => {
+      this.densityListeners.delete(listener);
+    };
+  }
+
+  public applyLibraryDensity(): void {
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.setAttribute('data-library-density', this.libraryDensity);
+      const def = this.getLibraryDensityDefinition();
+      const rootStyle = document.documentElement.style;
+      if (rootStyle) {
+        if (typeof rootStyle.setProperty === 'function') {
+          rootStyle.setProperty('--library-row-height', def.rowHeightCss);
+          rootStyle.setProperty('--library-item-padding', def.itemPadding);
+          rootStyle.setProperty('--library-grid-gap', def.gridGap);
+          rootStyle.setProperty('--library-section-gap', def.sectionGap);
+          rootStyle.setProperty('--library-artwork-size', def.artworkSize);
+          rootStyle.setProperty('--library-card-padding', def.cardPadding);
+        } else {
+          (rootStyle as any)['--library-row-height'] = def.rowHeightCss;
+          (rootStyle as any)['--library-item-padding'] = def.itemPadding;
+          (rootStyle as any)['--library-grid-gap'] = def.gridGap;
+          (rootStyle as any)['--library-section-gap'] = def.sectionGap;
+          (rootStyle as any)['--library-artwork-size'] = def.artworkSize;
+          (rootStyle as any)['--library-card-padding'] = def.cardPadding;
+        }
+      }
+    }
+  }
+
   private loadPreference(): void {
     try {
       if (typeof localStorage !== 'undefined') {
@@ -331,6 +407,14 @@ export class ThemeManager {
             this.playerLayout = storedLayout;
           } else {
             this.playerLayout = DEFAULT_PLAYER_LAYOUT;
+          }
+        }
+        const storedDensity = localStorage.getItem(LIBRARY_DENSITY_STORAGE_KEY) as LibraryDensityId | null;
+        if (storedDensity !== null) {
+          if (storedDensity in LIBRARY_DENSITIES) {
+            this.libraryDensity = storedDensity;
+          } else {
+            this.libraryDensity = DEFAULT_LIBRARY_DENSITY;
           }
         }
       }
@@ -383,6 +467,16 @@ export class ThemeManager {
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(PLAYER_LAYOUT_STORAGE_KEY, this.playerLayout);
+      }
+    } catch (_e) {
+      // Ignore storage errors in restricted contexts
+    }
+  }
+
+  private saveLibraryDensityPreference(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(LIBRARY_DENSITY_STORAGE_KEY, this.libraryDensity);
       }
     } catch (_e) {
       // Ignore storage errors in restricted contexts
@@ -597,6 +691,17 @@ export class ThemeManager {
         listener(this.playerLayout, def);
       } catch (err) {
         console.error('Error in ThemeManager layout listener:', err);
+      }
+    }
+  }
+
+  private notifyDensityListeners(): void {
+    const def = this.getLibraryDensityDefinition();
+    for (const listener of this.densityListeners) {
+      try {
+        listener(this.libraryDensity, def);
+      } catch (err) {
+        console.error('Error in ThemeManager density listener:', err);
       }
     }
   }
