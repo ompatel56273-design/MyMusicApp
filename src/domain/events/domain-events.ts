@@ -62,6 +62,11 @@ export interface PlaylistUpdatedEvent {
   readonly action: 'created' | 'updated' | 'deleted';
 }
 
+export interface SmartPlaylistChangedEvent {
+  readonly playlist: Playlist;
+  readonly action: 'created' | 'updated' | 'deleted' | 'evaluated';
+}
+
 export interface SleepTimerChangedEvent {
   readonly isActive: boolean;
   readonly startedAt: number | null;
@@ -89,6 +94,10 @@ export const DomainEvents = {
   SCAN_PROGRESS: 'scanner:progress',
   LIBRARY_UPDATED: 'library:updated',
   PLAYLIST_UPDATED: 'playlist:updated',
+  SMART_PLAYLIST_CREATED: 'smart-playlist:created',
+  SMART_PLAYLIST_UPDATED: 'smart-playlist:updated',
+  SMART_PLAYLIST_DELETED: 'smart-playlist:deleted',
+  SMART_PLAYLIST_CHANGED: 'smart-playlist:changed',
   SLEEP_TIMER_CHANGED: 'playback:sleep-timer-changed',
   SLEEP_TIMER_EXPIRED: 'playback:sleep-timer-expired'
 } as const;

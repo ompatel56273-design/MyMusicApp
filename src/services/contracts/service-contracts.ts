@@ -115,6 +115,13 @@ export interface ISearchService {
   searchPlaylists(query: string, options?: PaginationOptions): Promise<PaginatedResult<Playlist>>;
 }
 
+import type {
+  SmartRule,
+  SmartMatchMode,
+  SmartPlaylistSort,
+  SmartPlaylistDefinition
+} from '../../domain/value-objects/smart-playlist-types';
+
 export interface PlaylistTrackItem {
   readonly item: PlaylistItem;
   readonly track: Track;
@@ -138,6 +145,22 @@ export interface IPlaylistService {
   addTracksToPlaylist(playlistId: EntityId, trackIds: readonly EntityId[]): Promise<void>;
   removeTrackFromPlaylist(playlistId: EntityId, playlistItemId: EntityId): Promise<void>;
   reorderPlaylistItems(playlistId: EntityId, fromPosition: number, toPosition: number): Promise<void>;
+  createSmartPlaylist?(
+    name: string,
+    description: string | undefined,
+    rules: readonly SmartRule[],
+    matchMode?: SmartMatchMode,
+    sort?: SmartPlaylistSort,
+    limit?: number | null
+  ): Promise<Playlist>;
+  updateSmartPlaylist?(
+    id: EntityId,
+    updates: Partial<Omit<SmartPlaylistDefinition, 'id' | 'createdAt' | 'updatedAt'>>
+  ): Promise<Playlist>;
+  evaluateSmartPlaylist?(id: EntityId): Promise<readonly Track[]>;
+  duplicateSmartPlaylist?(id: EntityId): Promise<Playlist>;
+  getSmartPlaylistDefinition?(id: EntityId): Promise<SmartPlaylistDefinition | null>;
+  ensureBuiltInSmartPlaylists?(): Promise<void>;
 }
 
 /**

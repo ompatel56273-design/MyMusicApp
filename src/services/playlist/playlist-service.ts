@@ -13,6 +13,14 @@ import type { Playlist, PlaylistItem, Track } from '../../domain/entities/models
 import type { EntityId } from '../../domain/value-objects/audio-types';
 import type { EventBus } from '../../core/events/event-bus';
 import { DomainEvents, type PlaylistUpdatedEvent } from '../../domain/events/domain-events';
+import { SmartPlaylistValidator } from './smart-playlist-validator';
+import { SmartPlaylistEvaluator } from './smart-playlist-evaluator';
+import type {
+  SmartRule,
+  SmartMatchMode,
+  SmartPlaylistSort,
+  SmartPlaylistDefinition
+} from '../../domain/value-objects/smart-playlist-types';
 
 export interface PlaylistServiceDependencies {
   playlistRepo: IPlaylistRepository;
@@ -22,7 +30,7 @@ export interface PlaylistServiceDependencies {
 
 /**
  * Single authoritative Playlist domain service.
- * Coordinates playlist lifecycle, item ordering, track resolution, and event broadcasting.
+ * Coordinates playlist lifecycle, item ordering, track resolution, smart playlist evaluation, and event broadcasting.
  */
 export class PlaylistService implements IPlaylistService {
   private readonly playlistRepo: IPlaylistRepository;
@@ -46,6 +54,33 @@ export class PlaylistService implements IPlaylistService {
   public async getPlaylistWithTracks(id: EntityId): Promise<PlaylistWithTracks | null> {
     const playlist = await this.playlistRepo.getById(id);
     if (!playlist) return null;
+
+    if (playlist.isSmart) {
+      const tracks = await this.evaluateSmartPlaylist(id);
+      const now = Date.now();
+      const resolvedItems: PlaylistTrackItem[] = tracks.map((track, idx) => ({
+        item: {
+          id: `${id}_smart_${track.id}_${idx}`,
+          playlistId: id,
+          trackId: track.id,
+          position: idx,
+          addedAt: track.dateAdded || now
+        },
+        track
+      }));
+
+      const totalDuration = tracks.reduce((sum, t) => sum + (t.durationMs || 0), 0);
+      const updatedPlaylist: Playlist = {
+        ...playlist,
+        trackCount: tracks.length,
+        durationMs: totalDuration
+      };
+
+      return {
+        playlist: updatedPlaylist,
+        items: resolvedItems
+      };
+    }
 
     const items = await this.playlistRepo.getItems(id);
     const resolvedItems: PlaylistTrackItem[] = [];
@@ -175,6 +210,10 @@ export class PlaylistService implements IPlaylistService {
       throw new Error(`Playlist "${playlistId}" not found`);
     }
 
+    if (playlist.isSmart) {
+      throw new Error('Cannot manually add tracks to a Smart Playlist');
+    }
+
     const existingItems = await this.playlistRepo.getItems(playlistId);
     const now = Date.now();
 
@@ -211,6 +250,10 @@ export class PlaylistService implements IPlaylistService {
     const playlist = await this.playlistRepo.getById(playlistId);
     if (!playlist) {
       throw new Error(`Playlist "${playlistId}" not found`);
+    }
+
+    if (playlist.isSmart) {
+      throw new Error('Cannot manually remove tracks from a Smart Playlist');
     }
 
     const items = await this.playlistRepo.getItems(playlistId);
@@ -251,6 +294,10 @@ export class PlaylistService implements IPlaylistService {
       throw new Error(`Playlist "${playlistId}" not found`);
     }
 
+    if (playlist.isSmart) {
+      throw new Error('Cannot manually reorder items in a Smart Playlist');
+    }
+
     const items = [...(await this.playlistRepo.getItems(playlistId))];
     if (
       fromPosition < 0 ||
@@ -286,6 +333,229 @@ export class PlaylistService implements IPlaylistService {
       playlist: updatedPlaylist,
       action: 'updated'
     });
+  }
+
+  // --- Smart Playlist Methods ---
+
+  public async createSmartPlaylist(
+    name: string,
+    description: string | undefined,
+    rules: readonly SmartRule[],
+    matchMode: SmartMatchMode = 'all',
+    sort: SmartPlaylistSort = { field: 'title', order: 'asc' },
+    limit: number | null = null
+  ): Promise<Playlist> {
+    const trimmedName = name.trim();
+
+    SmartPlaylistValidator.validate({
+      name: trimmedName,
+      rules: rules as SmartRule[],
+      matchMode,
+      sort,
+      limit
+    });
+
+    const now = Date.now();
+    const id = `smart_pl_${now}_${Math.random().toString(36).substring(2, 9)}`;
+
+    const definition: SmartPlaylistDefinition = {
+      id,
+      name: trimmedName,
+      description: description?.trim() || undefined,
+      rules,
+      matchMode,
+      sort,
+      limit,
+      createdAt: now,
+      updatedAt: now,
+      enabled: true
+    };
+
+    const matchingTracks = await this.evalDefinition(definition);
+    const totalDuration = matchingTracks.reduce((sum, t) => sum + (t.durationMs || 0), 0);
+
+    const playlist: Playlist = {
+      id,
+      name: trimmedName,
+      description: description?.trim() || undefined,
+      isSmart: true,
+      smartRulesJson: JSON.stringify(definition),
+      createdAt: now,
+      updatedAt: now,
+      trackCount: matchingTracks.length,
+      durationMs: totalDuration
+    };
+
+    await this.playlistRepo.save(playlist);
+
+    this.eventBus.publish<PlaylistUpdatedEvent>(DomainEvents.PLAYLIST_UPDATED, {
+      playlist,
+      action: 'created'
+    });
+
+    this.eventBus.publish<any>(DomainEvents.SMART_PLAYLIST_CREATED, {
+      playlist,
+      action: 'created'
+    });
+
+    return playlist;
+  }
+
+  public async updateSmartPlaylist(
+    id: EntityId,
+    updates: Partial<Omit<SmartPlaylistDefinition, 'id' | 'createdAt' | 'updatedAt'>>
+  ): Promise<Playlist> {
+    const existingPlaylist = await this.playlistRepo.getById(id);
+    if (!existingPlaylist || !existingPlaylist.isSmart) {
+      throw new Error(`Smart Playlist "${id}" not found`);
+    }
+
+    const currentDef = this.getSmartPlaylistDefinitionFromPlaylist(existingPlaylist);
+    if (!currentDef) {
+      throw new Error(`Invalid Smart Playlist definition for "${id}"`);
+    }
+
+    const updatedDef: SmartPlaylistDefinition = {
+      ...currentDef,
+      ...updates,
+      name: updates.name !== undefined ? updates.name.trim() : currentDef.name,
+      description: updates.description !== undefined ? updates.description?.trim() || undefined : currentDef.description,
+      updatedAt: Date.now()
+    };
+
+    SmartPlaylistValidator.validate(updatedDef);
+
+    const matchingTracks = await this.evalDefinition(updatedDef);
+    const totalDuration = matchingTracks.reduce((sum, t) => sum + (t.durationMs || 0), 0);
+
+    const updatedPlaylist: Playlist = {
+      ...existingPlaylist,
+      name: updatedDef.name,
+      description: updatedDef.description,
+      smartRulesJson: JSON.stringify(updatedDef),
+      updatedAt: updatedDef.updatedAt,
+      trackCount: matchingTracks.length,
+      durationMs: totalDuration
+    };
+
+    await this.playlistRepo.save(updatedPlaylist);
+
+    this.eventBus.publish<PlaylistUpdatedEvent>(DomainEvents.PLAYLIST_UPDATED, {
+      playlist: updatedPlaylist,
+      action: 'updated'
+    });
+
+    this.eventBus.publish<any>(DomainEvents.SMART_PLAYLIST_UPDATED, {
+      playlist: updatedPlaylist,
+      action: 'updated'
+    });
+
+    return updatedPlaylist;
+  }
+
+  public async evaluateSmartPlaylist(id: EntityId): Promise<readonly Track[]> {
+    const playlist = await this.playlistRepo.getById(id);
+    if (!playlist || !playlist.isSmart) return [];
+
+    const def = this.getSmartPlaylistDefinitionFromPlaylist(playlist);
+    if (!def) return [];
+
+    return this.evalDefinition(def);
+  }
+
+  public async duplicateSmartPlaylist(id: EntityId): Promise<Playlist> {
+    const playlist = await this.playlistRepo.getById(id);
+    if (!playlist || !playlist.isSmart) {
+      throw new Error(`Smart Playlist "${id}" not found`);
+    }
+
+    const def = this.getSmartPlaylistDefinitionFromPlaylist(playlist);
+    if (!def) {
+      throw new Error(`Invalid Smart Playlist definition for "${id}"`);
+    }
+
+    return this.createSmartPlaylist(
+      `${def.name} (Copy)`,
+      def.description,
+      def.rules,
+      def.matchMode,
+      def.sort,
+      def.limit
+    );
+  }
+
+  public async getSmartPlaylistDefinition(id: EntityId): Promise<SmartPlaylistDefinition | null> {
+    const playlist = await this.playlistRepo.getById(id);
+    if (!playlist || !playlist.isSmart) return null;
+    return this.getSmartPlaylistDefinitionFromPlaylist(playlist);
+  }
+
+  public async ensureBuiltInSmartPlaylists(): Promise<void> {
+    const existing = await this.playlistRepo.list({ offset: 0, limit: 100 });
+    const names = new Set(existing.items.map(p => p.name));
+
+    const builtIns = [
+      {
+        name: 'Recently Added',
+        description: 'Tracks added to your library in the last 30 days',
+        rules: [{ field: 'addedAt' as const, operator: 'withinLast' as const, value: 30 }],
+        matchMode: 'all' as const,
+        sort: { field: 'dateAdded' as const, order: 'desc' as const },
+        limit: 50
+      },
+      {
+        name: 'Recently Played',
+        description: 'Tracks played recently',
+        rules: [{ field: 'lastPlayedAt' as const, operator: 'greaterThan' as const, value: 0 }],
+        matchMode: 'all' as const,
+        sort: { field: 'lastPlayed' as const, order: 'desc' as const },
+        limit: 50
+      },
+      {
+        name: 'Most Played',
+        description: 'Your most played tracks',
+        rules: [{ field: 'playCount' as const, operator: 'greaterThan' as const, value: 0 }],
+        matchMode: 'all' as const,
+        sort: { field: 'playCount' as const, order: 'desc' as const },
+        limit: 50
+      },
+      {
+        name: 'Never Played',
+        description: 'Tracks in your library you haven\'t played yet',
+        rules: [{ field: 'playCount' as const, operator: 'equals' as const, value: 0 }],
+        matchMode: 'all' as const,
+        sort: { field: 'title' as const, order: 'asc' as const },
+        limit: null
+      },
+      {
+        name: 'Favorites',
+        description: 'Tracks you have starred as favorite',
+        rules: [{ field: 'favorite' as const, operator: 'is' as const, value: true }],
+        matchMode: 'all' as const,
+        sort: { field: 'title' as const, order: 'asc' as const },
+        limit: null
+      }
+    ];
+
+    for (const b of builtIns) {
+      if (!names.has(b.name)) {
+        await this.createSmartPlaylist(b.name, b.description, b.rules, b.matchMode, b.sort, b.limit);
+      }
+    }
+  }
+
+  private getSmartPlaylistDefinitionFromPlaylist(playlist: Playlist): SmartPlaylistDefinition | null {
+    if (!playlist.smartRulesJson) return null;
+    try {
+      return JSON.parse(playlist.smartRulesJson) as SmartPlaylistDefinition;
+    } catch {
+      return null;
+    }
+  }
+
+  private async evalDefinition(def: SmartPlaylistDefinition): Promise<Track[]> {
+    const paginated = await this.trackRepo.list({ offset: 0, limit: 100000 });
+    return SmartPlaylistEvaluator.evaluate(paginated.items, def);
   }
 
   private async computeAggregates(
