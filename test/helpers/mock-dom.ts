@@ -1,3 +1,29 @@
+function createMockStyle(): any {
+  const store: Record<string, string> = {};
+  const styleObj: any = {
+    setProperty: (prop: string, val: string) => {
+      store[prop] = val;
+      styleObj[prop] = val;
+    },
+    getPropertyValue: (prop: string) => store[prop] || styleObj[prop] || '',
+    removeProperty: (prop: string) => {
+      delete store[prop];
+      delete styleObj[prop];
+    }
+  };
+  return new Proxy(styleObj, {
+    get(target, prop: string) {
+      if (prop in target) return target[prop];
+      return store[prop] || '';
+    },
+    set(target, prop: string, val: any) {
+      target[prop] = val;
+      store[prop] = String(val);
+      return true;
+    }
+  });
+}
+
 export class MockElement {
   public tagName: string;
   public id: string = '';
@@ -7,13 +33,37 @@ export class MockElement {
   public min: string = '0';
   public scrollTop: number = 0;
   public clientHeight: number = 600;
-  public style: Record<string, string> = {};
+  public style: any = createMockStyle();
   public attributes = new Map<string, string>();
   public children: MockElement[] = [];
   public parent: MockElement | null = null;
+  public paused: boolean = true;
+  public currentTime: number = 0;
+  public duration: number = 0;
+  public volume: number = 1;
+  public playbackRate: number = 1;
+  public preload: string = 'auto';
+  public crossOrigin: string = '';
+  public src: string = '';
   private _textContent: string = '';
   private _innerHTML: string = '';
   private eventListeners = new Map<string, Array<(e: any) => void>>();
+
+  public play(): Promise<void> {
+    this.paused = false;
+    return Promise.resolve();
+  }
+
+  public pause(): void {
+    this.paused = true;
+  }
+
+  public load(): void {
+    const list = this.eventListeners.get('canplay');
+    if (list) {
+      for (const h of list) h({ type: 'canplay', target: this });
+    }
+  }
 
   constructor(tagName: string = 'div') {
     this.tagName = tagName.toUpperCase();
@@ -457,6 +507,12 @@ export function setupMockDomEnvironment(): void {
         setItem: (k: string, v: string) => storage.set(k, String(v)),
         removeItem: (k: string) => storage.delete(k),
         clear: () => storage.clear()
+      };
+    }
+    if (typeof (globalThis as any).URL === 'undefined' || !(globalThis as any).URL.createObjectURL) {
+      (globalThis as any).URL = {
+        createObjectURL: (_blob?: any) => `blob:mock-url-${Math.random()}`,
+        revokeObjectURL: () => {}
       };
     }
     (globalThis as any).KeyboardEvent = class {
