@@ -109,6 +109,49 @@ export class KeyboardManager {
         break;
       }
 
+      case 'KeyN':
+      case 'MediaTrackNext': {
+        e.preventDefault();
+        void this.playbackManager.next();
+        break;
+      }
+
+      case 'KeyP':
+      case 'MediaTrackPrevious': {
+        e.preventDefault();
+        void this.playbackManager.previous();
+        break;
+      }
+
+      case 'MediaPlayPause': {
+        e.preventDefault();
+        if (this.playbackManager.state === 'playing') {
+          void this.playbackManager.pause();
+        } else {
+          void this.playbackManager.resume();
+        }
+        break;
+      }
+
+      case 'MediaStop': {
+        e.preventDefault();
+        void this.playbackManager.pause();
+        break;
+      }
+
+      case 'KeyL': {
+        e.preventDefault();
+        const abLoop = this.playbackManager.abLoop;
+        if (!abLoop || (!abLoop.isActive && abLoop.pointA === null)) {
+          this.playbackManager.setLoopA?.();
+        } else if (abLoop.pointA !== null && abLoop.pointB === null) {
+          this.playbackManager.setLoopB?.();
+        } else {
+          this.playbackManager.clearAbLoop?.();
+        }
+        break;
+      }
+
       case 'Slash': {
         e.preventDefault();
         const searchInput = document.querySelector<HTMLInputElement>('#global-search-input');
@@ -117,6 +160,13 @@ export class KeyboardManager {
           searchInput.select();
         } else {
           this.router.navigate('search');
+        }
+        break;
+      }
+
+      case 'Escape': {
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
         }
         break;
       }
