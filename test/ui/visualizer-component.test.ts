@@ -90,7 +90,7 @@ describe('VisualizerComponent', () => {
     expect(canvas).not.toBeNull();
 
     const modeButtons = container.querySelectorAll('.vis-mode-btn');
-    expect(modeButtons.length).toBe(8);
+    expect(modeButtons.length).toBe(4);
 
     const toggleCheckbox = container.querySelector<HTMLInputElement>('#vis-enabled-toggle');
     expect(toggleCheckbox).not.toBeNull();
@@ -115,19 +115,22 @@ describe('VisualizerComponent', () => {
     const toggleCheckbox = container.querySelector<HTMLInputElement>('#vis-enabled-toggle');
     expect(toggleCheckbox).not.toBeNull();
 
-    toggleCheckbox?.click();
-    await new Promise(r => setTimeout(r, 10));
-
+    // Default is disabled (Off)
     let settings = await visualizerService.getSettings();
     expect(settings.enabled).toBe(false);
 
-    // Re-query toggle since render() rewires DOM
+    toggleCheckbox?.click();
+    await new Promise(r => setTimeout(r, 10));
+
+    settings = await visualizerService.getSettings();
+    expect(settings.enabled).toBe(true);
+
     const updatedCheckbox = container.querySelector<HTMLInputElement>('#vis-enabled-toggle');
     updatedCheckbox?.click();
     await new Promise(r => setTimeout(r, 10));
 
     settings = await visualizerService.getSettings();
-    expect(settings.enabled).toBe(true);
+    expect(settings.enabled).toBe(false);
   });
 
   it('responds to playback state changes via EventBus', async () => {

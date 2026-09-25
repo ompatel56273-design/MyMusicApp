@@ -79,7 +79,14 @@ export class VisualizerComponent {
   private render(): void {
     if (!this.container) return;
 
-    const modes: VisualizerMode[] = ['bars', 'waveform', 'circular', 'spectrum', 'particles', 'pulse', 'album-reactive', 'minimal'];
+    const primaryModes: { id: VisualizerMode; label: string }[] = [
+      { id: 'off', label: 'Off' },
+      { id: 'bars', label: 'Spectrum Bars' },
+      { id: 'waveform', label: 'Waveform' },
+      { id: 'circular', label: 'Circular Spectrum' }
+    ];
+
+    const currentMode = !this.currentSettings.enabled ? 'off' : this.currentSettings.mode;
 
     this.container.innerHTML = `
       <div
@@ -122,41 +129,51 @@ export class VisualizerComponent {
                 Audio Visualizer
               </h3>
             </div>
-            <label style="display: inline-flex; align-items: center; gap: var(--space-2); margin-left: var(--space-2); padding: 4px 12px; border-radius: var(--radius-full); background: ${this.currentSettings.enabled ? 'rgba(6, 182, 212, 0.15)' : 'rgba(255, 255, 255, 0.04)'}; border: 1px solid ${this.currentSettings.enabled ? 'rgba(6, 182, 212, 0.4)' : 'var(--glass-border)'}; font-size: 12px; font-weight: 700; cursor: pointer; color: ${this.currentSettings.enabled ? 'var(--color-accent-secondary)' : 'var(--color-text-muted)'}; transition: all var(--duration-fast);">
+            <label style="display: inline-flex; align-items: center; gap: var(--space-2); margin-left: var(--space-2); padding: 4px 12px; border-radius: var(--radius-full); background: ${this.currentSettings.enabled && currentMode !== 'off' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(255, 255, 255, 0.04)'}; border: 1px solid ${this.currentSettings.enabled && currentMode !== 'off' ? 'rgba(6, 182, 212, 0.4)' : 'var(--glass-border)'}; font-size: 12px; font-weight: 700; cursor: pointer; color: ${this.currentSettings.enabled && currentMode !== 'off' ? 'var(--color-accent-secondary)' : 'var(--color-text-muted)'}; transition: all var(--duration-fast);">
               <input
                 type="checkbox"
                 id="vis-enabled-toggle"
-                ${this.currentSettings.enabled ? 'checked' : ''}
+                ${this.currentSettings.enabled && currentMode !== 'off' ? 'checked' : ''}
                 style="accent-color: var(--color-accent-secondary); cursor: pointer;"
               />
-              ${this.currentSettings.enabled ? 'ACTIVE' : 'OFF'}
+              ${this.currentSettings.enabled && currentMode !== 'off' ? 'ACTIVE' : 'OFF'}
             </label>
           </div>
 
           <!-- Mode Picker Chips -->
-          <div style="display: flex; gap: 4px; background: rgba(0, 0, 0, 0.3); padding: 4px; border-radius: var(--radius-xl); border: 1px solid var(--glass-border); flex-wrap: wrap;">
-            ${modes.map(m => `
-              <button
-                type="button"
-                class="vis-mode-btn"
-                data-mode="${m}"
-                style="
-                  padding: 6px 14px;
-                  border-radius: var(--radius-lg);
-                  border: none;
-                  font-size: 12px;
-                  font-weight: 600;
-                  text-transform: capitalize;
-                  cursor: pointer;
-                  background: ${this.currentSettings.mode === m ? 'var(--color-accent-gradient)' : 'transparent'};
-                  color: ${this.currentSettings.mode === m ? '#ffffff' : 'var(--color-text-secondary)'};
-                  box-shadow: ${this.currentSettings.mode === m ? 'var(--shadow-glow-purple)' : 'none'};
-                  transition: all var(--duration-fast) var(--ease-smooth);
-                "
-              >
-                ${m}
-              </button>
-            `).join('')}
+          <div
+            role="radiogroup"
+            aria-label="Visualizer Style Selection"
+            style="display: flex; gap: 4px; background: rgba(0, 0, 0, 0.3); padding: 4px; border-radius: var(--radius-xl); border: 1px solid var(--glass-border); flex-wrap: wrap;"
+          >
+            ${primaryModes.map(m => {
+              const isActive = (m.id === 'off' && (!this.currentSettings.enabled || currentMode === 'off')) ||
+                (this.currentSettings.enabled && (currentMode === m.id || (m.id === 'bars' && currentMode === 'spectrum-bars') || (m.id === 'circular' && currentMode === 'circular-spectrum')));
+              return `
+                <button
+                  type="button"
+                  class="vis-mode-btn ${isActive ? 'active' : ''}"
+                  data-mode="${m.id}"
+                  role="radio"
+                  aria-checked="${isActive ? 'true' : 'false'}"
+                  tabindex="0"
+                  style="
+                    padding: 6px 14px;
+                    border-radius: var(--radius-lg);
+                    border: none;
+                    font-size: 12px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    background: ${isActive ? 'var(--color-accent-gradient)' : 'transparent'};
+                    color: ${isActive ? '#ffffff' : 'var(--color-text-secondary)'};
+                    box-shadow: ${isActive ? 'var(--shadow-glow-purple)' : 'none'};
+                    transition: all var(--duration-fast) var(--ease-smooth);
+                  "
+                >
+                  ${m.label}
+                </button>
+              `;
+            }).join('')}
           </div>
         </div>
 
@@ -194,7 +211,7 @@ export class VisualizerComponent {
     }
 
     this.renderer.setConfig({
-      mode: this.currentSettings.mode,
+      mode: this.currentSettings.enabled ? this.currentSettings.mode : 'off',
       colorTheme: this.currentSettings.colorTheme,
       fpsLimit: this.currentSettings.fpsLimit,
       reducedMotion
@@ -220,9 +237,11 @@ export class VisualizerComponent {
       document.addEventListener('visibilitychange', this.visibilityHandler);
     }
 
-    // Start rendering if currently playing
+    // Start rendering if currently playing and enabled
     if (this.shouldBeRunning()) {
       this.renderer.start();
+    } else {
+      this.renderer.stop();
     }
   }
 
@@ -233,7 +252,8 @@ export class VisualizerComponent {
     const toggle = this.container.querySelector<HTMLInputElement>('#vis-enabled-toggle');
     toggle?.addEventListener('change', async () => {
       const enabled = toggle.checked;
-      this.currentSettings = { ...this.currentSettings, enabled };
+      const mode = enabled ? (this.currentSettings.mode === 'off' ? 'bars' : this.currentSettings.mode) : 'off';
+      this.currentSettings = { ...this.currentSettings, enabled, mode };
       if (this.visualizerService) {
         await this.visualizerService.setEnabled(enabled);
       }
@@ -249,16 +269,30 @@ export class VisualizerComponent {
     // 2. Mode buttons
     const modeBtns = this.container.querySelectorAll<HTMLButtonElement>('.vis-mode-btn');
     modeBtns.forEach(btn => {
-      btn.addEventListener('click', async () => {
+      const selectMode = async () => {
         const mode = btn.getAttribute('data-mode') as VisualizerMode;
         if (mode) {
-          this.currentSettings = { ...this.currentSettings, mode };
+          const enabled = mode !== 'off';
+          this.currentSettings = { ...this.currentSettings, mode, enabled };
           this.renderer.setConfig({ mode });
           if (this.visualizerService) {
             await this.visualizerService.setMode(mode);
           }
+          if (enabled && this.shouldBeRunning()) {
+            this.renderer.start();
+          } else {
+            this.renderer.stop();
+          }
           this.render();
           this.initCanvasAndRenderer();
+        }
+      };
+
+      btn.addEventListener('click', selectMode);
+      btn.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          void selectMode();
         }
       });
     });
@@ -280,7 +314,7 @@ export class VisualizerComponent {
   }
 
   private shouldBeRunning(): boolean {
-    if (!this.currentSettings.enabled) return false;
+    if (!this.currentSettings.enabled || this.currentSettings.mode === 'off') return false;
     if (typeof document !== 'undefined' && document.hidden) return false;
     if (this.playbackManager) {
       return this.playbackManager.state === 'playing';

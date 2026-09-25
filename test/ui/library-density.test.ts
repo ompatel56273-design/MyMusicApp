@@ -19,8 +19,8 @@ setupMockDomEnvironment();
 describe('F2.5 — Library Density System', () => {
   beforeEach(() => {
     localStorage.clear();
+    ThemeManager.getInstance().setLibraryDensity('compact');
     ThemeManager.getInstance().setLibraryDensity('standard');
-    document.documentElement.removeAttribute('data-library-density');
     document.documentElement.removeAttribute('data-player-layout');
     document.documentElement.removeAttribute('data-theme');
     document.documentElement.removeAttribute('data-accent');
@@ -88,6 +88,7 @@ describe('F2.5 — Library Density System', () => {
 
   it('5. Runtime switching immediately notifies subscribers with full definition', () => {
     const themeManager = ThemeManager.getInstance();
+    themeManager.setLibraryDensity('compact');
     const listener = vi.fn();
     const unsub = themeManager.subscribeLibraryDensity(listener);
 
