@@ -850,7 +850,7 @@ export class SearchView implements IView {
               ${results.playlists
                 .map(
                   pl => `
-                <div class="glass-panel" style="padding: var(--space-4); border-radius: var(--radius-xl); background: var(--glass-bg-subtle); border: 1px solid var(--glass-border); cursor: pointer;">
+                <div class="glass-panel search-playlist-card" data-playlist-id="${escapeHtml(pl.id)}" role="button" tabindex="0" aria-label="Open playlist ${escapeHtml(pl.name)}" style="padding: var(--space-4); border-radius: var(--radius-xl); background: var(--glass-bg-subtle); border: 1px solid var(--glass-border); cursor: pointer; transition: all var(--duration-fast);">
                   <div style="width: 100%; aspect-ratio: 1; border-radius: var(--radius-md); background: linear-gradient(135deg, rgba(236, 72, 153, 0.25) 0%, rgba(168, 85, 247, 0.25) 100%); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; color: var(--color-accent-pink);">
                     ${getIconSvg('playlist', { size: 32 })}
                   </div>
@@ -858,7 +858,7 @@ export class SearchView implements IView {
                     ${escapeHtml(pl.name)}
                   </span>
                   <span style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px; display: block;">
-                    ${pl.trackCount ?? 0} tracks
+                    ${pl.trackCount ?? 0} ${pl.trackCount === 1 ? 'track' : 'tracks'}
                   </span>
                 </div>
               `
@@ -979,6 +979,27 @@ export class SearchView implements IView {
     topPlayBtn?.addEventListener('click', () => {
       if (this.currentResults?.tracks && this.currentResults.tracks.length > 0 && this.playbackManager) {
         void this.playbackManager.playTrack(this.currentResults.tracks[0]!, this.currentResults.tracks as Track[]);
+      }
+    });
+
+    // Playlist Search Cards
+    const playlistCards = this.container.querySelectorAll<HTMLElement>('.search-playlist-card');
+    playlistCards.forEach(card => {
+      const plId = card.getAttribute('data-playlist-id');
+      if (plId) {
+        card.addEventListener('click', () => {
+          if (this.routerService) {
+            this.routerService.navigate('playlists', { id: plId });
+          }
+        });
+        card.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (this.routerService) {
+              this.routerService.navigate('playlists', { id: plId });
+            }
+          }
+        });
       }
     });
 

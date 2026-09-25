@@ -214,10 +214,30 @@ export class PlaylistService implements IPlaylistService {
       throw new Error('Cannot manually add tracks to a Smart Playlist');
     }
 
-    const existingItems = await this.playlistRepo.getItems(playlistId);
-    const now = Date.now();
+    // Validate existence and deduplicate incoming trackIds
+    const uniqueIncomingIds: EntityId[] = [];
+    const seenIncoming = new Set<EntityId>();
+    for (const tid of trackIds) {
+      if (!seenIncoming.has(tid)) {
+        seenIncoming.add(tid);
+        const track = await this.trackRepo.getById(tid);
+        if (track) {
+          uniqueIncomingIds.push(tid);
+        }
+      }
+    }
 
-    const newItems: PlaylistItem[] = trackIds.map((trackId, idx) => ({
+    if (uniqueIncomingIds.length === 0) return;
+
+    const existingItems = await this.playlistRepo.getItems(playlistId);
+    const existingTrackIds = new Set(existingItems.map(i => i.trackId));
+
+    // Filter out track IDs already in playlist (idempotent duplicate protection)
+    const tracksToAdd = uniqueIncomingIds.filter(tid => !existingTrackIds.has(tid));
+    if (tracksToAdd.length === 0) return;
+
+    const now = Date.now();
+    const newItems: PlaylistItem[] = tracksToAdd.map((trackId, idx) => ({
       id: `${playlistId}_${trackId}_${now}_${Math.random().toString(36).substring(2, 7)}`,
       playlistId,
       trackId,

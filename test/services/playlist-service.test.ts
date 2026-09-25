@@ -207,42 +207,67 @@ describe('PlaylistService', () => {
       expect(items[1]?.trackId).toBe('track_2');
     });
 
-    it('supports duplicate tracks with distinct item IDs and contiguous positions', async () => {
-      const pl = await playlistService.createPlaylist('Loop');
+    it('prevents duplicate Track IDs and makes repeated add operations idempotent', async () => {
+      const pl = await playlistService.createPlaylist('No Duplicates');
 
       await playlistService.addTracksToPlaylist(pl.id, ['track_1']);
-      await playlistService.addTracksToPlaylist(pl.id, ['track_1']);
+      await playlistService.addTracksToPlaylist(pl.id, ['track_1']); // repeated call with same ID
+      await playlistService.addTracksToPlaylist(pl.id, ['track_1', 'track_2', 'track_2']); // batch containing duplicates
 
       const items = await playlistRepo.getItems(pl.id);
       expect(items.length).toBe(2);
       expect(items[0]?.trackId).toBe('track_1');
-      expect(items[1]?.trackId).toBe('track_1');
-      expect(items[0]?.id).not.toBe(items[1]?.id);
+      expect(items[1]?.trackId).toBe('track_2');
       expect(items[0]?.position).toBe(0);
       expect(items[1]?.position).toBe(1);
+
+      const updated = await playlistService.getPlaylist(pl.id);
+      expect(updated?.trackCount).toBe(2);
+      expect(updated?.durationMs).toBe(420000);
+    });
+
+    it('ignores non-existent tracks when adding', async () => {
+      const pl = await playlistService.createPlaylist('Valid Only');
+      await playlistService.addTracksToPlaylist(pl.id, ['track_non_existent', 'track_1']);
+
+      const items = await playlistRepo.getItems(pl.id);
+      expect(items.length).toBe(1);
+      expect(items[0]?.trackId).toBe('track_1');
     });
   });
 
   describe('removeTrackFromPlaylist', () => {
     it('removes item by PlaylistItem.id and normalizes positions contiguously 0..n-1', async () => {
       const pl = await playlistService.createPlaylist('Trimming');
-      await playlistService.addTracksToPlaylist(pl.id, ['track_1', 'track_2', 'track_1']);
+      await playlistService.addTracksToPlaylist(pl.id, ['track_1', 'track_2']);
 
       const itemsBefore = await playlistRepo.getItems(pl.id);
-      const middleItemId = itemsBefore[1]!.id; // track_2 at position 1
+      const firstItemId = itemsBefore[0]!.id; // track_1
 
-      await playlistService.removeTrackFromPlaylist(pl.id, middleItemId);
+      await playlistService.removeTrackFromPlaylist(pl.id, firstItemId);
 
       const itemsAfter = await playlistRepo.getItems(pl.id);
-      expect(itemsAfter.length).toBe(2);
+      expect(itemsAfter.length).toBe(1);
       expect(itemsAfter[0]?.position).toBe(0);
-      expect(itemsAfter[0]?.trackId).toBe('track_1');
-      expect(itemsAfter[1]?.position).toBe(1);
-      expect(itemsAfter[1]?.trackId).toBe('track_1');
+      expect(itemsAfter[0]?.trackId).toBe('track_2');
 
       const updatedPl = await playlistService.getPlaylist(pl.id);
-      expect(updatedPl?.trackCount).toBe(2);
-      expect(updatedPl?.durationMs).toBe(360000); // 180000 * 2
+      expect(updatedPl?.trackCount).toBe(1);
+      expect(updatedPl?.durationMs).toBe(240000);
+    });
+
+    it('does not alter track metadata, play count, or favorites when removing from playlist', async () => {
+      const track1Before = await trackRepo.getById('track_1');
+      const pl = await playlistService.createPlaylist('Isolation Test');
+      await playlistService.addTracksToPlaylist(pl.id, ['track_1']);
+
+      const items = await playlistRepo.getItems(pl.id);
+      await playlistService.removeTrackFromPlaylist(pl.id, items[0]!.id);
+
+      const track1After = await trackRepo.getById('track_1');
+      expect(track1After).toEqual(track1Before);
+      expect(track1After?.playCount).toBe(0);
+      expect(track1After?.isFavorite).toBe(false);
     });
   });
 
@@ -260,6 +285,16 @@ describe('PlaylistService', () => {
       expect(items[1]?.trackId).toBe('track_1');
       expect(items[1]?.position).toBe(1);
     });
+
+    it('preserves ordering after reload from repository', async () => {
+      const pl = await playlistService.createPlaylist('Persistent Order');
+      await playlistService.addTracksToPlaylist(pl.id, ['track_1', 'track_2']);
+      await playlistService.reorderPlaylistItems(pl.id, 0, 1);
+
+      const fetchedItems = await playlistRepo.getItems(pl.id);
+      expect(fetchedItems[0]?.trackId).toBe('track_2');
+      expect(fetchedItems[1]?.trackId).toBe('track_1');
+    });
   });
 
   describe('getPlaylistWithTracks', () => {
@@ -275,14 +310,40 @@ describe('PlaylistService', () => {
       expect(result?.items[1]?.track.title).toBe('Second Song');
     });
 
-    it('gracefully handles missing library tracks without dropping membership', async () => {
+    it('gracefully handles missing library tracks without dropping membership or crashing', async () => {
       const pl = await playlistService.createPlaylist('With Missing');
-      await playlistService.addTracksToPlaylist(pl.id, ['track_deleted_from_disk']);
+      // Directly add PlaylistItem to repository simulating stale/missing track ID
+      await playlistRepo.addItem(pl.id, 'stale_track_id', 0);
 
       const result = await playlistService.getPlaylistWithTracks(pl.id);
       expect(result?.items.length).toBe(1);
       expect(result?.items[0]?.track.title).toBe('Unavailable Track');
       expect(result?.items[0]?.track.availability).toBe('missing');
+    });
+  });
+
+  describe('Invariants & Safety', () => {
+    it('playlist operations do not increment track playCount or history', async () => {
+      const pl = await playlistService.createPlaylist('No Side Effects');
+      await playlistService.addTracksToPlaylist(pl.id, ['track_1', 'track_2']);
+      await playlistService.reorderPlaylistItems(pl.id, 0, 1);
+      await playlistService.updatePlaylist(pl.id, { name: 'Renamed' });
+
+      const t1 = await trackRepo.getById('track_1');
+      const t2 = await trackRepo.getById('track_2');
+      expect(t1?.playCount).toBe(0);
+      expect(t2?.playCount).toBe(0);
+    });
+
+    it('stable playlist ID is generated and preserved across updates', async () => {
+      const pl = await playlistService.createPlaylist('Stable ID Check');
+      const originalId = pl.id;
+
+      const updated = await playlistService.updatePlaylist(originalId, { name: 'New Name' });
+      expect(updated.id).toBe(originalId);
+
+      const loaded = await playlistService.getPlaylist(originalId);
+      expect(loaded?.id).toBe(originalId);
     });
   });
 });

@@ -1,6 +1,6 @@
 import type { IView } from './view-interface';
 import type { RouteParams, LibraryTab } from '../navigation/route-types';
-import type { ILibraryService, IPlaybackManager, IArtworkService, IScannerService } from '../../services/contracts/service-contracts';
+import type { ILibraryService, IPlaybackManager, IArtworkService, IScannerService, IPlaylistService } from '../../services/contracts/service-contracts';
 import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-filesystem-adapter';
 import type { EventBus } from '../../core/events/event-bus';
 import { DomainEvents } from '../../domain/events/domain-events';
@@ -22,6 +22,7 @@ export interface LibraryViewDependencies {
   scannerService?: IScannerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   eventBus?: EventBus | undefined;
+  playlistService?: IPlaylistService | undefined;
 }
 
 /**
@@ -44,6 +45,7 @@ export class LibraryView implements IView {
   private readonly scannerService?: IScannerService | undefined;
   private readonly fsAdapter?: BrowserFilesystemAdapter | undefined;
   private readonly eventBus?: EventBus | undefined;
+  private readonly playlistService?: IPlaylistService | undefined;
   private libraryUpdateSub: Disposable | null = null;
 
   private toolbar: LibraryToolbar | null = null;
@@ -65,6 +67,7 @@ export class LibraryView implements IView {
       this.scannerService = depsOrService.scannerService;
       this.fsAdapter = depsOrService.fsAdapter;
       this.eventBus = depsOrService.eventBus;
+      this.playlistService = depsOrService.playlistService;
     } else {
       this.libraryService = depsOrService as ILibraryService;
     }
@@ -611,7 +614,8 @@ export class LibraryView implements IView {
         const songsView = new SongsTabView({
           libraryService: this.libraryService,
           playbackManager: this.playbackManager,
-          artworkService: this.artworkService
+          artworkService: this.artworkService,
+          playlistService: this.playlistService
         });
         this.activeSubView = songsView;
         void songsView.mount(contentSlot, this.toolbar ? this.toolbar.getState() : undefined);
@@ -676,7 +680,8 @@ export class LibraryView implements IView {
         const favoritesView = new FavoritesTabView({
           libraryService: this.libraryService,
           playbackManager: this.playbackManager,
-          artworkService: this.artworkService
+          artworkService: this.artworkService,
+          playlistService: this.playlistService
         });
         this.activeSubView = favoritesView;
         void favoritesView.mount(contentSlot);
