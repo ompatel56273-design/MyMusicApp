@@ -37,6 +37,8 @@ import type { IDatabaseAdapter } from '../../data/db/database-adapter';
 import { ThemeManager } from '../theme/theme-manager';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
+import type { LibraryAnalyticsService } from '../../services/analytics/library-analytics-service';
+
 export interface AppShellDependencies {
   playbackManager: IPlaybackManager;
   libraryService: ILibraryService;
@@ -51,6 +53,7 @@ export interface AppShellDependencies {
   dashboardService?: IDashboardService | undefined;
   scannerService?: IScannerService | undefined;
   statsService?: StatsService | undefined;
+  libraryAnalyticsService?: LibraryAnalyticsService | undefined;
   sleepTimerService?: SleepTimerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   dbAdapter?: IDatabaseAdapter | undefined;
@@ -217,6 +220,7 @@ export class AppShell {
             },
             dbAdapter: deps.dbAdapter
           }),
+          analyticsService: deps.libraryAnalyticsService,
           playbackManager: deps.playbackManager,
           artworkService: deps.artworkService,
           router: this.router,

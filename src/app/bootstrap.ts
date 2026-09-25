@@ -44,6 +44,7 @@ import { VisualizerService } from '../services/visualizer/visualizer-service';
 import { GalaxyService } from '../services/galaxy/galaxy-service';
 import { DashboardService } from '../services/dashboard/dashboard-service';
 import { StatsService } from '../services/stats/stats-service';
+import { LibraryAnalyticsService } from '../services/analytics/library-analytics-service';
 import { SleepTimerService } from '../services/playback/sleep-timer-service';
 import { FileAccessCapabilityService } from '../services/scanner/file-access-capability';
 import { LocalMusicOnboardingModal } from '../ui/components/onboarding/local-music-onboarding-modal';
@@ -255,6 +256,19 @@ export class AppBootstrap {
       this.logger.warn('Could not restore persistent playback queue:', { error: String(restoreErr) });
     }
 
+    const libraryAnalyticsService = new LibraryAnalyticsService({
+      trackRepo,
+      audioFileRepo,
+      artistRepo,
+      albumRepo,
+      genreRepo,
+      playlistRepo,
+      historyRepo,
+      statsService,
+      libraryService,
+      eventBus: this.eventBus
+    });
+
     // 7. Mount AppShell
     this.appShell = new AppShell({
       playbackManager,
@@ -270,6 +284,7 @@ export class AppBootstrap {
       dashboardService,
       scannerService,
       statsService,
+      libraryAnalyticsService,
       sleepTimerService,
       fsAdapter,
       dbAdapter: adapter,
