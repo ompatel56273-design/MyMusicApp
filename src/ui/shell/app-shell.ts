@@ -37,8 +37,7 @@ import type { IDatabaseAdapter } from '../../data/db/database-adapter';
 import { ThemeManager } from '../theme/theme-manager';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
-import type { DuplicateDetectorService } from '../../services/duplicate/duplicate-detector-service';
-import type { LibraryHealthService } from '../../services/library/library-health-service';
+import type { LibraryAnalyticsService } from '../../services/analytics/library-analytics-service';
 
 export interface AppShellDependencies {
   playbackManager: IPlaybackManager;
@@ -54,11 +53,10 @@ export interface AppShellDependencies {
   dashboardService?: IDashboardService | undefined;
   scannerService?: IScannerService | undefined;
   statsService?: StatsService | undefined;
+  libraryAnalyticsService?: LibraryAnalyticsService | undefined;
   sleepTimerService?: SleepTimerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   dbAdapter?: IDatabaseAdapter | undefined;
-  duplicateDetectorService?: DuplicateDetectorService | undefined;
-  healthService?: LibraryHealthService | undefined;
   eventBus: EventBus;
 }
 
@@ -96,7 +94,7 @@ export class AppShell {
     this.eventBus = deps.eventBus;
     this.router = new RouterService('home');
     this.header = new HeaderComponent(this.router);
-    this.sidebar = new SidebarComponent(this.router, deps.libraryService, deps.eventBus);
+    this.sidebar = new SidebarComponent(this.router, deps.libraryService);
     this.miniPlayer = new MiniPlayerComponent({
       playbackManager: deps.playbackManager,
       artworkService: deps.artworkService,
@@ -158,8 +156,6 @@ export class AppShell {
           artworkService: deps.artworkService,
           scannerService: deps.scannerService,
           fsAdapter: deps.fsAdapter,
-          duplicateDetectorService: deps.duplicateDetectorService,
-          healthService: deps.healthService,
           eventBus: deps.eventBus
         })
       ],
@@ -224,6 +220,7 @@ export class AppShell {
             },
             dbAdapter: deps.dbAdapter
           }),
+          analyticsService: deps.libraryAnalyticsService,
           playbackManager: deps.playbackManager,
           artworkService: deps.artworkService,
           router: this.router,
