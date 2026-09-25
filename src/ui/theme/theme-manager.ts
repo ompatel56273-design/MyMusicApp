@@ -134,7 +134,6 @@ export class ThemeManager {
   }
 
   public setPreference(pref: ThemePreference): void {
-    if (this.preference === pref) return;
     this.preference = pref;
     this.savePreference();
     this.applyTheme();
@@ -155,7 +154,6 @@ export class ThemeManager {
 
   public setAccentTheme(accent: AccentThemeId | string): void {
     const validAccent = (accent && accent in ACCENT_THEMES ? accent : DEFAULT_ACCENT_THEME) as AccentThemeId;
-    if (this.accentTheme === validAccent) return;
     this.accentTheme = validAccent;
     this.saveAccentPreference();
     this.applyAccentTheme();
@@ -176,7 +174,6 @@ export class ThemeManager {
 
   public setAmbientMode(mode: AmbientMode | string): void {
     const validMode = (mode && mode in AMBIENT_MODES ? mode : DEFAULT_AMBIENT_MODE) as AmbientMode;
-    if (this.ambientMode === validMode) return;
     this.ambientMode = validMode;
     this.saveAmbientPreference();
     this.applyAmbientMode();
@@ -285,7 +282,6 @@ export class ThemeManager {
 
   public setPlayerLayout(layout: PlayerLayoutId | string): void {
     const validLayout = (layout && layout in PLAYER_LAYOUTS ? layout : DEFAULT_PLAYER_LAYOUT) as PlayerLayoutId;
-    if (this.playerLayout === validLayout) return;
     this.playerLayout = validLayout;
     this.savePlayerLayoutPreference();
     this.applyPlayerLayout();
@@ -338,10 +334,6 @@ export class ThemeManager {
 
   public setLibraryDensity(density: LibraryDensityId | string): void {
     const validDensity = (density && density in LIBRARY_DENSITIES ? density : DEFAULT_LIBRARY_DENSITY) as LibraryDensityId;
-    if (this.libraryDensity === validDensity) {
-      this.saveLibraryDensityPreference();
-      return;
-    }
     this.libraryDensity = validDensity;
     this.saveLibraryDensityPreference();
     this.applyLibraryDensity();
@@ -521,6 +513,7 @@ export class ThemeManager {
     const def = this.getAccentThemeDefinition();
     if (typeof document !== 'undefined' && document.documentElement) {
       document.documentElement.setAttribute('data-accent', this.accentTheme);
+      document.documentElement.setAttribute('data-accent-theme', this.accentTheme);
       const rootStyle = document.documentElement.style;
       if (rootStyle) {
         if (typeof rootStyle.setProperty === 'function') {

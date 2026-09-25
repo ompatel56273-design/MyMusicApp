@@ -99,5 +99,6 @@ export const DomainEvents = {
   SMART_PLAYLIST_DELETED: 'smart-playlist:deleted',
   SMART_PLAYLIST_CHANGED: 'smart-playlist:changed',
   SLEEP_TIMER_CHANGED: 'playback:sleep-timer-changed',
-  SLEEP_TIMER_EXPIRED: 'playback:sleep-timer-expired'
+  SLEEP_TIMER_EXPIRED: 'playback:sleep-timer-expired',
+  DASHBOARD_SETTINGS_CHANGED: 'dashboard:settings-changed'
 } as const;

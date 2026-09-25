@@ -7,7 +7,8 @@ import type {
   IGalaxyService,
   IScannerService,
   ILibraryService,
-  IPlaybackManager
+  IPlaybackManager,
+  IDashboardService
 } from '../../services/contracts/service-contracts';
 import type { VisualizerMode } from '../../domain/entities/visualizer-settings';
 import type { RepeatMode, ShuffleMode } from '../../domain/value-objects/audio-types';
@@ -41,6 +42,7 @@ export interface SettingsViewDependencies {
   dbAdapter?: IDatabaseAdapter | undefined;
   eventBus?: EventBus | undefined;
   router?: RouterService | undefined;
+  dashboardService?: IDashboardService | undefined;
 }
 
 export type SettingsSectionId =
@@ -48,6 +50,7 @@ export type SettingsSectionId =
   | 'playback'
   | 'audio'
   | 'appearance'
+  | 'dashboard'
   | 'visualizer'
   | 'galaxy'
   | 'storage'
@@ -80,6 +83,7 @@ export class SettingsView implements IView {
   private readonly dbAdapter?: IDatabaseAdapter | undefined;
   private readonly eventBus?: EventBus | undefined;
   private readonly router?: RouterService | undefined;
+  private readonly dashboardService?: IDashboardService | undefined;
   private readonly capabilityService = FileAccessCapabilityService.getInstance();
 
   private equalizerComponent: EqualizerComponent | null = null;
@@ -99,6 +103,7 @@ export class SettingsView implements IView {
     { id: 'playback', label: 'Playback Preferences', icon: 'play' },
     { id: 'audio', label: 'Audio DSP & EQ', icon: 'volume' },
     { id: 'appearance', label: 'Theme & Style', icon: 'settings' },
+    { id: 'dashboard', label: 'Dashboard Customization', icon: 'grid' },
     { id: 'visualizer', label: 'Audio Visualizer', icon: 'maximize' },
     { id: 'galaxy', label: 'Audio Galaxy', icon: 'galaxy' },
     { id: 'storage', label: 'Storage & Database', icon: 'library' },
@@ -120,6 +125,7 @@ export class SettingsView implements IView {
     this.dbAdapter = deps?.dbAdapter;
     this.eventBus = deps?.eventBus;
     this.router = deps?.router;
+    this.dashboardService = deps?.dashboardService;
   }
 
   public mount(container: HTMLElement, params?: RouteParams): void {
@@ -139,6 +145,7 @@ export class SettingsView implements IView {
     this.attachMusicAccessListeners();
     this.attachStorageListeners();
     this.attachDeviceListeners();
+    this.renderDashboardSectionList();
     this.attachEventBusSubscriptions();
     this.refreshAllStats();
   }
@@ -1186,6 +1193,28 @@ export class SettingsView implements IView {
               </div>
             </section>
 
+            <!-- Dashboard Customization Section -->
+            <section id="section-dashboard" class="settings-card" tabindex="-1">
+              <div class="settings-card-header">
+                <div>
+                  <span class="settings-card-category">Home Screen Layout</span>
+                  <h2 class="settings-card-title">Dashboard Customization</h2>
+                </div>
+                <button id="settings-dashboard-reset-btn" class="settings-action-btn" aria-label="Restore Default Layout">
+                  <span>🔄</span>
+                  <span>Restore Default Layout</span>
+                </button>
+              </div>
+
+              <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0;">
+                Control which sections appear on your Home Dashboard and adjust their display sequence.
+              </p>
+
+              <div id="settings-dashboard-section-list" role="list" aria-label="Dashboard Sections" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- Populated dynamically by renderDashboardSectionList() -->
+              </div>
+            </section>
+
             <!-- 5. Audio Visualizer Preferences Section -->
             <section id="section-visualizer" class="settings-card" tabindex="-1">
               <div class="settings-card-header">
@@ -2191,6 +2220,115 @@ export class SettingsView implements IView {
         }
       })
     );
+
+    this.eventBusSubs.push(
+      this.eventBus.subscribe(DomainEvents.DASHBOARD_SETTINGS_CHANGED, () => {
+        this.renderDashboardSectionList();
+      })
+    );
+  }
+
+  private renderDashboardSectionList(): void {
+    if (!this.container) return;
+    const listEl = this.container.querySelector('#settings-dashboard-section-list');
+    if (!listEl) return;
+
+    const sections = this.dashboardService
+      ? this.dashboardService.getResolvedSections()
+      : [
+          { id: 'recently-played', label: 'Recently Played', enabled: true, order: 0 },
+          { id: 'playlists', label: 'Playlists & Mixes', enabled: true, order: 1 },
+          { id: 'artists', label: 'Top Artists', enabled: true, order: 2 },
+          { id: 'favorites', label: 'Favorites', enabled: true, order: 3 },
+          { id: 'recently-added', label: 'Recently Added', enabled: true, order: 4 },
+          { id: 'most-played', label: 'Most Played', enabled: true, order: 5 },
+          { id: 'albums', label: 'Top Albums', enabled: true, order: 6 },
+          { id: 'genres', label: 'Top Genres', enabled: true, order: 7 },
+          { id: 'folders', label: 'Folders', enabled: true, order: 8 }
+        ];
+
+    const enabledSections = sections.filter(s => s.enabled);
+    const totalEnabled = enabledSections.length;
+
+    listEl.innerHTML = sections
+      .map(sec => {
+        const enabledIdx = enabledSections.findIndex(s => s.id === sec.id);
+        const isFirst = enabledIdx === 0;
+        const isLast = enabledIdx === totalEnabled - 1;
+
+        return `
+          <div class="settings-dashboard-item" role="listitem" data-section-id="${sec.id}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border); border-radius: var(--radius-xl); gap: 12px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 200px;">
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;">
+                <input type="checkbox" class="dashboard-visibility-toggle" data-section-id="${sec.id}" ${sec.enabled ? 'checked' : ''} aria-label="Toggle ${sec.label} section visibility" style="accent-color: var(--color-accent-primary); width: 20px; height: 20px; cursor: pointer;" />
+                <span style="font-size: 14px; font-weight: 600; color: ${sec.enabled ? 'var(--color-text-primary)' : 'var(--color-text-muted)'};">${sec.label}</span>
+              </label>
+              <span class="dashboard-position-badge" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-full); background: ${sec.enabled ? 'var(--color-accent-muted)' : 'rgba(255, 255, 255, 0.05)'}; color: ${sec.enabled ? 'var(--color-accent-primary)' : 'var(--color-text-muted)'}; border: 1px solid var(--glass-border);">
+                ${sec.enabled ? `Pos ${enabledIdx + 1} of ${totalEnabled}` : 'Hidden'}
+              </span>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <button class="settings-action-btn btn-move-up" data-section-id="${sec.id}" ${isFirst || !sec.enabled ? 'disabled' : ''} aria-label="Move ${sec.label} up" style="padding: 6px 12px; min-height: 36px; font-size: 12px;">
+                <span>${getIconSvg('chevron-up', { size: 16 })}</span>
+                <span>Up</span>
+              </button>
+              <button class="settings-action-btn btn-move-down" data-section-id="${sec.id}" ${isLast || !sec.enabled ? 'disabled' : ''} aria-label="Move ${sec.label} down" style="padding: 6px 12px; min-height: 36px; font-size: 12px;">
+                <span>${getIconSvg('chevron-down', { size: 16 })}</span>
+                <span>Down</span>
+              </button>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    this.attachDashboardItemEvents();
+  }
+
+  private attachDashboardItemEvents(): void {
+    if (!this.container) return;
+
+    // Toggle Visibility
+    const toggles = this.container.querySelectorAll<HTMLInputElement>('.dashboard-visibility-toggle');
+    toggles.forEach(toggle => {
+      toggle.addEventListener('change', () => {
+        const sectionId = toggle.getAttribute('data-section-id');
+        if (sectionId && this.dashboardService) {
+          void this.dashboardService.setSectionVisibility(sectionId as any, toggle.checked);
+        }
+      });
+    });
+
+    // Move Up
+    const upBtns = this.container.querySelectorAll<HTMLButtonElement>('.btn-move-up');
+    upBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const sectionId = btn.getAttribute('data-section-id');
+        if (sectionId && this.dashboardService) {
+          void this.dashboardService.moveSectionUp(sectionId as any);
+        }
+      });
+    });
+
+    // Move Down
+    const downBtns = this.container.querySelectorAll<HTMLButtonElement>('.btn-move-down');
+    downBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const sectionId = btn.getAttribute('data-section-id');
+        if (sectionId && this.dashboardService) {
+          void this.dashboardService.moveSectionDown(sectionId as any);
+        }
+      });
+    });
+
+    // Restore Defaults
+    const resetBtn = this.container.querySelector<HTMLButtonElement>('#settings-dashboard-reset-btn');
+    resetBtn?.addEventListener('click', () => {
+      if (this.dashboardService) {
+        void this.dashboardService.resetToDefaults();
+      }
+    });
   }
 
   private showScanProgress(statusText: string, processed: number, total: number): void {
