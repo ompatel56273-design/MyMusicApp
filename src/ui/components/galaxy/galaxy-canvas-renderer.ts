@@ -540,22 +540,60 @@ export class GalaxyCanvasRenderer {
       ctx.lineWidth = isSelected ? 2.5 : isFocused ? 2 : 1;
       ctx.strokeStyle = isSelected ? '#ffffff' : isFocused ? '#38bdf8' : isFavorite ? '#fbbf24' : 'rgba(255, 255, 255, 0.45)';
       ctx.stroke();
+    }
 
-      // Node Labels (Render name + song count below the planet matching Template 10)
-      if (zoom >= 0.55 || isSelected || isFocused || node.type === 'genre' || (node.type === 'artist' && zoom >= 0.4)) {
+    // 8. Node Labels Pass with Bounding Box Collision Suppression
+    const placedLabelBoxes: { minX: number; maxX: number; minY: number; maxY: number }[] = [];
+
+    for (const node of visibleNodes) {
+      const sx = toScreenX(node.x);
+      const sy = toScreenY(node.y);
+      const screenRadius = Math.max(4, node.radius * zoom);
+
+      const isSelected = node.id === this.selectedNodeId;
+      const isFocused = node.id === this.focusedNodeId;
+      const isPlaying = node.entityId === this.playingEntityId;
+      const isFavorite = node.metadata.isFavorite;
+
+      const isHighPriority = isSelected || isFocused || isPlaying || node.type === 'genre';
+      const isVisibleByZoom = zoom >= 0.65 || (node.type === 'artist' && zoom >= 0.45);
+
+      if (isHighPriority || isVisibleByZoom) {
         const fontSize = Math.max(10, Math.min(14, 11 * zoom));
         ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-        ctx.fillStyle = isSelected ? '#ffffff' : isFocused ? '#38bdf8' : 'rgba(255, 255, 255, 0.95)';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        ctx.fillText(node.label, sx, sy + screenRadius + 4);
+        const textWidth = ctx.measureText(node.label).width;
+        const textHeight = fontSize + (node.metadata.trackCount !== undefined ? fontSize + 6 : 0);
 
-        // Subtitle (Track count or Favorite Star)
-        const trackCount = node.metadata.trackCount;
-        if (trackCount !== undefined && (zoom >= 0.75 || isSelected || node.type === 'genre')) {
-          ctx.font = `400 ${Math.max(9, fontSize - 2)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-          ctx.fillStyle = isFavorite ? '#fbbf24' : 'rgba(255, 255, 255, 0.6)';
-          ctx.fillText(isFavorite ? `★ ${trackCount} songs` : `${trackCount} songs`, sx, sy + screenRadius + fontSize + 6);
+        const boxMinX = sx - textWidth / 2 - 6;
+        const boxMaxX = sx + textWidth / 2 + 6;
+        const boxMinY = sy + screenRadius + 2;
+        const boxMaxY = sy + screenRadius + textHeight + 6;
+
+        let hasOverlap = false;
+        if (!isHighPriority) {
+          for (const b of placedLabelBoxes) {
+            if (boxMinX < b.maxX && boxMaxX > b.minX && boxMinY < b.maxY && boxMaxY > b.minY) {
+              hasOverlap = true;
+              break;
+            }
+          }
+        }
+
+        if (!hasOverlap) {
+          placedLabelBoxes.push({ minX: boxMinX, maxX: boxMaxX, minY: boxMinY, maxY: boxMaxY });
+
+          ctx.fillStyle = isSelected ? '#ffffff' : isFocused ? '#38bdf8' : isPlaying ? '#34d399' : 'rgba(255, 255, 255, 0.95)';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillText(node.label, sx, sy + screenRadius + 4);
+
+          // Subtitle (Track count or Favorite Star)
+          const trackCount = node.metadata.trackCount;
+          if (trackCount !== undefined && (zoom >= 0.75 || isSelected || node.type === 'genre')) {
+            ctx.font = `400 ${Math.max(9, fontSize - 2)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+            ctx.fillStyle = isFavorite ? '#fbbf24' : 'rgba(255, 255, 255, 0.6)';
+            ctx.fillText(isFavorite ? `★ ${trackCount} songs` : `${trackCount} songs`, sx, sy + screenRadius + fontSize + 6);
+          }
         }
       }
     }

@@ -100,21 +100,43 @@ export class StatsService {
       const [totalSongs, allTracksResult, artistsResult, albumsResult, genresResult] = await Promise.all([
         this.trackRepo.count(),
         this.trackRepo.list({ limit: 10000 }),
-        this.artistRepo ? this.artistRepo.list({ limit: 1 }) : Promise.resolve({ total: 0 }),
-        this.albumRepo ? this.albumRepo.list({ limit: 1 }) : Promise.resolve({ total: 0 }),
-        this.genreRepo ? this.genreRepo.list({ limit: 1 }) : Promise.resolve({ total: 0 })
+        this.artistRepo ? this.artistRepo.list({ limit: 10000 }) : Promise.resolve({ items: [], total: 0 }),
+        this.albumRepo ? this.albumRepo.list({ limit: 10000 }) : Promise.resolve({ items: [], total: 0 }),
+        this.genreRepo ? this.genreRepo.list({ limit: 10000 }) : Promise.resolve({ items: [], total: 0 })
       ]);
 
       const tracks = allTracksResult.items;
       let totalPlays = 0;
       let favoriteSongsCount = 0;
 
+      const distinctArtists = new Set<string>();
+      const distinctAlbums = new Set<string>();
+      const distinctGenres = new Set<string>();
+
       for (const track of tracks) {
         totalPlays += (track.playCount || 0);
         if (track.isFavorite) {
           favoriteSongsCount++;
         }
+        if (track.artistName && track.artistName.toLowerCase() !== 'unknown artist') {
+          distinctArtists.add(track.artistName.trim().toLowerCase());
+        }
+        if (track.albumTitle && track.albumTitle.toLowerCase() !== 'unknown album') {
+          const key = `${track.albumTitle.trim().toLowerCase()}:::${(track.artistName || '').trim().toLowerCase()}`;
+          distinctAlbums.add(key);
+        }
+        if (track.genreName && track.genreName.toLowerCase() !== 'unknown genre') {
+          distinctGenres.add(track.genreName.trim().toLowerCase());
+        }
       }
+
+      const realArtistsRepoCount = (artistsResult.items || []).filter(a => a.name && a.name.toLowerCase() !== 'unknown artist').length;
+      const realAlbumsRepoCount = (albumsResult.items || []).filter(a => a.title && a.title.toLowerCase() !== 'unknown album').length;
+      const realGenresRepoCount = (genresResult.items || []).filter(g => g.name && g.name.toLowerCase() !== 'unknown genre').length;
+
+      const totalArtists = Math.max(realArtistsRepoCount, distinctArtists.size);
+      const totalAlbums = Math.max(realAlbumsRepoCount, distinctAlbums.size);
+      const totalGenres = Math.max(realGenresRepoCount, distinctGenres.size);
 
       // Calculate total listening time from playback history if available
       let totalListeningTimeMs = 0;
@@ -141,9 +163,9 @@ export class StatsService {
 
       return {
         totalSongs,
-        totalArtists: artistsResult.total,
-        totalAlbums: albumsResult.total,
-        totalGenres: genresResult.total,
+        totalArtists,
+        totalAlbums,
+        totalGenres,
         totalListeningTimeMs,
         totalPlays,
         favoriteSongsCount
@@ -198,7 +220,9 @@ export class StatsService {
       const artistMap = new Map<string, TopArtistItem>();
 
       for (const track of result.items) {
-        const name = (track.artistName && track.artistName.trim()) || 'Unknown Artist';
+        const name = (track.artistName && track.artistName.trim()) || '';
+        if (!name || name.toLowerCase() === 'unknown artist') continue;
+
         const existing = artistMap.get(name);
         const pCount = track.playCount || 0;
 
@@ -242,7 +266,9 @@ export class StatsService {
       const albumMap = new Map<string, TopAlbumItem>();
 
       for (const track of result.items) {
-        const title = (track.albumTitle && track.albumTitle.trim()) || 'Unknown Album';
+        const title = (track.albumTitle && track.albumTitle.trim()) || '';
+        if (!title || title.toLowerCase() === 'unknown album') continue;
+
         const artist = (track.artistName && track.artistName.trim()) || 'Unknown Artist';
         const key = `${title}:::${artist}`;
         const existing = albumMap.get(key);

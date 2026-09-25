@@ -16,7 +16,11 @@ export class GenreRepository implements IGenreRepository {
   }
 
   public async getByName(name: string): Promise<Genre | null> {
-    return this.db.getByIndex<Genre>(STORES.GENRES, 'by_name', name);
+    const exact = await this.db.getByIndex<Genre>(STORES.GENRES, 'by_name', name);
+    if (exact) return exact;
+    const all = await this.db.getAll<Genre>(STORES.GENRES);
+    const target = name.trim().toLowerCase();
+    return all.find(g => g.name.trim().toLowerCase() === target) || null;
   }
 
   public async list(options?: PaginationOptions): Promise<PaginatedResult<Genre>> {

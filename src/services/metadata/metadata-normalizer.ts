@@ -27,19 +27,39 @@ export class MetadataNormalizer {
   private static readonly ARTIST_DELIMITERS = /\s+(?:feat\.|ft\.|featuring|with|vs\.)\s+|[;/&]\s*/i;
 
   public static normalize(raw: ExtractedMetadata, fallbackFilename?: string): NormalizedMetadataResult {
-    // 1. Normalize Title (Precedence: embedded title -> filename title -> "Unknown Track")
-    let title = (raw.title || '').trim();
-    if (!title && fallbackFilename) {
+    // Standardize raw strings
+    let rawTitle = (raw.title || '').trim();
+    let rawArtist = (raw.artist || '').trim();
+
+    // 1. Filename Parsing Fallback if embedded title or artist is missing
+    if ((!rawTitle || !rawArtist) && fallbackFilename) {
       const lastDot = fallbackFilename.lastIndexOf('.');
-      title = lastDot > 0 ? fallbackFilename.substring(0, lastDot).trim() : fallbackFilename.trim();
+      const baseName = lastDot > 0 ? fallbackFilename.substring(0, lastDot).trim() : fallbackFilename.trim();
+
+      if (!rawTitle && rawArtist) {
+        // Artist is known, use baseName as title fallback
+        rawTitle = baseName;
+      } else if (!rawTitle || !rawArtist) {
+        // Pattern: "01 - Artist - Title" or "Artist - Title"
+        const matchWithTrack = baseName.match(/^(\d+)[\s._-]+\s*(.+?)\s+-\s+(.+)$/);
+        const matchSimple = baseName.match(/^(.+?)\s+-\s+(.+)$/);
+
+        if (matchWithTrack) {
+          if (!rawArtist) rawArtist = matchWithTrack[2]!.trim();
+          if (!rawTitle) rawTitle = matchWithTrack[3]!.trim();
+        } else if (matchSimple) {
+          if (!rawArtist) rawArtist = matchSimple[1]!.trim();
+          if (!rawTitle) rawTitle = matchSimple[2]!.trim();
+        } else if (!rawTitle) {
+          rawTitle = baseName;
+        }
+      }
     }
-    if (!title) {
-      title = 'Unknown Track';
-    }
+
+    let title = rawTitle || 'Unknown Track';
 
     // 2. Multi-Artist Extraction
     const artistList: NormalizedArtistEntry[] = [];
-    const rawArtist = (raw.artist || '').trim();
 
     if (raw.artists && raw.artists.length > 0) {
       for (const a of raw.artists) {

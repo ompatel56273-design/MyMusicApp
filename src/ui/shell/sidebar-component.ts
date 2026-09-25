@@ -4,6 +4,9 @@ import type { Disposable } from '../../core/types/common';
 import type { ILibraryService } from '../../services/contracts/service-contracts';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
+import { EventBus } from '../../core/events/event-bus';
+import { DomainEvents } from '../../domain/events/domain-events';
+
 export interface NavItem {
   id: AppRoute;
   label: string;
@@ -14,7 +17,9 @@ export class SidebarComponent {
   private container: HTMLElement | null = null;
   private readonly router: RouterService;
   private readonly libraryService?: ILibraryService | undefined;
+  private readonly eventBus?: EventBus | undefined;
   private routerSub: Disposable | null = null;
+  private eventBusSub: Disposable | null = null;
   private statsInterval: number | null = null;
 
   private primaryNavItems: NavItem[] = [
@@ -35,9 +40,10 @@ export class SidebarComponent {
     { label: 'Downloads', icon: 'download', route: 'library', params: { tab: 'folders' } }
   ];
 
-  constructor(router: RouterService, libraryService?: ILibraryService) {
+  constructor(router: RouterService, libraryService?: ILibraryService, eventBus?: EventBus) {
     this.router = router;
     this.libraryService = libraryService;
+    this.eventBus = eventBus;
   }
 
   public mount(container: HTMLElement): void {
@@ -48,6 +54,12 @@ export class SidebarComponent {
       this.updateActiveNav(state);
     });
 
+    if (this.eventBus) {
+      this.eventBusSub = this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, () => {
+        this.fetchLibraryStats();
+      });
+    }
+
     this.fetchLibraryStats();
   }
 
@@ -55,6 +67,10 @@ export class SidebarComponent {
     if (this.routerSub) {
       this.routerSub.dispose();
       this.routerSub = null;
+    }
+    if (this.eventBusSub) {
+      this.eventBusSub.dispose();
+      this.eventBusSub = null;
     }
     if (this.statsInterval) {
       window.clearInterval(this.statsInterval);
