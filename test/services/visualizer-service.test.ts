@@ -34,8 +34,8 @@ describe('VisualizerService', () => {
   it('returns default settings when none are persisted', async () => {
     const settings = await visualizerService.getSettings();
     expect(settings).toEqual(DEFAULT_VISUALIZER_SETTINGS);
-    expect(settings.enabled).toBe(true);
-    expect(settings.mode).toBe('bars');
+    expect(settings.enabled).toBe(false);
+    expect(settings.mode).toBe('off');
     expect(settings.fpsLimit).toBe(60);
     expect(settings.colorTheme).toBe('accent');
   });
@@ -101,8 +101,8 @@ describe('VisualizerService', () => {
     });
 
     const sanitized = await visualizerService.getSettings();
-    expect(sanitized.enabled).toBe(true);
-    expect(sanitized.mode).toBe('bars');
+    expect(sanitized.enabled).toBe(false);
+    expect(sanitized.mode).toBe('off');
     expect(sanitized.fpsLimit).toBe(60);
     expect(sanitized.colorTheme).toBe('accent');
   });

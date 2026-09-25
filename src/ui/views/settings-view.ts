@@ -1193,35 +1193,66 @@ export class SettingsView implements IView {
                   <span class="settings-card-category">Real-time Graphics</span>
                   <h2 class="settings-card-title">Audio Visualizer Preferences</h2>
                 </div>
-                <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer; font-size: 13px; font-weight: 700; color: var(--color-text-primary); background: rgba(255, 255, 255, 0.04); padding: 6px 14px; border-radius: var(--radius-full); border: 1px solid var(--glass-border);">
-                  <input type="checkbox" id="settings-viz-enabled" style="accent-color: var(--color-accent-secondary);" />
-                  Enable Visualizer
-                </label>
               </div>
 
               <div class="settings-form-row">
                 <div class="settings-form-row-label">
-                  <span class="settings-form-row-title">Visualizer Render Mode</span>
-                  <span class="settings-form-row-desc">Algorithm used for rendering dynamic audio frequency waveforms</span>
+                  <span class="settings-form-row-title">Visualizer Style</span>
+                  <span class="settings-form-row-desc">Select visual presentation style or disable visualizer</span>
                 </div>
-                <select id="settings-viz-mode" class="settings-input-control">
-                  <option value="bars">Frequency Spectrum Bars</option>
-                  <option value="waveform">Oscilloscope Waveform</option>
-                  <option value="circular">Circular Radial Ring</option>
-                  <option value="spectrum">Continuous Filled Spectrum</option>
-                  <option value="particles">Neon Audio Particles</option>
-                  <option value="pulse">Concentric Bass Pulse</option>
-                  <option value="album-reactive">Album-Reactive Chromatic</option>
-                  <option value="minimal">Minimal Ambient Orb</option>
+                <select id="settings-viz-mode" class="settings-input-control" aria-label="Visualizer Style">
+                  <option value="off">Off</option>
+                  <option value="bars">Spectrum Bars</option>
+                  <option value="waveform">Waveform</option>
+                  <option value="circular">Circular Spectrum</option>
                 </select>
               </div>
 
-              <div class="settings-form-row">
+              <div class="settings-ambient-grid" role="radiogroup" aria-label="Visualizer Style Selection" style="margin-top: var(--space-4);">
+                <div class="settings-viz-style-option settings-viz-option" data-viz-style="off" role="radio" tabindex="0" aria-checked="false" aria-label="Off">
+                  <div class="settings-ambient-swatch">
+                    <span style="font-size: 16px;">🚫</span>
+                  </div>
+                  <div class="settings-accent-details">
+                    <span class="settings-accent-name">Off</span>
+                    <span class="settings-accent-desc">No visualizer processing or rendering</span>
+                  </div>
+                </div>
+                <div class="settings-viz-style-option settings-viz-option" data-viz-style="bars" role="radio" tabindex="0" aria-checked="false" aria-label="Spectrum Bars">
+                  <div class="settings-ambient-swatch">
+                    <span style="font-size: 16px;">📊</span>
+                  </div>
+                  <div class="settings-accent-details">
+                    <span class="settings-accent-name">Spectrum Bars</span>
+                    <span class="settings-accent-desc">Frequency-domain animated vertical bars</span>
+                  </div>
+                </div>
+                <div class="settings-viz-style-option settings-viz-option" data-viz-style="waveform" role="radio" tabindex="0" aria-checked="false" aria-label="Waveform">
+                  <div class="settings-ambient-swatch">
+                    <span style="font-size: 16px;">〰️</span>
+                  </div>
+                  <div class="settings-accent-details">
+                    <span class="settings-accent-name">Waveform</span>
+                    <span class="settings-accent-desc">Continuous time-domain oscilloscope wave</span>
+                  </div>
+                </div>
+                <div class="settings-viz-style-option settings-viz-option" data-viz-style="circular" role="radio" tabindex="0" aria-checked="false" aria-label="Circular Spectrum">
+                  <div class="settings-ambient-swatch">
+                    <span style="font-size: 16px;">⭕</span>
+                  </div>
+                  <div class="settings-accent-details">
+                    <span class="settings-accent-name">Circular Spectrum</span>
+                    <span class="settings-accent-desc">Radial frequency distribution around a circle</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-form-row" style="margin-top: var(--space-4);">
                 <div class="settings-form-row-label">
                   <span class="settings-form-row-title">Frame Rate Target</span>
-                  <span class="settings-form-row-desc">Target FPS cap for WebGL / Canvas visualizer rendering</span>
+                  <span class="settings-form-row-desc">Target FPS cap for Canvas visualizer rendering</span>
                 </div>
-                <select id="settings-viz-fps" class="settings-input-control">
+                <select id="settings-viz-fps" class="settings-input-control" aria-label="Frame Rate Target">
                   <option value="60">60 FPS (Smooth Motion)</option>
                   <option value="30">30 FPS (Power Efficient)</option>
                 </select>
@@ -1850,26 +1881,61 @@ export class SettingsView implements IView {
   private attachVisualizerSettingsListeners(): void {
     if (!this.container || !this.visualizerService) return;
 
-    const enabledCheckbox = this.container.querySelector<HTMLInputElement>('#settings-viz-enabled');
     const modeSelect = this.container.querySelector<HTMLSelectElement>('#settings-viz-mode');
     const fpsSelect = this.container.querySelector<HTMLSelectElement>('#settings-viz-fps');
+    const styleOptions = this.container.querySelectorAll<HTMLElement>('.settings-viz-style-option');
+
+    const updateUIState = (settings: { enabled?: boolean; mode?: VisualizerMode } | null | undefined) => {
+      if (!settings) return;
+      const activeMode = !settings.enabled ? 'off' : (settings.mode || 'off');
+      if (modeSelect) modeSelect.value = activeMode;
+
+      styleOptions.forEach(opt => {
+        const val = opt.getAttribute('data-viz-style');
+        const isActive = (val === 'off' && activeMode === 'off') ||
+          (val === activeMode) ||
+          (val === 'bars' && activeMode === 'spectrum-bars') ||
+          (val === 'circular' && activeMode === 'circular-spectrum');
+
+        opt.classList.toggle('active', isActive);
+        opt.setAttribute('aria-checked', isActive ? 'true' : 'false');
+
+        const checkEl = opt.querySelector('.settings-ambient-check');
+        if (checkEl) {
+          (checkEl as HTMLElement).style.display = isActive ? 'flex' : 'none';
+        }
+      });
+    };
 
     void this.visualizerService.getSettings().then(settings => {
-      if (enabledCheckbox) enabledCheckbox.checked = settings.enabled;
-      if (modeSelect) modeSelect.value = settings.mode;
+      updateUIState(settings);
       if (fpsSelect) fpsSelect.value = String(settings.fpsLimit);
     });
 
-    enabledCheckbox?.addEventListener('change', () => {
+    modeSelect?.addEventListener('change', async () => {
+      const selectedMode = modeSelect.value as VisualizerMode;
       if (this.visualizerService) {
-        void this.visualizerService.setEnabled(enabledCheckbox.checked);
+        const updated = await this.visualizerService.setMode(selectedMode);
+        updateUIState(updated);
       }
     });
 
-    modeSelect?.addEventListener('change', () => {
-      if (this.visualizerService) {
-        void this.visualizerService.setMode(modeSelect.value as VisualizerMode);
-      }
+    styleOptions.forEach(opt => {
+      const handleSelect = async () => {
+        const val = opt.getAttribute('data-viz-style') as VisualizerMode;
+        if (val && this.visualizerService) {
+          const updated = await this.visualizerService.setMode(val);
+          updateUIState(updated);
+        }
+      };
+
+      opt.addEventListener('click', handleSelect);
+      opt.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          void handleSelect();
+        }
+      });
     });
 
     fpsSelect?.addEventListener('change', () => {
