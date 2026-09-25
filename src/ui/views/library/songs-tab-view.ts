@@ -1,7 +1,8 @@
 import type { Track } from '../../../domain/entities/models';
-import type { ILibraryService, IPlaybackManager, IArtworkService } from '../../../services/contracts/service-contracts';
+import type { ILibraryService, IPlaybackManager, IArtworkService, IPlaylistService } from '../../../services/contracts/service-contracts';
 import { VirtualScroller } from '../../components/virtual-scroller/virtual-scroller';
 import { TrackRowComponent } from '../../components/library/track-row-component';
+import { AddToPlaylistModalComponent } from '../../components/playlist/add-to-playlist-modal-component';
 import type { LibraryToolbarState } from '../../components/library/library-toolbar';
 import { ThemeManager } from '../../theme/theme-manager';
 
@@ -9,6 +10,7 @@ export interface SongsTabViewDependencies {
   libraryService: ILibraryService;
   playbackManager?: IPlaybackManager | undefined;
   artworkService?: IArtworkService | undefined;
+  playlistService?: IPlaylistService | undefined;
 }
 
 export class SongsTabView {
@@ -16,6 +18,7 @@ export class SongsTabView {
   private readonly libraryService: ILibraryService;
   private readonly playbackManager?: IPlaybackManager | undefined;
   private readonly artworkService?: IArtworkService | undefined;
+  private readonly playlistService?: IPlaylistService | undefined;
 
   private allTracks: Track[] = [];
   private filteredTracks: Track[] = [];
@@ -32,6 +35,7 @@ export class SongsTabView {
     this.libraryService = deps.libraryService;
     this.playbackManager = deps.playbackManager;
     this.artworkService = deps.artworkService;
+    this.playlistService = deps.playlistService;
   }
 
   public async mount(container: HTMLElement, filterOverride?: Partial<LibraryToolbarState>): Promise<void> {
@@ -157,7 +161,15 @@ export class SongsTabView {
           index,
           {
             onPlay: t => this.handlePlayTrack(t),
-            onToggleFavorite: t => void this.handleToggleFavorite(t)
+            onToggleFavorite: t => void this.handleToggleFavorite(t),
+            onAddToPlaylist: this.playlistService
+              ? t => {
+                  void AddToPlaylistModalComponent.show({
+                    trackIds: [t.id],
+                    playlistService: this.playlistService!
+                  });
+                }
+              : undefined
           },
           this.artworkService
         );

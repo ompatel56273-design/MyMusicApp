@@ -9,11 +9,12 @@ import type {
 } from '../../services/contracts/service-contracts';
 import type { RouterService } from '../navigation/router-service';
 import type { EventBus } from '../../core/events/event-bus';
-import type { Track, Artist } from '../../domain/entities/models';
+import type { Track, Artist, Playlist } from '../../domain/entities/models';
 import type { Disposable } from '../../core/types/common';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 import type { DashboardSectionId } from '../../domain/entities/dashboard-settings';
 import { SUPPORTED_DASHBOARD_SECTIONS } from '../../domain/entities/dashboard-settings';
+import { DomainEvents } from '../../domain/events/domain-events';
 
 export interface HomeViewDependencies {
   playbackManager?: IPlaybackManager | undefined;
@@ -143,6 +144,7 @@ export class HomeView implements IView {
 
   private recentTracks: readonly Track[] = [];
   private topArtists: readonly Artist[] = [];
+  private realPlaylists: readonly Playlist[] = [];
   private libraryStats = { trackCount: 0, albumCount: 0, artistCount: 0, playlistCount: 0 };
   private subscriptions: Disposable[] = [];
   private activeMood = 'For You';
@@ -1391,11 +1393,12 @@ export class HomeView implements IView {
         this.libraryService.listTracks({ limit: 10 }),
         this.libraryService.listArtists({ limit: 8 }),
         this.libraryService.getLibraryStats().catch(() => ({ trackCount: 0, albumCount: 0, artistCount: 0 })),
-        this.playlistService ? this.playlistService.listPlaylists({ limit: 1 }).catch(() => ({ total: 0 })) : Promise.resolve({ total: 0 })
+        this.playlistService ? this.playlistService.listPlaylists({ limit: 6 }).catch(() => ({ items: [], total: 0 })) : Promise.resolve({ items: [], total: 0 })
       ]);
 
       this.recentTracks = tracksRes?.items ?? [];
       this.topArtists = artistsRes?.items ?? [];
+      this.realPlaylists = (playlistsRes as any)?.items ?? [];
       this.libraryStats = {
         trackCount: statsRes.trackCount || this.recentTracks.length,
         albumCount: statsRes.albumCount || 0,
@@ -1406,6 +1409,7 @@ export class HomeView implements IView {
       this.updateStatsDisplay();
       this.renderTrackCards();
       this.renderTopArtists();
+      this.renderPlaylistsGrid();
       this.renderFavoritesGrid();
       this.renderRecentlyAddedGrid();
       this.renderMostPlayedGrid();
@@ -1693,6 +1697,12 @@ export class HomeView implements IView {
         void this.loadData();
       })
     );
+
+    this.subscriptions.push(
+      this.eventBus.subscribe(DomainEvents.PLAYLIST_UPDATED, () => {
+        void this.loadData();
+      })
+    );
   }
 
   private renderDynamicSections(): void {
@@ -1946,6 +1956,64 @@ export class HomeView implements IView {
 
     this.container.querySelector('#see-all-folders-btn')?.addEventListener('click', () => {
       this.router?.navigate('library', { tab: 'folders' });
+    });
+  }
+
+  private renderPlaylistsGrid(): void {
+    if (!this.container) return;
+    const container = this.container.querySelector<HTMLElement>('#home-mixes-container');
+    if (!container) return;
+
+    if (this.realPlaylists.length === 0) {
+      container.innerHTML = this.renderDefaultMixCards();
+      const mixCards = container.querySelectorAll<HTMLElement>('.home-mix-card');
+      mixCards.forEach(card => {
+        card.addEventListener('click', () => {
+          if (this.recentTracks.length > 0 && this.playbackManager) {
+            const randomIdx = Math.floor(Math.random() * this.recentTracks.length);
+            void this.playbackManager.playTrack(this.recentTracks[randomIdx]!, [...this.recentTracks]);
+          } else {
+            this.router?.navigate('playlists');
+          }
+        });
+      });
+      return;
+    }
+
+    container.innerHTML = this.realPlaylists
+      .map(
+        pl => `
+        <div class="home-mix-card" data-playlist-id="${this.escapeHtml(pl.id)}" role="button" tabindex="0" aria-label="Open playlist ${this.escapeHtml(pl.name)}" style="cursor: pointer;">
+          <div class="home-mix-artwork" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.3) 0%, rgba(236, 72, 153, 0.25) 50%, rgba(6, 182, 212, 0.2) 100%);">
+            <span style="color: var(--color-accent-purple-glow);">${getIconSvg('playlist', { size: 36 })}</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this.escapeHtml(pl.name)}">
+              ${this.escapeHtml(pl.name)}
+            </span>
+            <span style="font-size: 11px; color: var(--color-text-muted);">
+              ${pl.trackCount ?? 0} ${pl.trackCount === 1 ? 'song' : 'songs'}
+            </span>
+          </div>
+        </div>
+      `
+      )
+      .join('');
+
+    const cards = container.querySelectorAll<HTMLElement>('.home-mix-card');
+    cards.forEach(card => {
+      const id = card.getAttribute('data-playlist-id');
+      if (id) {
+        card.addEventListener('click', () => {
+          this.router?.navigate('playlists', { id });
+        });
+        card.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            this.router?.navigate('playlists', { id });
+          }
+        });
+      }
     });
   }
 

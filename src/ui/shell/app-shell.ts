@@ -159,7 +159,8 @@ export class AppShell {
           artworkService: deps.artworkService,
           scannerService: deps.scannerService,
           fsAdapter: deps.fsAdapter,
-          eventBus: deps.eventBus
+          eventBus: deps.eventBus,
+          playlistService: deps.playlistService
         })
       ],
       [
