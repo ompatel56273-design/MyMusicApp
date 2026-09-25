@@ -15,6 +15,9 @@ import { FoldersTabView } from './library/folders-tab-view';
 import { FavoritesTabView } from './library/favorites-tab-view';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
+import type { DuplicateDetectorService } from '../../services/duplicate/duplicate-detector-service';
+import { DuplicateDetectionModal } from '../components/library/duplicate-detection-modal';
+
 export interface LibraryViewDependencies {
   libraryService: ILibraryService;
   playbackManager?: IPlaybackManager | undefined;
@@ -22,6 +25,7 @@ export interface LibraryViewDependencies {
   scannerService?: IScannerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   eventBus?: EventBus | undefined;
+  duplicateDetectorService?: DuplicateDetectorService | undefined;
 }
 
 /**
@@ -44,6 +48,7 @@ export class LibraryView implements IView {
   private readonly scannerService?: IScannerService | undefined;
   private readonly fsAdapter?: BrowserFilesystemAdapter | undefined;
   private readonly eventBus?: EventBus | undefined;
+  private readonly duplicateDetectorService?: DuplicateDetectorService | undefined;
   private libraryUpdateSub: Disposable | null = null;
 
   private toolbar: LibraryToolbar | null = null;
@@ -65,6 +70,7 @@ export class LibraryView implements IView {
       this.scannerService = depsOrService.scannerService;
       this.fsAdapter = depsOrService.fsAdapter;
       this.eventBus = depsOrService.eventBus;
+      this.duplicateDetectorService = depsOrService.duplicateDetectorService;
     } else {
       this.libraryService = depsOrService as ILibraryService;
     }
@@ -361,12 +367,18 @@ export class LibraryView implements IView {
             </p>
           </div>
 
-          <!-- Quick Actions Button (Add Music / Scan) -->
+          <!-- Quick Actions Button (Add Music / Scan + Find Duplicates) -->
           <div class="library-header-metrics" style="display: flex; align-items: center; gap: var(--space-3); z-index: 1;">
             <button id="library-scan-quick-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; border: none; background: linear-gradient(135deg, var(--color-accent-purple) 0%, #9333ea 100%); color: #ffffff; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.5); transition: all var(--duration-fast) var(--ease-smooth);">
               <span>${getIconSvg('plus', { size: 16, color: '#ffffff' })}</span>
               <span>Add Music / Scan</span>
             </button>
+            ${this.duplicateDetectorService ? `
+              <button id="library-duplicates-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; border: 1px solid var(--glass-border-interactive); background: rgba(168, 85, 247, 0.12); color: var(--color-text-primary); transition: all var(--duration-fast) var(--ease-smooth);">
+                <span>${getIconSvg('sparkles', { size: 16, color: 'var(--color-accent-purple-glow)' })}</span>
+                <span>Find Duplicates</span>
+              </button>
+            ` : ''}
           </div>
         </header>
 
@@ -481,6 +493,20 @@ export class LibraryView implements IView {
 
   private bindHeaderEvents(): void {
     if (!this.container) return;
+    const dupBtn = this.container.querySelector<HTMLButtonElement>('#library-duplicates-btn');
+    dupBtn?.addEventListener('click', () => {
+      if (this.duplicateDetectorService) {
+        const modal = new DuplicateDetectionModal({
+          duplicateDetectorService: this.duplicateDetectorService,
+          onResolved: async () => {
+            await this.updateStats();
+            this.mountActiveTab();
+          }
+        });
+        modal.mount();
+      }
+    });
+
     const scanBtn = this.container.querySelector<HTMLButtonElement>('#library-scan-quick-btn');
     scanBtn?.addEventListener('click', async () => {
       console.log('[FolderPicker] selection started');

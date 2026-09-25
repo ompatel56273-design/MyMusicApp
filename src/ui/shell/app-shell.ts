@@ -37,6 +37,8 @@ import type { IDatabaseAdapter } from '../../data/db/database-adapter';
 import { ThemeManager } from '../theme/theme-manager';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
+import type { DuplicateDetectorService } from '../../services/duplicate/duplicate-detector-service';
+
 export interface AppShellDependencies {
   playbackManager: IPlaybackManager;
   libraryService: ILibraryService;
@@ -54,6 +56,7 @@ export interface AppShellDependencies {
   sleepTimerService?: SleepTimerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   dbAdapter?: IDatabaseAdapter | undefined;
+  duplicateDetectorService?: DuplicateDetectorService | undefined;
   eventBus: EventBus;
 }
 
@@ -91,7 +94,7 @@ export class AppShell {
     this.eventBus = deps.eventBus;
     this.router = new RouterService('home');
     this.header = new HeaderComponent(this.router);
-    this.sidebar = new SidebarComponent(this.router, deps.libraryService);
+    this.sidebar = new SidebarComponent(this.router, deps.libraryService, deps.eventBus);
     this.miniPlayer = new MiniPlayerComponent({
       playbackManager: deps.playbackManager,
       artworkService: deps.artworkService,
@@ -153,6 +156,7 @@ export class AppShell {
           artworkService: deps.artworkService,
           scannerService: deps.scannerService,
           fsAdapter: deps.fsAdapter,
+          duplicateDetectorService: deps.duplicateDetectorService,
           eventBus: deps.eventBus
         })
       ],
