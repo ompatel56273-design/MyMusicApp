@@ -46,6 +46,7 @@ import { DashboardService } from '../services/dashboard/dashboard-service';
 import { StatsService } from '../services/stats/stats-service';
 import { SleepTimerService } from '../services/playback/sleep-timer-service';
 import { DuplicateDetectorService } from '../services/duplicate/duplicate-detector-service';
+import { LibraryHealthService } from '../services/library/library-health-service';
 import { FileAccessCapabilityService } from '../services/scanner/file-access-capability';
 import { LocalMusicOnboardingModal } from '../ui/components/onboarding/local-music-onboarding-modal';
 
@@ -224,6 +225,14 @@ export class AppBootstrap {
       audioFileRepo,
       this.eventBus
     );
+    const healthService = new LibraryHealthService({
+      libraryService,
+      trackRepo,
+      audioFileRepo,
+      playlistRepo,
+      duplicateDetectorService,
+      eventBus: this.eventBus
+    });
 
     // 4.1 Apply Audio Settings to Engine & PlaybackManager
     try {
@@ -278,6 +287,7 @@ export class AppBootstrap {
       statsService,
       sleepTimerService,
       duplicateDetectorService,
+      healthService,
       fsAdapter,
       dbAdapter: adapter,
       eventBus: this.eventBus
