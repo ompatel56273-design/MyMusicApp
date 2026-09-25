@@ -42,6 +42,7 @@ import { LyricsService } from '../services/lyrics/lyrics-service';
 import { AudioSettingsService } from '../services/audio/audio-settings-service';
 import { VisualizerService } from '../services/visualizer/visualizer-service';
 import { GalaxyService } from '../services/galaxy/galaxy-service';
+import { DashboardService } from '../services/dashboard/dashboard-service';
 import { StatsService } from '../services/stats/stats-service';
 import { SleepTimerService } from '../services/playback/sleep-timer-service';
 import { FileAccessCapabilityService } from '../services/scanner/file-access-capability';
@@ -197,6 +198,7 @@ export class AppBootstrap {
     });
     const audioSettingsService = new AudioSettingsService(adapter);
     const visualizerService = new VisualizerService(adapter);
+    const dashboardService = new DashboardService(adapter, this.eventBus);
     const statsService = new StatsService({
       trackRepo,
       artistRepo,
@@ -265,6 +267,7 @@ export class AppBootstrap {
       audioSettingsService,
       visualizerService,
       galaxyService,
+      dashboardService,
       scannerService,
       statsService,
       sleepTimerService,

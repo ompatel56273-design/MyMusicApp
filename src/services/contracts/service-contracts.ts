@@ -192,6 +192,7 @@ import type { DspPipelineOptions, ReplayGainMode } from '../audio/audio-types';
 import type { AudioSettings, EqualizerPreset } from '../../domain/entities/audio-settings';
 import type { VisualizerSettings, VisualizerMode } from '../../domain/entities/visualizer-settings';
 import type { GalaxyGraph, GalaxyFilterOptions, GalaxySettings } from '../../domain/entities/galaxy-types';
+import type { DashboardSettings, DashboardSectionConfig } from '../../domain/entities/dashboard-settings';
 import type { AudioAnalysisMetrics } from '../audio/audio-types';
 
 /**
@@ -202,6 +203,23 @@ export interface IGalaxyService {
   invalidateCache(): void;
   getSettings(): Promise<GalaxySettings>;
   saveSettings(settings: Partial<GalaxySettings>): Promise<GalaxySettings>;
+}
+
+/**
+ * Dashboard Service Contract.
+ */
+export interface IDashboardService {
+  getSettings(): Promise<DashboardSettings>;
+  saveSettings(settings: Partial<DashboardSettings>): Promise<DashboardSettings>;
+  toggleSectionVisibility(sectionId: string, visible?: boolean): Promise<DashboardSettings>;
+  setSectionVisibility(sectionId: string, visible: boolean): Promise<DashboardSettings>;
+  reorderSections(sectionId: string, direction: 'up' | 'down'): Promise<DashboardSettings>;
+  moveSectionUp(sectionId: string): Promise<DashboardSettings>;
+  moveSectionDown(sectionId: string): Promise<DashboardSettings>;
+  moveSection(fromIndex: number, toIndex: number): Promise<DashboardSettings>;
+  setSectionOrder(order: readonly string[]): Promise<DashboardSettings>;
+  resetToDefaults(): Promise<DashboardSettings>;
+  getResolvedSections(): readonly DashboardSectionConfig[];
 }
 
 /**

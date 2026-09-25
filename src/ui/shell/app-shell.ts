@@ -27,6 +27,7 @@ import type {
   IAudioSettingsService,
   IVisualizerService,
   IGalaxyService,
+  IDashboardService,
   IScannerService
 } from '../../services/contracts/service-contracts';
 import { EventBus } from '../../core/events/event-bus';
@@ -47,6 +48,7 @@ export interface AppShellDependencies {
   audioSettingsService?: IAudioSettingsService | undefined;
   visualizerService?: IVisualizerService | undefined;
   galaxyService?: IGalaxyService | undefined;
+  dashboardService?: IDashboardService | undefined;
   scannerService?: IScannerService | undefined;
   statsService?: StatsService | undefined;
   sleepTimerService?: SleepTimerService | undefined;
@@ -139,6 +141,7 @@ export class AppShell {
           router: this.router,
           artworkService: deps.artworkService,
           playlistService: deps.playlistService,
+          dashboardService: deps.dashboardService,
           eventBus: deps.eventBus
         })
       ],
@@ -169,6 +172,7 @@ export class AppShell {
           audioSettingsService: deps.audioSettingsService,
           visualizerService: deps.visualizerService,
           galaxyService: deps.galaxyService,
+          dashboardService: deps.dashboardService,
           scannerService: deps.scannerService,
           libraryService: deps.libraryService,
           fsAdapter: deps.fsAdapter,

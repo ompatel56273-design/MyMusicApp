@@ -53,5 +53,6 @@ export const ServiceTokens = {
   AudioEngine: createToken<IAudioEngine>('IAudioEngine'),
   AudioSettingsService: createToken<import('../../services/contracts/service-contracts').IAudioSettingsService>('IAudioSettingsService'),
   VisualizerService: createToken<import('../../services/contracts/service-contracts').IVisualizerService>('IVisualizerService'),
-  GalaxyService: createToken<import('../../services/contracts/service-contracts').IGalaxyService>('IGalaxyService')
+  GalaxyService: createToken<import('../../services/contracts/service-contracts').IGalaxyService>('IGalaxyService'),
+  DashboardService: createToken<import('../../services/contracts/service-contracts').IDashboardService>('IDashboardService')
 } as const;
