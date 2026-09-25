@@ -15,8 +15,11 @@ import { FoldersTabView } from './library/folders-tab-view';
 import { FavoritesTabView } from './library/favorites-tab-view';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
+import type { AlbumMergeService } from '../../services/library/album-merge-service';
+
 export interface LibraryViewDependencies {
   libraryService: ILibraryService;
+  albumMergeService?: AlbumMergeService | undefined;
   playbackManager?: IPlaybackManager | undefined;
   artworkService?: IArtworkService | undefined;
   scannerService?: IScannerService | undefined;
@@ -39,6 +42,7 @@ export class LibraryView implements IView {
   private container: HTMLElement | null = null;
   private currentTab: LibraryTab = 'songs';
   private readonly libraryService: ILibraryService;
+  private readonly albumMergeService?: AlbumMergeService | undefined;
   private readonly playbackManager?: IPlaybackManager | undefined;
   private readonly artworkService?: IArtworkService | undefined;
   private readonly scannerService?: IScannerService | undefined;
@@ -60,6 +64,7 @@ export class LibraryView implements IView {
   constructor(depsOrService?: LibraryViewDependencies | ILibraryService) {
     if (depsOrService && 'libraryService' in depsOrService) {
       this.libraryService = depsOrService.libraryService;
+      this.albumMergeService = depsOrService.albumMergeService;
       this.playbackManager = depsOrService.playbackManager;
       this.artworkService = depsOrService.artworkService;
       this.scannerService = depsOrService.scannerService;
@@ -621,6 +626,7 @@ export class LibraryView implements IView {
       case 'albums': {
         const albumsView = new AlbumsTabView({
           libraryService: this.libraryService,
+          albumMergeService: this.albumMergeService,
           playbackManager: this.playbackManager,
           artworkService: this.artworkService,
           onSelectAlbum: _album => {

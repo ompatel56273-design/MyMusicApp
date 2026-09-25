@@ -1,10 +1,14 @@
 import type { Album } from '../../../domain/entities/models';
 import type { ILibraryService, IPlaybackManager, IArtworkService } from '../../../services/contracts/service-contracts';
+import type { AlbumMergeService } from '../../../services/library/album-merge-service';
 import { VirtualScroller } from '../../components/virtual-scroller/virtual-scroller';
 import { AlbumCardComponent } from '../../components/library/album-card-component';
+import { AlbumMergeModal } from '../../components/library/album-merge-modal';
+import { getIconSvg } from '../../icons/icon-registry';
 
 export interface AlbumsTabViewDependencies {
   libraryService: ILibraryService;
+  albumMergeService?: AlbumMergeService | undefined;
   playbackManager?: IPlaybackManager | undefined;
   artworkService?: IArtworkService | undefined;
   onSelectAlbum?: ((album: Album) => void) | undefined;
@@ -13,6 +17,7 @@ export interface AlbumsTabViewDependencies {
 export class AlbumsTabView {
   private container: HTMLElement | null = null;
   private readonly libraryService: ILibraryService;
+  private readonly albumMergeService?: AlbumMergeService | undefined;
   private readonly playbackManager?: IPlaybackManager | undefined;
   private readonly artworkService?: IArtworkService | undefined;
   private readonly onSelectAlbum?: ((album: Album) => void) | undefined;
@@ -22,6 +27,7 @@ export class AlbumsTabView {
 
   constructor(deps: AlbumsTabViewDependencies) {
     this.libraryService = deps.libraryService;
+    this.albumMergeService = deps.albumMergeService;
     this.playbackManager = deps.playbackManager;
     this.artworkService = deps.artworkService;
     this.onSelectAlbum = deps.onSelectAlbum;
@@ -30,14 +36,55 @@ export class AlbumsTabView {
   public async mount(container: HTMLElement): Promise<void> {
     this.container = container;
     this.container.innerHTML = `
-      <div id="albums-viewport" style="overflow-y: auto; max-height: calc(100vh - 280px); min-height: 300px;">
-        <div style="padding: var(--space-8); text-align: center; color: var(--color-text-muted);">
-          Loading albums...
+      <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 8px;">
+          <span style="font-size: 13px; font-weight: 700; color: var(--color-text-secondary);" id="albums-count-label">
+            Albums
+          </span>
+          ${this.albumMergeService ? `
+            <button id="albums-btn-merge" style="
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+              padding: 6px 14px;
+              border-radius: var(--radius-full);
+              border: 1px solid var(--glass-border-interactive);
+              background: rgba(124, 58, 237, 0.15);
+              color: var(--color-accent-purple-glow);
+              font-size: 12px;
+              font-weight: 700;
+              cursor: pointer;
+              transition: all var(--duration-fast);
+            ">
+              <span>${getIconSvg('disc', { size: 14 })}</span>
+              <span>Merge Duplicate Albums</span>
+            </button>
+          ` : ''}
+        </div>
+        <div id="albums-viewport" style="overflow-y: auto; max-height: calc(100vh - 320px); min-height: 300px;">
+          <div style="padding: var(--space-8); text-align: center; color: var(--color-text-muted);">
+            Loading albums...
+          </div>
         </div>
       </div>
     `;
 
+    this.bindHeaderEvents();
     await this.loadAlbums();
+  }
+
+  private bindHeaderEvents(): void {
+    const mergeBtn = this.container?.querySelector('#albums-btn-merge');
+    mergeBtn?.addEventListener('click', () => {
+      if (this.albumMergeService) {
+        AlbumMergeModal.show({
+          albumMergeService: this.albumMergeService,
+          onMerged: () => {
+            void this.loadAlbums();
+          }
+        });
+      }
+    });
   }
 
   public unmount(): void {
