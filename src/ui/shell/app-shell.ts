@@ -38,6 +38,7 @@ import { ThemeManager } from '../theme/theme-manager';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
 import type { DuplicateDetectorService } from '../../services/duplicate/duplicate-detector-service';
+import type { LibraryHealthService } from '../../services/library/library-health-service';
 
 export interface AppShellDependencies {
   playbackManager: IPlaybackManager;
@@ -57,6 +58,7 @@ export interface AppShellDependencies {
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   dbAdapter?: IDatabaseAdapter | undefined;
   duplicateDetectorService?: DuplicateDetectorService | undefined;
+  healthService?: LibraryHealthService | undefined;
   eventBus: EventBus;
 }
 
@@ -157,6 +159,7 @@ export class AppShell {
           scannerService: deps.scannerService,
           fsAdapter: deps.fsAdapter,
           duplicateDetectorService: deps.duplicateDetectorService,
+          healthService: deps.healthService,
           eventBus: deps.eventBus
         })
       ],
