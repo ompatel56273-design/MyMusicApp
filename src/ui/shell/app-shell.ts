@@ -38,6 +38,7 @@ import { ThemeManager } from '../theme/theme-manager';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
 import type { LibraryAnalyticsService } from '../../services/analytics/library-analytics-service';
+import type { AlbumMergeService } from '../../services/library/album-merge-service';
 
 export interface AppShellDependencies {
   playbackManager: IPlaybackManager;
@@ -54,6 +55,7 @@ export interface AppShellDependencies {
   scannerService?: IScannerService | undefined;
   statsService?: StatsService | undefined;
   libraryAnalyticsService?: LibraryAnalyticsService | undefined;
+  albumMergeService?: AlbumMergeService | undefined;
   sleepTimerService?: SleepTimerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   dbAdapter?: IDatabaseAdapter | undefined;
@@ -152,6 +154,7 @@ export class AppShell {
         'library',
         new LibraryView({
           libraryService: deps.libraryService,
+          albumMergeService: deps.albumMergeService,
           playbackManager: deps.playbackManager,
           artworkService: deps.artworkService,
           scannerService: deps.scannerService,
