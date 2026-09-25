@@ -7,12 +7,15 @@ export interface DiscoveredFileEntry {
   readonly parentPath: string;
 }
 
+import type { MissingFileStatus } from '../../domain/entities/cleanup-types';
+
 export interface IFilesystemAdapter {
   isAvailable(): boolean;
   normalizePath(rawPath: string): string;
   isAudioFile(filename: string): boolean;
   getAudioExtension(filename: string): string | null;
   readFile(path: string): Promise<Uint8Array>;
+  verifyFileAccessibility(path: string): Promise<MissingFileStatus>;
   traverseDirectory(
     rootPath: string,
     onFile: (entry: DiscoveredFileEntry) => void | Promise<void>,
@@ -143,6 +146,15 @@ export class VirtualFilesystemAdapter extends BaseFilesystemAdapter implements I
     const normalized = this.normalizePath(path);
     this.buffers.delete(normalized);
     return this.files.delete(normalized);
+  }
+
+  public async verifyFileAccessibility(path: string): Promise<MissingFileStatus> {
+    const normalized = this.normalizePath(path);
+    if (!normalized) return 'unsupported';
+    if (this.files.has(normalized) || this.buffers.has(normalized)) {
+      return 'available';
+    }
+    return 'missing';
   }
 
   public clear(): void {

@@ -283,3 +283,21 @@ export interface IAudioEngine {
   setCrossfade?(enabled: boolean, durationSec?: number): void;
   readonly isCrossfading?: boolean;
 }
+
+import type {
+  MissingFileScanSummary,
+  MissingFileScanProgress,
+  CleanupResult
+} from '../../domain/entities/cleanup-types';
+
+/**
+ * Missing-File Scanner Service Contract.
+ * Verifies local library file availability and manages safe record cleanup.
+ */
+export interface IMissingFileScannerService {
+  scanMissingFiles(options?: {
+    onProgress?: (progress: MissingFileScanProgress) => void;
+    signal?: AbortSignal;
+  }): Promise<MissingFileScanSummary>;
+  cleanupMissingTracks(trackIds: readonly EntityId[]): Promise<CleanupResult>;
+}

@@ -1,4 +1,5 @@
 import { BaseFilesystemAdapter, type IFilesystemAdapter, type DiscoveredFileEntry } from './filesystem-adapter';
+import type { MissingFileStatus } from '../../domain/entities/cleanup-types';
 import { ScannerError } from '../../core/errors/app-error';
 import { Logger } from '../../core/logging/logger';
 
@@ -33,6 +34,70 @@ export class BrowserFilesystemAdapter extends BaseFilesystemAdapter implements I
   public getRegisteredFile(path: string): File | undefined {
     const normalized = this.normalizePath(path);
     return this.fileMap.get(normalized);
+  }
+
+  public async verifyFileAccessibility(path: string): Promise<MissingFileStatus> {
+    const normalized = this.normalizePath(path);
+    if (!normalized) return 'unsupported';
+
+    // 1. Check if directly registered in fileMap
+    if (this.fileMap.has(normalized)) {
+      return 'available';
+    }
+
+    // 2. Find matching root handle
+    let matchedRoot = '';
+    let relativePath = '';
+    for (const [root] of this.rootHandles) {
+      if (normalized === root || normalized.startsWith(root + '/')) {
+        if (root.length > matchedRoot.length) {
+          matchedRoot = root;
+          relativePath = normalized.substring(root.length).replace(/^\/+/, '');
+        }
+      }
+    }
+
+    const rootHandle = this.rootHandles.get(matchedRoot);
+    if (!rootHandle) {
+      if (this.rootHandles.size === 0) {
+        return 'unverifiable';
+      }
+      return 'unverifiable';
+    }
+
+    try {
+      const segments = relativePath.split('/');
+      let currentDir = rootHandle;
+      for (let i = 0; i < segments.length - 1; i++) {
+        const seg = segments[i]!;
+        currentDir = await currentDir.getDirectoryHandle(seg);
+      }
+
+      const fileName = segments[segments.length - 1]!;
+      const fileHandle = await currentDir.getFileHandle(fileName);
+      await fileHandle.getFile();
+      return 'available';
+    } catch (err: unknown) {
+      const e = err as Error;
+      const errorName = e?.name || '';
+      const errorMsg = (e?.message || '').toLowerCase();
+
+      if (errorName === 'NotFoundError' || errorMsg.includes('not found') || errorMsg.includes('could not be found')) {
+        return 'missing';
+      }
+
+      if (
+        errorName === 'NotAllowedError' ||
+        errorName === 'SecurityError' ||
+        errorName === 'PermissionDeniedError' ||
+        errorMsg.includes('permission') ||
+        errorMsg.includes('denied')
+      ) {
+        return 'unverifiable';
+      }
+
+      return 'unverifiable';
+    }
   }
 
   public async readFile(path: string): Promise<Uint8Array> {

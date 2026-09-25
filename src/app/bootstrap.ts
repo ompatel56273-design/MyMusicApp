@@ -45,6 +45,7 @@ import { GalaxyService } from '../services/galaxy/galaxy-service';
 import { DashboardService } from '../services/dashboard/dashboard-service';
 import { StatsService } from '../services/stats/stats-service';
 import { SleepTimerService } from '../services/playback/sleep-timer-service';
+import { MissingFileScannerService } from '../services/cleanup/missing-file-scanner-service';
 import { FileAccessCapabilityService } from '../services/scanner/file-access-capability';
 import { LocalMusicOnboardingModal } from '../ui/components/onboarding/local-music-onboarding-modal';
 
@@ -218,6 +219,15 @@ export class AppBootstrap {
       eventBus: this.eventBus,
       logger: this.logger
     });
+    const cleanupService = new MissingFileScannerService({
+      trackRepo,
+      audioFileRepo,
+      filesystem: fsAdapter,
+      eventBus: this.eventBus,
+      albumRepo,
+      artistRepo,
+      historyRepo
+    });
 
     // 4.1 Apply Audio Settings to Engine & PlaybackManager
     try {
@@ -269,6 +279,7 @@ export class AppBootstrap {
       galaxyService,
       dashboardService,
       scannerService,
+      cleanupService,
       statsService,
       sleepTimerService,
       fsAdapter,

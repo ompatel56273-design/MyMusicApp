@@ -1,12 +1,19 @@
 import type { IView } from './view-interface';
 import type { RouteParams, LibraryTab } from '../navigation/route-types';
-import type { ILibraryService, IPlaybackManager, IArtworkService, IScannerService } from '../../services/contracts/service-contracts';
+import type {
+  ILibraryService,
+  IPlaybackManager,
+  IArtworkService,
+  IScannerService,
+  IMissingFileScannerService
+} from '../../services/contracts/service-contracts';
 import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-filesystem-adapter';
 import type { EventBus } from '../../core/events/event-bus';
 import { DomainEvents } from '../../domain/events/domain-events';
 import type { Disposable } from '../../core/types/common';
 import { LibraryToolbar, type LibraryToolbarState } from '../components/library/library-toolbar';
 import { TrackInspectorComponent } from '../components/library/track-inspector-component';
+import { MissingFileCleanupModalComponent } from '../components/library/missing-file-cleanup-modal';
 import { SongsTabView } from './library/songs-tab-view';
 import { AlbumsTabView } from './library/albums-tab-view';
 import { ArtistsTabView } from './library/artists-tab-view';
@@ -20,6 +27,7 @@ export interface LibraryViewDependencies {
   playbackManager?: IPlaybackManager | undefined;
   artworkService?: IArtworkService | undefined;
   scannerService?: IScannerService | undefined;
+  cleanupService?: IMissingFileScannerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   eventBus?: EventBus | undefined;
 }
@@ -42,6 +50,7 @@ export class LibraryView implements IView {
   private readonly playbackManager?: IPlaybackManager | undefined;
   private readonly artworkService?: IArtworkService | undefined;
   private readonly scannerService?: IScannerService | undefined;
+  private readonly cleanupService?: IMissingFileScannerService | undefined;
   private readonly fsAdapter?: BrowserFilesystemAdapter | undefined;
   private readonly eventBus?: EventBus | undefined;
   private libraryUpdateSub: Disposable | null = null;
@@ -63,6 +72,7 @@ export class LibraryView implements IView {
       this.playbackManager = depsOrService.playbackManager;
       this.artworkService = depsOrService.artworkService;
       this.scannerService = depsOrService.scannerService;
+      this.cleanupService = depsOrService.cleanupService;
       this.fsAdapter = depsOrService.fsAdapter;
       this.eventBus = depsOrService.eventBus;
     } else {
@@ -361,8 +371,12 @@ export class LibraryView implements IView {
             </p>
           </div>
 
-          <!-- Quick Actions Button (Add Music / Scan) -->
-          <div class="library-header-metrics" style="display: flex; align-items: center; gap: var(--space-3); z-index: 1;">
+          <!-- Quick Actions Button (Add Music / Scan & Cleanup) -->
+          <div class="library-header-metrics" style="display: flex; align-items: center; gap: var(--space-3); z-index: 1; flex-wrap: wrap;">
+            <button id="library-cleanup-quick-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); cursor: pointer; border: 1px solid var(--glass-border-interactive); background: var(--glass-bg-subtle); color: #ffffff; transition: all var(--duration-fast) var(--ease-smooth);">
+              <span>${getIconSvg('trash', { size: 16, color: '#f87171' })}</span>
+              <span>Verify & Clean</span>
+            </button>
             <button id="library-scan-quick-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; border: none; background: linear-gradient(135deg, var(--color-accent-purple) 0%, #9333ea 100%); color: #ffffff; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.5); transition: all var(--duration-fast) var(--ease-smooth);">
               <span>${getIconSvg('plus', { size: 16, color: '#ffffff' })}</span>
               <span>Add Music / Scan</span>
@@ -481,6 +495,23 @@ export class LibraryView implements IView {
 
   private bindHeaderEvents(): void {
     if (!this.container) return;
+
+    const cleanupBtn = this.container.querySelector<HTMLButtonElement>('#library-cleanup-quick-btn');
+    cleanupBtn?.addEventListener('click', () => {
+      if (!this.cleanupService) return;
+      const modal = new MissingFileCleanupModalComponent({
+        cleanupService: this.cleanupService,
+        onClose: () => {
+          // Modal unmounts itself
+        },
+        onCompleted: async () => {
+          await this.updateStats();
+          this.mountActiveTab();
+        }
+      });
+      modal.mount(document.body);
+    });
+
     const scanBtn = this.container.querySelector<HTMLButtonElement>('#library-scan-quick-btn');
     scanBtn?.addEventListener('click', async () => {
       console.log('[FolderPicker] selection started');

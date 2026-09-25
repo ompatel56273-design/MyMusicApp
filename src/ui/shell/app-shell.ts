@@ -28,7 +28,8 @@ import type {
   IVisualizerService,
   IGalaxyService,
   IDashboardService,
-  IScannerService
+  IScannerService,
+  IMissingFileScannerService
 } from '../../services/contracts/service-contracts';
 import { EventBus } from '../../core/events/event-bus';
 import type { Disposable } from '../../core/types/common';
@@ -50,6 +51,7 @@ export interface AppShellDependencies {
   galaxyService?: IGalaxyService | undefined;
   dashboardService?: IDashboardService | undefined;
   scannerService?: IScannerService | undefined;
+  cleanupService?: IMissingFileScannerService | undefined;
   statsService?: StatsService | undefined;
   sleepTimerService?: SleepTimerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
@@ -152,6 +154,7 @@ export class AppShell {
           playbackManager: deps.playbackManager,
           artworkService: deps.artworkService,
           scannerService: deps.scannerService,
+          cleanupService: deps.cleanupService,
           fsAdapter: deps.fsAdapter,
           eventBus: deps.eventBus
         })
