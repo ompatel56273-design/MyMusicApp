@@ -14,6 +14,7 @@ import type { Disposable } from '../../core/types/common';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 import type { DashboardSectionId } from '../../domain/entities/dashboard-settings';
 import { SUPPORTED_DASHBOARD_SECTIONS } from '../../domain/entities/dashboard-settings';
+import { DomainEvents } from '../../domain/events/domain-events';
 
 export interface HomeViewDependencies {
   playbackManager?: IPlaybackManager | undefined;
@@ -1683,6 +1684,12 @@ export class HomeView implements IView {
 
     this.subscriptions.push(
       this.eventBus.subscribe('library:scanned', () => {
+        void this.loadData();
+      })
+    );
+
+    this.subscriptions.push(
+      this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, () => {
         void this.loadData();
       })
     );

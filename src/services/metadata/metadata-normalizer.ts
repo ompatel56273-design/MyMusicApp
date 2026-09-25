@@ -9,6 +9,7 @@ export interface NormalizedArtistEntry {
 export interface NormalizedMetadataResult {
   readonly title: string;
   readonly primaryArtist: string;
+  readonly hasRealArtist: boolean;
   readonly allArtists: readonly NormalizedArtistEntry[];
   readonly albumTitle?: string | undefined;
   readonly albumArtist?: string | undefined;
@@ -27,7 +28,39 @@ export class MetadataNormalizer {
   private static readonly ARTIST_DELIMITERS = /\s+(?:feat\.|ft\.|featuring|with|vs\.)\s+|[;/&]\s*/i;
 
   public static normalize(raw: ExtractedMetadata, fallbackFilename?: string): NormalizedMetadataResult {
-    // 1. Normalize Title (Precedence: embedded title -> filename title -> "Unknown Track")
+    let extractedArtist: string | undefined;
+    let extractedAlbum: string | undefined;
+    let extractedTrackNumber: number | undefined;
+
+    // Check filename for fallback metadata if embedded tags are incomplete
+    if (fallbackFilename) {
+      const lastDot = fallbackFilename.lastIndexOf('.');
+      const base = lastDot > 0 ? fallbackFilename.substring(0, lastDot).trim() : fallbackFilename.trim();
+      const parts = base.split(/\s*-\s*/);
+
+      if (parts.length === 2) {
+        const p0 = parts[0]!.trim();
+        const numMatch = p0.match(/^(\d+)[\.\s]*$/);
+        if (numMatch && numMatch[1]) {
+          extractedTrackNumber = parseInt(numMatch[1], 10);
+        } else if (p0.length > 0) {
+          extractedArtist = p0;
+        }
+      } else if (parts.length >= 3) {
+        const p0 = parts[0]!.trim();
+        const p1 = parts[1]!.trim();
+        const numMatch = p0.match(/^(\d+)[\.\s]*$/);
+        if (numMatch && numMatch[1]) {
+          extractedTrackNumber = parseInt(numMatch[1], 10);
+          if (p1.length > 0) extractedArtist = p1;
+        } else {
+          if (p0.length > 0) extractedArtist = p0;
+          if (p1.length > 0) extractedAlbum = p1;
+        }
+      }
+    }
+
+    // 1. Normalize Title (Precedence: embedded title -> filename -> "Unknown Track")
     let title = (raw.title || '').trim();
     if (!title && fallbackFilename) {
       const lastDot = fallbackFilename.lastIndexOf('.');
@@ -40,6 +73,8 @@ export class MetadataNormalizer {
     // 2. Multi-Artist Extraction
     const artistList: NormalizedArtistEntry[] = [];
     const rawArtist = (raw.artist || '').trim();
+    const effectiveArtist = rawArtist || extractedArtist || '';
+    const hasRealArtist = !!effectiveArtist && effectiveArtist.toLowerCase() !== 'unknown artist';
 
     if (raw.artists && raw.artists.length > 0) {
       for (const a of raw.artists) {
@@ -51,32 +86,31 @@ export class MetadataNormalizer {
           });
         }
       }
-    } else if (rawArtist) {
-      // Split on delimiters
-      const tokens = rawArtist.split(this.ARTIST_DELIMITERS).map(s => s.trim()).filter(Boolean);
+    } else if (effectiveArtist) {
+      const tokens = effectiveArtist.split(this.ARTIST_DELIMITERS).map(s => s.trim()).filter(Boolean);
       if (tokens.length > 0) {
-        artistList.push({ name: tokens[0], role: 'primary' });
+        artistList.push({ name: tokens[0]!, role: 'primary' });
         for (let i = 1; i < tokens.length; i++) {
-          if (!artistList.some(item => item.name.toLowerCase() === tokens[i].toLowerCase())) {
-            artistList.push({ name: tokens[i], role: 'featured' });
+          if (!artistList.some(item => item.name.toLowerCase() === tokens[i]!.toLowerCase())) {
+            artistList.push({ name: tokens[i]!, role: 'featured' });
           }
         }
       } else {
-        artistList.push({ name: rawArtist, role: 'primary' });
+        artistList.push({ name: effectiveArtist, role: 'primary' });
       }
     }
 
-    const primaryArtist = artistList.length > 0 ? artistList[0].name : (rawArtist || 'Unknown Artist');
+    const primaryArtist = artistList.length > 0 ? artistList[0]!.name : (effectiveArtist || 'Unknown Artist');
 
     // 3. Album & Album Artist
-    const albumTitle = (raw.album || '').trim() || undefined;
+    const albumTitle = (raw.album || '').trim() || extractedAlbum || undefined;
     const albumArtist = (raw.albumArtist || '').trim() || (raw.isCompilation ? 'Various Artists' : undefined);
 
     // 4. Genre
     const genreName = (raw.genre || '').trim() || undefined;
 
     // 5. Track & Disc Numbers
-    const trackNumber = raw.trackNumber && raw.trackNumber > 0 ? raw.trackNumber : undefined;
+    const trackNumber = (raw.trackNumber && raw.trackNumber > 0) ? raw.trackNumber : extractedTrackNumber;
     const discNumber = raw.discNumber && raw.discNumber > 0 ? raw.discNumber : undefined;
 
     // 6. Year
@@ -93,6 +127,7 @@ export class MetadataNormalizer {
     return {
       title,
       primaryArtist,
+      hasRealArtist,
       allArtists: artistList.length > 0 ? artistList : [{ name: primaryArtist, role: 'primary' }],
       albumTitle,
       albumArtist,

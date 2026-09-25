@@ -75,39 +75,58 @@ export class MetadataService {
         }
       }
 
-      // 2. Resolve / Create Artist
+      // 2. Resolve / Create Artist (Never create 'Unknown Artist' entities)
       let artistId = track.artistId;
-      if (normalized.primaryArtist && normalized.primaryArtist !== 'Unknown Artist') {
-        let artist = await this.artistRepo.getByName(normalized.primaryArtist);
+      const cleanArtist = normalized.primaryArtist?.trim();
+      const hasValidArtist = normalized.hasRealArtist && cleanArtist && cleanArtist.toLowerCase() !== 'unknown artist';
+
+      if (hasValidArtist) {
+        let artist = await this.artistRepo.getByName(cleanArtist);
+        if (!artist) {
+          const allArtists = await this.artistRepo.list({ limit: 2000 });
+          artist = allArtists.items.find(a => a.name.trim().toLowerCase() === cleanArtist.toLowerCase()) || null;
+        }
         if (!artist) {
           artistId = `artist_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
           const newArtist: Artist = {
             id: artistId,
-            name: normalized.primaryArtist,
+            name: cleanArtist,
             trackCount: 1,
             albumCount: normalized.albumTitle ? 1 : 0
           };
           await this.artistRepo.save(newArtist);
         } else {
           artistId = artist.id;
+          if (track.artistId !== artist.id) {
+            await this.artistRepo.save({
+              ...artist,
+              trackCount: (artist.trackCount || 0) + 1,
+              albumCount: normalized.albumTitle ? Math.max(artist.albumCount, 1) : artist.albumCount
+            });
+          }
         }
       }
 
-      // 3. Resolve / Create Album
+      // 3. Resolve / Create Album (Case-insensitive deduplication)
       let albumId = track.albumId;
-      if (normalized.albumTitle) {
+      const cleanAlbum = normalized.albumTitle?.trim();
+      const hasValidAlbum = cleanAlbum && cleanAlbum.toLowerCase() !== 'unknown album';
+
+      if (hasValidAlbum) {
         let album: Album | null = null;
-        if (artistId) {
-          const albums = await this.albumRepo.list(undefined, artistId);
-          album = albums.items.find(a => a.title.toLowerCase() === normalized.albumTitle!.toLowerCase()) || null;
-        }
+        const allAlbums = await this.albumRepo.list({ limit: 2000 }, artistId);
+        album = allAlbums.items.find(
+          a => a.title.trim().toLowerCase() === cleanAlbum.toLowerCase() &&
+               (!artistId || !a.artistId || a.artistId === artistId)
+        ) || null;
+
         if (!album) {
           albumId = `album_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
           const newAlbum: Album = {
             id: albumId,
-            title: normalized.albumTitle,
+            title: cleanAlbum,
             artistId,
-            artistName: normalized.primaryArtist,
+            artistName: hasValidArtist ? cleanArtist : track.artistName,
             year: normalized.year,
             trackCount: 1,
             durationMs: normalized.durationMs,
@@ -118,23 +137,43 @@ export class MetadataService {
           await this.albumRepo.save(newAlbum);
         } else {
           albumId = album.id;
+          if (track.albumId !== album.id) {
+            await this.albumRepo.save({
+              ...album,
+              trackCount: (album.trackCount || 0) + 1,
+              durationMs: (album.durationMs || 0) + (normalized.durationMs || 0)
+            });
+          }
         }
       }
 
-      // 4. Resolve / Create Genre
+      // 4. Resolve / Create Genre (Case-insensitive deduplication)
       let genreId = track.genreId;
-      if (normalized.genreName) {
-        let genre = await this.genreRepo.getByName(normalized.genreName);
+      const cleanGenre = normalized.genreName?.trim();
+      const hasValidGenre = cleanGenre && cleanGenre.toLowerCase() !== 'unknown genre';
+
+      if (hasValidGenre) {
+        let genre = await this.genreRepo.getByName(cleanGenre);
+        if (!genre) {
+          const allGenres = await this.genreRepo.list({ limit: 500 });
+          genre = allGenres.items.find(g => g.name.trim().toLowerCase() === cleanGenre.toLowerCase()) || null;
+        }
         if (!genre) {
           genreId = `genre_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
           const newGenre: Genre = {
             id: genreId,
-            name: normalized.genreName,
+            name: cleanGenre,
             trackCount: 1
           };
           await this.genreRepo.save(newGenre);
         } else {
           genreId = genre.id;
+          if (track.genreId !== genre.id) {
+            await this.genreRepo.save({
+              ...genre,
+              trackCount: (genre.trackCount || 0) + 1
+            });
+          }
         }
       }
 
@@ -143,11 +182,11 @@ export class MetadataService {
         ...track,
         title: normalized.title,
         artistId,
-        artistName: normalized.primaryArtist,
+        artistName: hasValidArtist ? cleanArtist : (track.artistName && track.artistName !== 'Unknown Artist' ? track.artistName : undefined),
         albumId,
-        albumTitle: normalized.albumTitle,
+        albumTitle: hasValidAlbum ? cleanAlbum : (track.albumTitle && track.albumTitle !== 'Unknown Album' ? track.albumTitle : undefined),
         genreId,
-        genreName: normalized.genreName,
+        genreName: hasValidGenre ? cleanGenre : track.genreName,
         artworkId,
         trackNumber: normalized.trackNumber ?? track.trackNumber,
         discNumber: normalized.discNumber ?? track.discNumber,
@@ -160,7 +199,8 @@ export class MetadataService {
           sampleRate: rawMetadata.sampleRate ?? track.format.sampleRate,
           bitDepth: rawMetadata.bitDepth ?? track.format.bitDepth,
           channels: rawMetadata.channels ?? track.format.channels,
-          isLossless: rawMetadata.isLossless
+          isLossless: rawMetadata.isLossless,
+          bitrate: rawMetadata.bitrate ?? track.format.bitrate
         },
         replayGain: rawMetadata.replayGain ?? track.replayGain,
         dateModified: Date.now()

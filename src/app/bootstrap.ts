@@ -45,6 +45,7 @@ import { GalaxyService } from '../services/galaxy/galaxy-service';
 import { DashboardService } from '../services/dashboard/dashboard-service';
 import { StatsService } from '../services/stats/stats-service';
 import { SleepTimerService } from '../services/playback/sleep-timer-service';
+import { DuplicateDetectorService } from '../services/duplicate/duplicate-detector-service';
 import { FileAccessCapabilityService } from '../services/scanner/file-access-capability';
 import { LocalMusicOnboardingModal } from '../ui/components/onboarding/local-music-onboarding-modal';
 
@@ -218,6 +219,10 @@ export class AppBootstrap {
       eventBus: this.eventBus,
       logger: this.logger
     });
+    const duplicateDetectorService = new DuplicateDetectorService({
+      trackRepo,
+      eventBus: this.eventBus
+    });
 
     // 4.1 Apply Audio Settings to Engine & PlaybackManager
     try {
@@ -273,7 +278,8 @@ export class AppBootstrap {
       sleepTimerService,
       fsAdapter,
       dbAdapter: adapter,
-      eventBus: this.eventBus
+      eventBus: this.eventBus,
+      duplicateDetectorService
     });
     this.appShell.mount(root);
 

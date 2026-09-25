@@ -153,28 +153,51 @@ export class GalaxyLayoutEngine {
     for (const [albumId, trackList] of albumToTracks.entries()) {
       const parentAlbum = albums.find(al => al.id === albumId);
       const center = parentAlbum ? { x: parentAlbum.x, y: parentAlbum.y } : defaultCenter;
-      const tCount = trackList.length || 1;
-      const trackOrbit = 50;
 
-      trackList.forEach((track, tIdx) => {
-        const angle = (tIdx / tCount) * Math.PI * 2;
-        track.x = center.x + Math.cos(angle) * trackOrbit;
-        track.y = center.y + Math.sin(angle) * trackOrbit;
-        track.radius = track.radius || GalaxyLayoutEngine.RADIUS_MAP.track;
-        track.color = track.color || GalaxyLayoutEngine.COLOR_MAP.track;
+      let trackOrbit = 65;
+      let tIdx = 0;
+      while (tIdx < trackList.length) {
+        const circumference = 2 * Math.PI * trackOrbit;
+        const maxOnRing = Math.max(5, Math.floor(circumference / 50));
+        const countOnThisRing = Math.min(maxOnRing, trackList.length - tIdx);
+        const angleOffset = (trackOrbit * 0.05);
 
-        const uIdx = unparentedTracks.indexOf(track);
-        if (uIdx !== -1) unparentedTracks.splice(uIdx, 1);
-      });
+        for (let i = 0; i < countOnThisRing; i++) {
+          const track = trackList[tIdx++];
+          if (!track) break;
+          const angle = (i / countOnThisRing) * Math.PI * 2 + angleOffset;
+          track.x = center.x + Math.cos(angle) * trackOrbit;
+          track.y = center.y + Math.sin(angle) * trackOrbit;
+          track.radius = track.radius || GalaxyLayoutEngine.RADIUS_MAP.track;
+          track.color = track.color || GalaxyLayoutEngine.COLOR_MAP.track;
+
+          const uIdx = unparentedTracks.indexOf(track);
+          if (uIdx !== -1) unparentedTracks.splice(uIdx, 1);
+        }
+        trackOrbit += 55;
+      }
     }
 
-    unparentedTracks.forEach((track, idx) => {
-      const angle = (idx / (unparentedTracks.length || 1)) * Math.PI * 2;
-      track.x = originX + Math.cos(angle) * 200;
-      track.y = originY + Math.sin(angle) * 200;
-      track.radius = track.radius || GalaxyLayoutEngine.RADIUS_MAP.track;
-      track.color = track.color || GalaxyLayoutEngine.COLOR_MAP.track;
-    });
+    // Distribute unparented tracks across concentric orbital shells around origin
+    let unparentedRadius = 220;
+    let upIdx = 0;
+    while (upIdx < unparentedTracks.length) {
+      const circumference = 2 * Math.PI * unparentedRadius;
+      const maxOnRing = Math.max(8, Math.floor(circumference / 85));
+      const countOnThisRing = Math.min(maxOnRing, unparentedTracks.length - upIdx);
+      const angleOffset = (unparentedRadius * 0.04);
+
+      for (let i = 0; i < countOnThisRing; i++) {
+        const track = unparentedTracks[upIdx++];
+        if (!track) break;
+        const angle = (i / countOnThisRing) * Math.PI * 2 + angleOffset;
+        track.x = originX + Math.cos(angle) * unparentedRadius;
+        track.y = originY + Math.sin(angle) * unparentedRadius;
+        track.radius = track.radius || GalaxyLayoutEngine.RADIUS_MAP.track;
+        track.color = track.color || GalaxyLayoutEngine.COLOR_MAP.track;
+      }
+      unparentedRadius += 95;
+    }
 
     // 5. Outer Orbits for Playlists & Folders
     playlists.forEach((pl, idx) => {
@@ -223,7 +246,7 @@ export class GalaxyLayoutEngine {
           const dx = n2.x - n1.x;
           const dy = n2.y - n1.y;
           const distSq = dx * dx + dy * dy || 1;
-          const minDist = n1.radius + n2.radius + 15;
+          const minDist = n1.radius + n2.radius + 30;
 
           if (distSq < minDist * minDist) {
             const dist = Math.sqrt(distSq);

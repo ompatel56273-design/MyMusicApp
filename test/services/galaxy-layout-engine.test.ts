@@ -50,4 +50,41 @@ describe('GalaxyLayoutEngine', () => {
     expect(Number.isFinite(result[0]!.x)).toBe(true);
     expect(Number.isFinite(result[1]!.x)).toBe(true);
   });
+
+  it('distributes 83+ tracks across multi-layer orbital shells preventing overlapping collisions', () => {
+    const trackNodes: GalaxyNode[] = [];
+    for (let i = 0; i < 83; i++) {
+      trackNodes.push({
+        id: `track:${i}`,
+        type: 'track',
+        entityId: `t${i}`,
+        label: `Song ${i} - Artist`,
+        x: 0,
+        y: 0,
+        radius: 8,
+        color: '#10b981',
+        lodMin: 3,
+        lodMax: 4,
+        metadata: {}
+      });
+    }
+
+    const result = layoutEngine.computeLayout(trackNodes, []);
+    expect(result.length).toBe(83);
+
+    // Verify nodes are distributed across multiple concentric orbital radii rather than all at r=200
+    const radii = result.map(n => Math.round(Math.sqrt(n.x * n.x + n.y * n.y)));
+    const uniqueRadiiBands = new Set(radii.map(r => Math.round(r / 50) * 50));
+    expect(uniqueRadiiBands.size).toBeGreaterThanOrEqual(3);
+
+    // Verify minimum distance between any pair of nodes prevents heavy overlapping
+    for (let i = 0; i < result.length; i++) {
+      for (let j = i + 1; j < result.length; j++) {
+        const dx = result[i]!.x - result[j]!.x;
+        const dy = result[i]!.y - result[j]!.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        expect(dist).toBeGreaterThan(10); // Center-to-center distance must exceed individual node radius
+      }
+    }
+  });
 });

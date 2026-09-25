@@ -28,7 +28,8 @@ import type {
   IVisualizerService,
   IGalaxyService,
   IDashboardService,
-  IScannerService
+  IScannerService,
+  IDuplicateDetectorService
 } from '../../services/contracts/service-contracts';
 import { EventBus } from '../../core/events/event-bus';
 import type { Disposable } from '../../core/types/common';
@@ -55,6 +56,7 @@ export interface AppShellDependencies {
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   dbAdapter?: IDatabaseAdapter | undefined;
   eventBus: EventBus;
+  duplicateDetectorService?: IDuplicateDetectorService | undefined;
 }
 
 /**
@@ -91,7 +93,7 @@ export class AppShell {
     this.eventBus = deps.eventBus;
     this.router = new RouterService('home');
     this.header = new HeaderComponent(this.router);
-    this.sidebar = new SidebarComponent(this.router, deps.libraryService);
+    this.sidebar = new SidebarComponent(this.router, deps.libraryService, deps.eventBus);
     this.miniPlayer = new MiniPlayerComponent({
       playbackManager: deps.playbackManager,
       artworkService: deps.artworkService,
@@ -153,7 +155,8 @@ export class AppShell {
           artworkService: deps.artworkService,
           scannerService: deps.scannerService,
           fsAdapter: deps.fsAdapter,
-          eventBus: deps.eventBus
+          eventBus: deps.eventBus,
+          duplicateDetectorService: deps.duplicateDetectorService
         })
       ],
       [

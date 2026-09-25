@@ -1,12 +1,13 @@
 import type { IView } from './view-interface';
 import type { RouteParams, LibraryTab } from '../navigation/route-types';
-import type { ILibraryService, IPlaybackManager, IArtworkService, IScannerService } from '../../services/contracts/service-contracts';
+import type { ILibraryService, IPlaybackManager, IArtworkService, IScannerService, IDuplicateDetectorService } from '../../services/contracts/service-contracts';
 import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-filesystem-adapter';
 import type { EventBus } from '../../core/events/event-bus';
 import { DomainEvents } from '../../domain/events/domain-events';
 import type { Disposable } from '../../core/types/common';
 import { LibraryToolbar, type LibraryToolbarState } from '../components/library/library-toolbar';
 import { TrackInspectorComponent } from '../components/library/track-inspector-component';
+import { DuplicateDetectionModalComponent } from '../components/library/duplicate-detection-modal';
 import { SongsTabView } from './library/songs-tab-view';
 import { AlbumsTabView } from './library/albums-tab-view';
 import { ArtistsTabView } from './library/artists-tab-view';
@@ -22,6 +23,7 @@ export interface LibraryViewDependencies {
   scannerService?: IScannerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   eventBus?: EventBus | undefined;
+  duplicateDetectorService?: IDuplicateDetectorService | undefined;
 }
 
 /**
@@ -44,6 +46,7 @@ export class LibraryView implements IView {
   private readonly scannerService?: IScannerService | undefined;
   private readonly fsAdapter?: BrowserFilesystemAdapter | undefined;
   private readonly eventBus?: EventBus | undefined;
+  private readonly duplicateDetectorService?: IDuplicateDetectorService | undefined;
   private libraryUpdateSub: Disposable | null = null;
 
   private toolbar: LibraryToolbar | null = null;
@@ -65,6 +68,7 @@ export class LibraryView implements IView {
       this.scannerService = depsOrService.scannerService;
       this.fsAdapter = depsOrService.fsAdapter;
       this.eventBus = depsOrService.eventBus;
+      this.duplicateDetectorService = depsOrService.duplicateDetectorService;
     } else {
       this.libraryService = depsOrService as ILibraryService;
     }
@@ -361,8 +365,12 @@ export class LibraryView implements IView {
             </p>
           </div>
 
-          <!-- Quick Actions Button (Add Music / Scan) -->
+          <!-- Quick Actions Button (Find Duplicates & Add Music / Scan) -->
           <div class="library-header-metrics" style="display: flex; align-items: center; gap: var(--space-3); z-index: 1;">
+            <button id="library-duplicates-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); cursor: pointer; border: 1px solid var(--glass-border-interactive); background: var(--glass-bg-interactive); color: var(--color-text-primary); transition: all var(--duration-fast) var(--ease-smooth);">
+              <span style="color: var(--color-accent-cyan); display: flex;">${getIconSvg('filter', { size: 15 })}</span>
+              <span>Find Duplicates</span>
+            </button>
             <button id="library-scan-quick-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; border: none; background: linear-gradient(135deg, var(--color-accent-purple) 0%, #9333ea 100%); color: #ffffff; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.5); transition: all var(--duration-fast) var(--ease-smooth);">
               <span>${getIconSvg('plus', { size: 16, color: '#ffffff' })}</span>
               <span>Add Music / Scan</span>
@@ -481,6 +489,20 @@ export class LibraryView implements IView {
 
   private bindHeaderEvents(): void {
     if (!this.container) return;
+
+    const dupBtn = this.container.querySelector<HTMLButtonElement>('#library-duplicates-btn');
+    dupBtn?.addEventListener('click', () => {
+      if (this.duplicateDetectorService) {
+        DuplicateDetectionModalComponent.show({
+          duplicateDetector: this.duplicateDetectorService,
+          onCompleted: async () => {
+            await this.updateStats();
+            this.mountActiveTab();
+          }
+        });
+      }
+    });
+
     const scanBtn = this.container.querySelector<HTMLButtonElement>('#library-scan-quick-btn');
     scanBtn?.addEventListener('click', async () => {
       console.log('[FolderPicker] selection started');

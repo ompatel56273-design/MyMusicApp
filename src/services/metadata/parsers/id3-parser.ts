@@ -17,10 +17,31 @@ export class ID3Parser {
   }
 
   public static parse(buffer: Uint8Array): Partial<ExtractedMetadata> {
+    let result: Partial<ExtractedMetadata> = {};
     if (this.isID3(buffer)) {
-      return this.parseID3v2(buffer);
+      result = this.parseID3v2(buffer);
+    } else {
+      result = this.parseID3v1(buffer);
     }
-    return this.parseID3v1(buffer);
+
+    const mutableResult: Record<string, any> = { ...result };
+    const mpegInfo = this.parseMpegAudioInfo(buffer);
+    if (mpegInfo) {
+      if ((!mutableResult.durationMs || mutableResult.durationMs <= 0) && mpegInfo.durationMs) {
+        mutableResult.durationMs = mpegInfo.durationMs;
+      }
+      if (!mutableResult.sampleRate && mpegInfo.sampleRate) {
+        mutableResult.sampleRate = mpegInfo.sampleRate;
+      }
+      if (!mutableResult.channels && mpegInfo.channels) {
+        mutableResult.channels = mpegInfo.channels;
+      }
+      if (mpegInfo.bitrate) {
+        mutableResult.bitrate = mpegInfo.bitrate;
+      }
+    }
+
+    return mutableResult as Partial<ExtractedMetadata>;
   }
 
   private static parseID3v2(buffer: Uint8Array): Partial<ExtractedMetadata> {
@@ -153,6 +174,16 @@ export class ID3Parser {
       };
     }
 
+    // Parse duration from TLEN frame
+    const tlenStr = tags['TLEN'] || tags['TLE'];
+    let durationMs: number | undefined;
+    if (tlenStr) {
+      const parsedLen = parseInt(tlenStr.trim(), 10);
+      if (!isNaN(parsedLen) && parsedLen > 0) {
+        durationMs = parsedLen;
+      }
+    }
+
     return {
       title,
       artist,
@@ -164,6 +195,7 @@ export class ID3Parser {
       discNumber,
       totalDiscs,
       year,
+      durationMs,
       composer,
       isCompilation,
       artwork,
@@ -306,15 +338,208 @@ export class ID3Parser {
     };
   }
 
+  private static readonly STANDARD_GENRES = [
+    'Blues', 'Classic Rock', 'Country', 'Dance', 'Disco', 'Funk', 'Grunge', 'Hip-Hop',
+    'Jazz', 'Metal', 'New Age', 'Oldies', 'Other', 'Pop', 'R&B', 'Rap', 'Reggae', 'Rock',
+    'Techno', 'Industrial', 'Alternative', 'Ska', 'Death Metal', 'Pranks', 'Soundtrack',
+    'Euro-Techno', 'Ambient', 'Trip-Hop', 'Vocal', 'Jazz+Funk', 'Fusion', 'Trance',
+    'Classical', 'Instrumental', 'Acid', 'House', 'Game', 'Sound Clip', 'Gospel', 'Noise',
+    'Alternative Rock', 'Bass', 'Soul', 'Punk', 'Space', 'Meditative', 'Instrumental Pop',
+    'Instrumental Rock', 'Ethnic', 'Gothic', 'Darkwave', 'Techno-Industrial', 'Electronic',
+    'Pop-Folk', 'Eurodance', 'Dream', 'Southern Rock', 'Comedy', 'Cult', 'Gangsta',
+    'Top 40', 'Christian Rap', 'Pop/Funk', 'Jungle', 'Native US', 'Cabaret', 'New Wave',
+    'Psychadelic', 'Rave', 'Showtunes', 'Trailer', 'Lo-Fi', 'Tribal', 'Acid Punk',
+    'Acid Jazz', 'Polka', 'Retro', 'Musical', 'Rock & Roll', 'Hard Rock', 'Folk',
+    'Folk-Rock', 'National Folk', 'Swing', 'Fast Fusion', 'Bebob', 'Latin', 'Revival',
+    'Celtic', 'Bluegrass', 'Avantgarde', 'Gothic Rock', 'Progressive Rock',
+    'Psychedelic Rock', 'Symphonic Rock', 'Slow Rock', 'Big Band', 'Chorus',
+    'Easy Listening', 'Acoustic', 'Humour', 'Speech', 'Chanson', 'Opera',
+    'Chamber Music', 'Sonata', 'Symphony', 'Booty Bass', 'Primus', 'Porn Groove',
+    'Satire', 'Slow Jam', 'Club', 'Tango', 'Samba', 'Folklore', 'Ballad',
+    'Power Ballad', 'Rhythmic Soul', 'Freestyle', 'Duet', 'Punk Rock', 'Drum Solo',
+    'Acapella', 'Euro-House', 'Dance Hall', 'Goa', 'Drum & Bass', 'Club-House',
+    'Hardcore', 'Terror', 'Indie', 'BritPop', 'Negerpunk', 'Polsk Punk', 'Beat',
+    'Christian Gangsta Rap', 'Heavy Metal', 'Black Metal', 'Crossover',
+    'Contemporary Christian', 'Christian Rock', 'Merengue', 'Salsa', 'Thrash Metal',
+    'Anime', 'JPop', 'Synthpop'
+  ];
+
   private static cleanGenre(genre?: string): string | undefined {
     if (!genre) return undefined;
-    // Replace Winamp genre numbers like (17) -> Hard Rock
-    const match = genre.match(/^\((\d+)\)$/);
-    if (match && match[1]) {
-      const idx = parseInt(match[1], 10);
-      const GENRES_LIST = ['Blues', 'Classic Rock', 'Country', 'Dance', 'Disco', 'Funk', 'Grunge', 'Hip-Hop', 'Jazz', 'Metal', 'New Age', 'Oldies', 'Other', 'Pop', 'R&B', 'Rap', 'Reggae', 'Rock'];
-      if (idx < GENRES_LIST.length) return GENRES_LIST[idx];
+    const trimmed = genre.trim();
+    if (!trimmed) return undefined;
+
+    // Check for parenthesized genre code like "(17)", "(17)Hard Rock", or "((17))"
+    const parenMatch = trimmed.match(/^\(+(\d+)\)+(.*)$/);
+    if (parenMatch && parenMatch[1]) {
+      const idx = parseInt(parenMatch[1], 10);
+      if (idx >= 0 && idx < ID3Parser.STANDARD_GENRES.length) {
+        return ID3Parser.STANDARD_GENRES[idx];
+      }
+      const remainder = parenMatch[2]?.trim();
+      if (remainder) return remainder;
     }
-    return genre.trim() || undefined;
+
+    // Check for plain numeric genre string like "17"
+    if (/^\d+$/.test(trimmed)) {
+      const idx = parseInt(trimmed, 10);
+      if (idx >= 0 && idx < ID3Parser.STANDARD_GENRES.length) {
+        return ID3Parser.STANDARD_GENRES[idx];
+      }
+    }
+
+    return trimmed;
+  }
+
+  /**
+   * Scans for the first valid MPEG Layer III audio frame to derive duration, sampleRate, bitrate, and channels.
+   */
+  public static parseMpegAudioInfo(buffer: Uint8Array): {
+    durationMs?: number;
+    sampleRate?: number;
+    bitrate?: number;
+    channels?: number;
+  } | null {
+    if (buffer.length < 4) return null;
+
+    let offset = 0;
+    if (this.isID3(buffer)) {
+      const tagSize =
+        ((buffer[6] & 0x7f) << 21) |
+        ((buffer[7] & 0x7f) << 14) |
+        ((buffer[8] & 0x7f) << 7) |
+        (buffer[9] & 0x7f);
+      offset = 10 + tagSize;
+    }
+
+    const hasId3v1 =
+      buffer.length >= 128 &&
+      buffer[buffer.length - 128] === 0x54 &&
+      buffer[buffer.length - 127] === 0x41 &&
+      buffer[buffer.length - 126] === 0x47;
+
+    const audioEnd = hasId3v1 ? buffer.length - 128 : buffer.length;
+    const maxScan = Math.min(offset + 65536, buffer.length - 4);
+    let frameOffset = -1;
+
+    for (let i = offset; i < maxScan; i++) {
+      if (buffer[i] === 0xff && (buffer[i + 1]! & 0xe0) === 0xe0) {
+        const b1 = buffer[i + 1]!;
+        const b2 = buffer[i + 2]!;
+        const versionBits = (b1 >> 3) & 0x03;
+        const layerBits = (b1 >> 1) & 0x03;
+        const bitrateIdx = (b2 >> 4) & 0x0f;
+        const srateIdx = (b2 >> 2) & 0x03;
+
+        if (versionBits !== 1 && layerBits !== 0 && bitrateIdx > 0 && bitrateIdx < 15 && srateIdx < 3) {
+          frameOffset = i;
+          break;
+        }
+      }
+    }
+
+    if (frameOffset === -1) return null;
+
+    const b1 = buffer[frameOffset + 1]!;
+    const b2 = buffer[frameOffset + 2]!;
+    const b3 = buffer[frameOffset + 3]!;
+
+    const versionBits = (b1 >> 3) & 0x03;
+    const bitrateIdx = (b2 >> 4) & 0x0f;
+    const srateIdx = (b2 >> 2) & 0x03;
+    const channelMode = (b3 >> 6) & 0x03;
+
+    const channels = channelMode === 3 ? 1 : 2;
+
+    const sampleRateTable = [
+      [11025, 12000, 8000],  // MPEG 2.5
+      [0, 0, 0],             // reserved
+      [22050, 24000, 16000], // MPEG 2
+      [44100, 48000, 32000]  // MPEG 1
+    ];
+    const sampleRate = sampleRateTable[versionBits]?.[srateIdx] || 44100;
+
+    const mpeg1Bitrates = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
+    const mpeg2Bitrates = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+
+    const isMpeg1 = versionBits === 3;
+    const bitrateKbps = isMpeg1 ? (mpeg1Bitrates[bitrateIdx] || 128) : (mpeg2Bitrates[bitrateIdx] || 64);
+    const samplesPerFrame = isMpeg1 ? 1152 : 576;
+
+    const xingOffset = isMpeg1
+      ? (channelMode === 3 ? frameOffset + 21 : frameOffset + 36)
+      : (channelMode === 3 ? frameOffset + 13 : frameOffset + 21);
+
+    let durationMs: number | undefined;
+
+    if (xingOffset + 12 <= buffer.length) {
+      const isXing =
+        buffer[xingOffset] === 0x58 &&
+        buffer[xingOffset + 1] === 0x69 &&
+        buffer[xingOffset + 2] === 0x6e &&
+        buffer[xingOffset + 3] === 0x67;
+      const isInfo =
+        buffer[xingOffset] === 0x49 &&
+        buffer[xingOffset + 1] === 0x6e &&
+        buffer[xingOffset + 2] === 0x66 &&
+        buffer[xingOffset + 3] === 0x6f;
+
+      if (isXing || isInfo) {
+        const flags =
+          (buffer[xingOffset + 4]! << 24) |
+          (buffer[xingOffset + 5]! << 16) |
+          (buffer[xingOffset + 6]! << 8) |
+          buffer[xingOffset + 7]!;
+
+        if ((flags & 0x0001) !== 0 && xingOffset + 12 <= buffer.length) {
+          const frameCount =
+            (buffer[xingOffset + 8]! << 24) |
+            (buffer[xingOffset + 9]! << 16) |
+            (buffer[xingOffset + 10]! << 8) |
+            buffer[xingOffset + 11]!;
+
+          if (frameCount > 0 && sampleRate > 0) {
+            durationMs = Math.round((frameCount * samplesPerFrame / sampleRate) * 1000);
+          }
+        }
+      }
+    }
+
+    if (!durationMs && frameOffset + 36 + 18 <= buffer.length) {
+      const vbriOffset = frameOffset + 36;
+      if (
+        buffer[vbriOffset] === 0x56 &&
+        buffer[vbriOffset + 1] === 0x42 &&
+        buffer[vbriOffset + 2] === 0x52 &&
+        buffer[vbriOffset + 3] === 0x49
+      ) {
+        const frameCount =
+          (buffer[vbriOffset + 14]! << 24) |
+          (buffer[vbriOffset + 15]! << 16) |
+          (buffer[vbriOffset + 16]! << 8) |
+          buffer[vbriOffset + 17]!;
+
+        if (frameCount > 0 && sampleRate > 0) {
+          durationMs = Math.round((frameCount * samplesPerFrame / sampleRate) * 1000);
+        }
+      }
+    }
+
+    if (!durationMs && bitrateKbps > 0) {
+      const audioBytes = Math.max(0, audioEnd - frameOffset);
+      if (audioBytes > 0) {
+        durationMs = Math.round(((audioBytes * 8) / (bitrateKbps * 1000)) * 1000);
+      }
+    }
+
+    const ret: { durationMs?: number; sampleRate?: number; bitrate?: number; channels?: number } = {
+      sampleRate,
+      bitrate: bitrateKbps,
+      channels
+    };
+    if (durationMs !== undefined) {
+      ret.durationMs = durationMs;
+    }
+    return ret;
   }
 }

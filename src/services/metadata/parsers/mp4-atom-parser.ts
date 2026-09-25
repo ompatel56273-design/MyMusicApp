@@ -78,6 +78,27 @@ export class Mp4AtomParser {
       }
     }
 
+    // 2. Extract duration from 'mvhd' atom
+    let durationMs: number | undefined;
+    const mvhdAtom = this.findAtomPath(buffer, view, 0, buffer.length, ['moov', 'mvhd']);
+    if (mvhdAtom && mvhdAtom.size >= 28) {
+      const version = view.getUint8(mvhdAtom.offset + 8);
+      let timescale = 0;
+      let duration = 0;
+      if (version === 0 && mvhdAtom.size >= 32) {
+        timescale = view.getUint32(mvhdAtom.offset + 20);
+        duration = view.getUint32(mvhdAtom.offset + 24);
+      } else if (version === 1 && mvhdAtom.size >= 44) {
+        timescale = view.getUint32(mvhdAtom.offset + 28);
+        const high = view.getUint32(mvhdAtom.offset + 32);
+        const low = view.getUint32(mvhdAtom.offset + 36);
+        duration = high * 4294967296 + low;
+      }
+      if (timescale > 0 && duration > 0) {
+        durationMs = Math.round((duration / timescale) * 1000);
+      }
+    }
+
     const title = tags['©nam'];
     const artist = tags['©ART'];
     const albumArtist = tags['aART'];
@@ -100,6 +121,7 @@ export class Mp4AtomParser {
       album,
       genre,
       year,
+      durationMs,
       trackNumber: tags['trkn']?.trackNum || undefined,
       totalTracks: tags['trkn']?.totalTracks || undefined,
       discNumber: tags['disk']?.discNum || undefined,
