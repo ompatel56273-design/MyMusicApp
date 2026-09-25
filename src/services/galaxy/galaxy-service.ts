@@ -9,7 +9,7 @@ import { DEFAULT_GALAXY_SETTINGS } from '../../domain/entities/galaxy-types';
 import type { ILibraryService, IPlaylistService, IGalaxyService } from '../contracts/service-contracts';
 import type { StatsService } from '../stats/stats-service';
 import type { IDatabaseAdapter } from '../../data/db/database-adapter';
-import type { Track, Album } from '../../domain/entities/models';
+import type { Track } from '../../domain/entities/models';
 import { STORES } from '../../data/db/schema';
 import { GalaxyLayoutEngine } from './galaxy-layout-engine';
 import { Logger } from '../../core/logging/logger';
@@ -106,21 +106,21 @@ export class GalaxyService implements IGalaxyService {
   }
 
   private async buildGraph(filter?: GalaxyFilterOptions): Promise<GalaxyGraph> {
-    // 1. Fetch real entity collections from authoritative services
+    // 1. Fetch real entity collections from authoritative services with full capacity
     const [artistsRes, albumsRes, tracksRes, genresRes, folders, playlistsRes, recentHistory] = await Promise.all([
-      this.libraryService.listArtists({ limit: 500 }),
-      this.libraryService.listAlbums({ limit: 1000 }),
-      this.libraryService.listTracks({ limit: 2500 }),
-      this.libraryService.listGenres({ limit: 100 }),
+      this.libraryService.listArtists({ limit: 100000 }),
+      this.libraryService.listAlbums({ limit: 100000 }),
+      this.libraryService.listTracks({ limit: 100000 }),
+      this.libraryService.listGenres({ limit: 100000 }),
       this.libraryService.listFolders(),
-      this.playlistService ? this.playlistService.listPlaylists({ limit: 100 }) : { items: [] },
-      this.statsService ? this.statsService.getRecentHistory(15).catch(() => []) : Promise.resolve([])
+      this.playlistService ? this.playlistService.listPlaylists({ limit: 100000 }) : { items: [] },
+      this.statsService ? this.statsService.getRecentHistory(20).catch(() => []) : Promise.resolve([])
     ]);
 
-    const artists = artistsRes.items;
-    const albums = albumsRes.items;
-    const tracks = tracksRes.items;
-    const genres = genresRes.items;
+    const artists = [...artistsRes.items];
+    const albums = [...albumsRes.items];
+    const tracks = [...tracksRes.items];
+    const genres = [...genresRes.items];
     const playlists = playlistsRes.items;
 
     // Create a map for recent history ordering
@@ -129,50 +129,136 @@ export class GalaxyService implements IGalaxyService {
       recentPlayMap.set(h.track.id, idx + 1);
     });
 
-    // Group tracks by album and artist for relational metadata
+    // 2. Discover / Synthesize missing Genre, Artist, and Album entities to prevent broken hierarchy
+    const genreMap = new Map<string, { id: string; name: string }>();
+    genres.forEach(g => {
+      if (g.name) genreMap.set(g.id, { id: g.id, name: g.name });
+    });
+
+    const artistMap = new Map<string, { id: string; name: string; genreId: string; artworkId?: string | undefined }>();
+    artists.forEach(a => {
+      artistMap.set(a.id, {
+        id: a.id,
+        name: a.name || 'Unknown Artist',
+        genreId: 'genre_general',
+        ...(a.artworkId ? { artworkId: a.artworkId } : {})
+      });
+    });
+
+    const albumMap = new Map<string, { id: string; title: string; artistId: string; artworkId?: string | undefined; year?: number | undefined }>();
+    albums.forEach(al => {
+      albumMap.set(al.id, {
+        id: al.id,
+        title: al.title || 'Unknown Album',
+        artistId: al.artistId || 'artist_unknown',
+        ...(al.artworkId ? { artworkId: al.artworkId } : {}),
+        ...(al.year !== undefined ? { year: al.year } : {})
+      });
+    });
+
+    // Default Fallback Entities
+    const DEFAULT_GENRE_ID = 'genre_unknown';
+    const DEFAULT_ARTIST_ID = 'artist_unknown';
+
+    // Inspect tracks and assign / synthesize parent relationships
     const tracksByAlbum = new Map<string, Track[]>();
     const tracksByArtist = new Map<string, Track[]>();
     const tracksByGenre = new Map<string, Track[]>();
-    const albumsByArtist = new Map<string, Album[]>();
+    const albumsByArtist = new Map<string, string[]>(); // artistId -> albumIds[]
+    const artistsByGenre = new Map<string, Set<string>>(); // genreId -> artistIds[]
 
     for (const t of tracks) {
-      if (t.albumId) {
-        const list = tracksByAlbum.get(t.albumId) || [];
-        list.push(t);
-        tracksByAlbum.set(t.albumId, list);
+      // Resolve Genre
+      let gId = t.genreId;
+      if (!gId || !genreMap.has(gId)) {
+        if (t.genreName && t.genreName.trim()) {
+          const cleanGName = t.genreName.trim();
+          gId = `genre_${cleanGName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+          if (!genreMap.has(gId)) {
+            genreMap.set(gId, { id: gId, name: cleanGName });
+          }
+        } else {
+          gId = DEFAULT_GENRE_ID;
+          if (!genreMap.has(gId)) {
+            genreMap.set(gId, { id: gId, name: 'Unknown Genre' });
+          }
+        }
       }
-      if (t.artistId) {
-        const list = tracksByArtist.get(t.artistId) || [];
-        list.push(t);
-        tracksByArtist.set(t.artistId, list);
-      }
-      if (t.genreId) {
-        const list = tracksByGenre.get(t.genreId) || [];
-        list.push(t);
-        tracksByGenre.set(t.genreId, list);
-      }
-    }
 
-    for (const al of albums) {
-      if (al.artistId) {
-        const list = albumsByArtist.get(al.artistId) || [];
-        list.push(al);
-        albumsByArtist.set(al.artistId, list);
+      // Resolve Artist
+      let aId = t.artistId;
+      if (!aId || !artistMap.has(aId)) {
+        if (t.artistName && t.artistName.trim()) {
+          const cleanAName = t.artistName.trim();
+          aId = `artist_${cleanAName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+          if (!artistMap.has(aId)) {
+            artistMap.set(aId, { id: aId, name: cleanAName, genreId: gId });
+          }
+        } else {
+          aId = DEFAULT_ARTIST_ID;
+          if (!artistMap.has(aId)) {
+            artistMap.set(aId, { id: aId, name: 'Unknown Artist', genreId: gId });
+          }
+        }
       }
+
+      // Associate Artist with Genre
+      const artistEntry = artistMap.get(aId);
+      if (artistEntry && (!artistEntry.genreId || artistEntry.genreId === DEFAULT_GENRE_ID)) {
+        artistEntry.genreId = gId;
+      }
+      const gArtists = artistsByGenre.get(gId) || new Set<string>();
+      gArtists.add(aId);
+      artistsByGenre.set(gId, gArtists);
+
+      // Resolve Album
+      let alId = t.albumId;
+      if (!alId || !albumMap.has(alId)) {
+        if (t.albumTitle && t.albumTitle.trim()) {
+          const cleanAlTitle = t.albumTitle.trim();
+          alId = `album_${cleanAlTitle.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${aId}`;
+          if (!albumMap.has(alId)) {
+            albumMap.set(alId, { id: alId, title: cleanAlTitle, artistId: aId });
+          }
+        } else {
+          alId = `album_unknown_${aId}`;
+          if (!albumMap.has(alId)) {
+            albumMap.set(alId, { id: alId, title: 'Unknown Album', artistId: aId });
+          }
+        }
+      }
+
+      // Associate Album with Artist
+      const aAlbums = albumsByArtist.get(aId) || [];
+      if (!aAlbums.includes(alId)) {
+        aAlbums.push(alId);
+        albumsByArtist.set(aId, aAlbums);
+      }
+
+      // Group tracks
+      const alTrackList = tracksByAlbum.get(alId) || [];
+      alTrackList.push(t);
+      tracksByAlbum.set(alId, alTrackList);
+
+      const aTrackList = tracksByArtist.get(aId) || [];
+      aTrackList.push(t);
+      tracksByArtist.set(aId, aTrackList);
+
+      const gTrackList = tracksByGenre.get(gId) || [];
+      gTrackList.push(t);
+      tracksByGenre.set(gId, gTrackList);
     }
 
     const nodeMap = new Map<string, GalaxyNode>();
     const edgeSet = new Set<string>();
     const edges: GalaxyEdge[] = [];
 
-    // Helper to add nodes safely without duplicates
     const addNode = (node: GalaxyNode) => {
       if (!nodeMap.has(node.id)) {
         nodeMap.set(node.id, node);
       }
     };
 
-    // Helper to add edges safely without duplicates
     const addEdge = (sourceId: string, targetId: string, type: GalaxyEdge['type'], weight = 1) => {
       const edgeId = `edge:${sourceId}-${targetId}`;
       if (!edgeSet.has(edgeId) && nodeMap.has(sourceId) && nodeMap.has(targetId)) {
@@ -188,19 +274,20 @@ export class GalaxyService implements IGalaxyService {
       }
     };
 
-    // 2. Build Genre Nodes (LOD 1 - 4) with dynamic sizing based on real volume
-    for (const g of genres) {
-      if (!g.name) continue;
-      const genreTracks = tracksByGenre.get(g.id) || [];
+    // 3. Build Genre Nodes (LOD 1 - 4)
+    for (const [gId, gMeta] of genreMap.entries()) {
+      const genreTracks = tracksByGenre.get(gId) || [];
+      if (genreTracks.length === 0 && genres.length > 0) continue;
+
       const genrePlayCount = genreTracks.reduce((sum, t) => sum + (t.playCount || 0), 0);
-      const trackCount = g.trackCount ?? genreTracks.length;
-      const radius = Math.min(52, Math.max(28, 28 + Math.log2(trackCount + 1) * 4));
+      const trackCount = genreTracks.length;
+      const radius = Math.min(56, Math.max(30, 30 + Math.log2(trackCount + 1) * 4));
 
       addNode({
-        id: `genre:${g.id}`,
+        id: `genre:${gId}`,
         type: 'genre',
-        entityId: g.id,
-        label: g.name,
+        entityId: gId,
+        label: gMeta.name,
         x: 0,
         y: 0,
         radius,
@@ -210,6 +297,7 @@ export class GalaxyService implements IGalaxyService {
         metadata: {
           trackCount,
           playCount: genrePlayCount,
+          artistCount: (artistsByGenre.get(gId) || new Set()).size,
           trackList: genreTracks.slice(0, 50).map(t => ({
             id: t.id,
             title: t.title,
@@ -221,38 +309,44 @@ export class GalaxyService implements IGalaxyService {
       });
     }
 
-    // 3. Build Artist Nodes (LOD 1 - 4)
-    for (const a of artists) {
-      const artistTracks = tracksByArtist.get(a.id) || [];
-      const artistAlbums = albumsByArtist.get(a.id) || [];
+    // 4. Build Artist Nodes (LOD 1 - 4)
+    for (const [aId, aMeta] of artistMap.entries()) {
+      const artistTracks = tracksByArtist.get(aId) || [];
+      if (artistTracks.length === 0 && artists.length > 0) continue;
+
+      const artistAlbumIds = albumsByArtist.get(aId) || [];
       const artistPlayCount = artistTracks.reduce((sum, t) => sum + (t.playCount || 0), 0);
-      const trackCount = a.trackCount ?? artistTracks.length;
+      const trackCount = artistTracks.length;
       const hasFavorites = artistTracks.some(t => t.isFavorite);
-      const radius = Math.min(38, Math.max(18, 18 + Math.log2(trackCount + 1) * 3));
+      const radius = Math.min(40, Math.max(18, 18 + Math.log2(trackCount + 1) * 3));
+      const isMajorArtist = trackCount >= 4 || artistPlayCount >= 10;
 
       addNode({
-        id: `artist:${a.id}`,
+        id: `artist:${aId}`,
         type: 'artist',
-        entityId: a.id,
-        label: a.name || 'Unknown Artist',
+        entityId: aId,
+        label: aMeta.name,
         x: 0,
         y: 0,
         radius,
         color: '#3b82f6',
-        lodMin: 1,
+        lodMin: isMajorArtist ? 1 : 2,
         lodMax: 4,
-        artworkId: a.artworkId,
+        artworkId: aMeta.artworkId,
         metadata: {
           trackCount,
-          albumCount: a.albumCount ?? artistAlbums.length,
+          albumCount: artistAlbumIds.length,
           playCount: artistPlayCount,
           isFavorite: hasFavorites,
-          albumList: artistAlbums.map(al => ({
-            id: al.id,
-            title: al.title,
-            year: al.year,
-            trackCount: al.trackCount
-          })),
+          albumList: artistAlbumIds.map(alId => {
+            const al = albumMap.get(alId);
+            return {
+              id: alId,
+              title: al ? al.title : 'Album',
+              year: al?.year,
+              trackCount: (tracksByAlbum.get(alId) || []).length
+            };
+          }),
           trackList: artistTracks.slice(0, 50).map(t => ({
             id: t.id,
             title: t.title,
@@ -262,34 +356,40 @@ export class GalaxyService implements IGalaxyService {
           }))
         }
       });
+
+      // Connect Genre -> Artist
+      const gId = aMeta.genreId || DEFAULT_GENRE_ID;
+      if (nodeMap.has(`genre:${gId}`)) {
+        addEdge(`genre:${gId}`, `artist:${aId}`, 'genre-artist', 2);
+      }
     }
 
-    // 4. Build Album Nodes (LOD 2 - 4)
-    for (const al of albums) {
-      const albumTracks = tracksByAlbum.get(al.id) || [];
+    // 5. Build Album Nodes (LOD 2 - 4)
+    for (const [alId, alMeta] of albumMap.entries()) {
+      const albumTracks = tracksByAlbum.get(alId) || [];
+      if (albumTracks.length === 0 && albums.length > 0) continue;
+
       const albumPlayCount = albumTracks.reduce((sum, t) => sum + (t.playCount || 0), 0);
-      const trackCount = al.trackCount ?? albumTracks.length;
+      const trackCount = albumTracks.length;
       const hasFavorites = albumTracks.some(t => t.isFavorite);
-      const radius = Math.min(24, Math.max(12, 12 + Math.log2(trackCount + 1) * 2));
+      const radius = Math.min(26, Math.max(13, 13 + Math.log2(trackCount + 1) * 2));
 
       addNode({
-        id: `album:${al.id}`,
+        id: `album:${alId}`,
         type: 'album',
-        entityId: al.id,
-        label: al.title || 'Unknown Album',
+        entityId: alId,
+        label: alMeta.title,
         x: 0,
         y: 0,
         radius,
         color: '#ff6b00',
         lodMin: 2,
         lodMax: 4,
-        artworkId: al.artworkId,
+        artworkId: alMeta.artworkId,
         metadata: {
-          artistName: al.artistName,
+          artistName: artistMap.get(alMeta.artistId)?.name,
           trackCount,
-          durationMs: al.durationMs,
-          year: al.year,
-          isCompilation: al.isCompilation,
+          year: alMeta.year,
           playCount: albumPlayCount,
           isFavorite: hasFavorites,
           trackList: albumTracks.map(t => ({
@@ -303,18 +403,25 @@ export class GalaxyService implements IGalaxyService {
       });
 
       // Connect Artist -> Album
-      if (al.artistId) {
-        addEdge(`artist:${al.artistId}`, `album:${al.id}`, 'artist-album', 2);
+      if (nodeMap.has(`artist:${alMeta.artistId}`)) {
+        addEdge(`artist:${alMeta.artistId}`, `album:${alId}`, 'artist-album', 2);
       }
     }
 
-    // 5. Build Track Nodes (LOD 3 - 4) with Favorite & Recent Play marks
+    // 6. Build Track Nodes (LOD 3 - 4)
     for (const t of tracks) {
       const recentOrder = recentPlayMap.get(t.id);
-      const baseRadius = 8;
+      const baseRadius = 7;
       const favBonus = t.isFavorite ? 3 : 0;
       const playBonus = t.playCount ? Math.min(3, t.playCount * 0.3) : 0;
       const radius = baseRadius + favBonus + playBonus;
+
+      // Find resolved parent album
+      let parentAlbumId = t.albumId;
+      if (!parentAlbumId || !albumMap.has(parentAlbumId)) {
+        const aId = t.artistId || (t.artistName ? `artist_${t.artistName.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}` : DEFAULT_ARTIST_ID);
+        parentAlbumId = t.albumTitle ? `album_${t.albumTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}_${aId}` : `album_singles_${aId}`;
+      }
 
       addNode({
         id: `track:${t.id}`,
@@ -329,8 +436,8 @@ export class GalaxyService implements IGalaxyService {
         lodMax: 4,
         artworkId: t.artworkId,
         metadata: {
-          artistName: t.artistName,
-          albumTitle: t.albumTitle,
+          artistName: t.artistName || (t.artistId ? artistMap.get(t.artistId)?.name : 'Unknown Artist'),
+          albumTitle: t.albumTitle || (parentAlbumId ? albumMap.get(parentAlbumId)?.title : 'Singles'),
           durationMs: t.durationMs,
           isFavorite: t.isFavorite,
           playCount: t.playCount,
@@ -339,25 +446,12 @@ export class GalaxyService implements IGalaxyService {
       });
 
       // Connect Album -> Track
-      if (t.albumId) {
-        addEdge(`album:${t.albumId}`, `track:${t.id}`, 'album-track', 1);
-      }
-
-      // Connect Genre -> Artist & Genre -> Track
-      if (t.genreId) {
-        if (t.artistId) {
-          addEdge(`genre:${t.genreId}`, `artist:${t.artistId}`, 'genre-artist', 2);
-        }
-        addEdge(`genre:${t.genreId}`, `track:${t.id}`, 'genre-track', 1);
-      }
-
-      // Connect Folder -> Track
-      if (t.folderId && (filter?.showFolders ?? true)) {
-        addEdge(`folder:${t.folderId}`, `track:${t.id}`, 'folder-track', 1);
+      if (nodeMap.has(`album:${parentAlbumId}`)) {
+        addEdge(`album:${parentAlbumId}`, `track:${t.id}`, 'album-track', 1);
       }
     }
 
-    // 6. Build Playlist Nodes (Optional LOD 2 - 4)
+    // 7. Build Playlist Nodes (Optional LOD 2 - 4)
     if (filter?.showPlaylists ?? true) {
       for (const pl of playlists) {
         addNode({
@@ -377,7 +471,7 @@ export class GalaxyService implements IGalaxyService {
       }
     }
 
-    // 7. Build Folder Nodes (Optional LOD 2 - 4)
+    // 8. Build Folder Nodes (Optional LOD 2 - 4)
     if (filter?.showFolders ?? true) {
       for (const f of folders) {
         addNode({
@@ -396,7 +490,7 @@ export class GalaxyService implements IGalaxyService {
       }
     }
 
-    // 8. Calculate positions using deterministic layout engine
+    // 9. Calculate positions using deterministic layout engine
     const allNodes = Array.from(nodeMap.values());
     this.layoutEngine.computeLayout(allNodes, edges);
 

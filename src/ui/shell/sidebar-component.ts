@@ -2,6 +2,8 @@ import type { RouterService } from '../navigation/router-service';
 import type { AppRoute, RouteState } from '../navigation/route-types';
 import type { Disposable } from '../../core/types/common';
 import type { ILibraryService } from '../../services/contracts/service-contracts';
+import type { EventBus } from '../../core/events/event-bus';
+import { DomainEvents } from '../../domain/events/domain-events';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
 export interface NavItem {
@@ -14,7 +16,9 @@ export class SidebarComponent {
   private container: HTMLElement | null = null;
   private readonly router: RouterService;
   private readonly libraryService?: ILibraryService | undefined;
+  private readonly eventBus?: EventBus | undefined;
   private routerSub: Disposable | null = null;
+  private librarySub: Disposable | null = null;
   private statsInterval: number | null = null;
 
   private primaryNavItems: NavItem[] = [
@@ -35,9 +39,10 @@ export class SidebarComponent {
     { label: 'Downloads', icon: 'download', route: 'library', params: { tab: 'folders' } }
   ];
 
-  constructor(router: RouterService, libraryService?: ILibraryService) {
+  constructor(router: RouterService, libraryService?: ILibraryService, eventBus?: EventBus) {
     this.router = router;
     this.libraryService = libraryService;
+    this.eventBus = eventBus;
   }
 
   public mount(container: HTMLElement): void {
@@ -48,13 +53,23 @@ export class SidebarComponent {
       this.updateActiveNav(state);
     });
 
-    this.fetchLibraryStats();
+    if (this.eventBus) {
+      this.librarySub = this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, () => {
+        void this.fetchLibraryStats();
+      });
+    }
+
+    void this.fetchLibraryStats();
   }
 
   public unmount(): void {
     if (this.routerSub) {
       this.routerSub.dispose();
       this.routerSub = null;
+    }
+    if (this.librarySub) {
+      this.librarySub.dispose();
+      this.librarySub = null;
     }
     if (this.statsInterval) {
       window.clearInterval(this.statsInterval);

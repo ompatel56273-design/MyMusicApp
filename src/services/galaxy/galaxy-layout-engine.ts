@@ -11,10 +11,10 @@ export interface LayoutOptions {
  * Deterministic Radial-Hierarchical Layout Calculator for Audio Galaxy.
  * Produces consistent, reproducible, bounded 2D positions for graph nodes.
  * Hierarchy:
- * - Genre Centers: distributed symmetrically around center origin (Radius ~ 600px)
- * - Artists: orbit around their primary Genre center (Radius ~ 250px)
- * - Albums: concentric rings around their Artist (Radius ~ 120px)
- * - Tracks: satellite clusters around their Album (Radius ~ 60px)
+ * - Genre Planets: distributed symmetrically around center origin (Radius ~ 700-1200px)
+ * - Artist Systems: orbit around their primary Genre center (Radius ~ 220-450px)
+ * - Album Satellites: concentric rings around their Artist (Radius ~ 85-200px)
+ * - Song Nodes: satellite clusters around their Album (Radius ~ 35-120px)
  * - Playlists & Folders: dedicated outer perimeter orbits
  */
 export class GalaxyLayoutEngine {
@@ -28,13 +28,22 @@ export class GalaxyLayoutEngine {
   };
 
   private static readonly RADIUS_MAP: Record<GalaxyNodeType, number> = {
-    genre: 36,
+    genre: 38,
     artist: 24,
     album: 16,
     track: 8,
     playlist: 20,
     folder: 18
   };
+
+  private static hashSeed(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash) / 2147483647;
+  }
 
   public computeLayout(
     nodes: GalaxyNode[],
@@ -57,28 +66,32 @@ export class GalaxyLayoutEngine {
     const artistToAlbums = new Map<string, GalaxyNode[]>();
     const albumToTracks = new Map<string, GalaxyNode[]>();
 
+    const artistMap = new Map(artists.map(a => [a.id, a]));
+    const albumMap = new Map(albums.map(al => [al.id, al]));
+    const trackMap = new Map(tracks.map(t => [t.id, t]));
+
     for (const edge of edges) {
       if (edge.type === 'genre-artist') {
         const list = genreToArtists.get(edge.sourceId) ?? [];
-        const artist = artists.find(a => a.id === edge.targetId);
+        const artist = artistMap.get(edge.targetId);
         if (artist && !list.includes(artist)) list.push(artist);
         genreToArtists.set(edge.sourceId, list);
       } else if (edge.type === 'artist-album') {
         const list = artistToAlbums.get(edge.sourceId) ?? [];
-        const album = albums.find(al => al.id === edge.targetId);
+        const album = albumMap.get(edge.targetId);
         if (album && !list.includes(album)) list.push(album);
         artistToAlbums.set(edge.sourceId, list);
       } else if (edge.type === 'album-track') {
         const list = albumToTracks.get(edge.sourceId) ?? [];
-        const track = tracks.find(t => t.id === edge.targetId);
+        const track = trackMap.get(edge.targetId);
         if (track && !list.includes(track)) list.push(track);
         albumToTracks.set(edge.sourceId, list);
       }
     }
 
-    // 1. Position Genres around origin in a circle
+    // 1. Position Genres around origin symmetrically with generous spacing
     const genreCount = genres.length || 1;
-    const genreOrbitRadius = 700;
+    const genreOrbitRadius = Math.max(800, Math.min(2200, 600 + genreCount * 120));
 
     genres.forEach((genre, idx) => {
       const angle = (idx / genreCount) * Math.PI * 2;
@@ -91,18 +104,24 @@ export class GalaxyLayoutEngine {
     // Fallback genre anchor for unattached artists
     const defaultCenter = { x: originX, y: originY };
 
-    // 2. Position Artists around their primary Genre center
+    // 2. Position Artists around their primary Genre center in concentric orbital rings
     const unparentedArtists: GalaxyNode[] = [...artists];
     for (const [genreId, artistList] of genreToArtists.entries()) {
       const parentGenre = genres.find(g => g.id === genreId);
       const center = parentGenre ? { x: parentGenre.x, y: parentGenre.y } : defaultCenter;
       const aCount = artistList.length || 1;
-      const artistOrbit = 260;
+      const baseSeed = GalaxyLayoutEngine.hashSeed(genreId) * Math.PI * 2;
 
       artistList.forEach((artist, aIdx) => {
-        const angle = (aIdx / aCount) * Math.PI * 2 + (parentGenre ? (parentGenre.x * 0.001) : 0);
-        artist.x = center.x + Math.cos(angle) * artistOrbit;
-        artist.y = center.y + Math.sin(angle) * artistOrbit;
+        // Distribute across rings if artist count is large
+        const ringIndex = Math.floor(aIdx / 6);
+        const posInRing = aIdx % 6;
+        const ringSize = Math.min(6, aCount - ringIndex * 6);
+        const ringRadius = 240 + ringIndex * 130;
+        const angle = baseSeed + (posInRing / Math.max(1, ringSize)) * Math.PI * 2 + ringIndex * 0.4;
+
+        artist.x = center.x + Math.cos(angle) * ringRadius;
+        artist.y = center.y + Math.sin(angle) * ringRadius;
         artist.radius = artist.radius || GalaxyLayoutEngine.RADIUS_MAP.artist;
         artist.color = artist.color || GalaxyLayoutEngine.COLOR_MAP.artist;
 
@@ -111,27 +130,32 @@ export class GalaxyLayoutEngine {
       });
     }
 
-    // Position any orphan artists around main origin
+    // Position any orphan artists around origin
     unparentedArtists.forEach((artist, idx) => {
       const angle = (idx / (unparentedArtists.length || 1)) * Math.PI * 2;
-      artist.x = originX + Math.cos(angle) * 400;
-      artist.y = originY + Math.sin(angle) * 400;
+      artist.x = originX + Math.cos(angle) * 500;
+      artist.y = originY + Math.sin(angle) * 500;
       artist.radius = artist.radius || GalaxyLayoutEngine.RADIUS_MAP.artist;
       artist.color = artist.color || GalaxyLayoutEngine.COLOR_MAP.artist;
     });
 
-    // 3. Position Albums around their parent Artist
+    // 3. Position Albums around their parent Artist in concentric orbital rings
     const unparentedAlbums = [...albums];
     for (const [artistId, albumList] of artistToAlbums.entries()) {
-      const parentArtist = artists.find(a => a.id === artistId);
+      const parentArtist = artistMap.get(artistId);
       const center = parentArtist ? { x: parentArtist.x, y: parentArtist.y } : defaultCenter;
       const albCount = albumList.length || 1;
-      const albumOrbit = 120;
+      const baseSeed = GalaxyLayoutEngine.hashSeed(artistId) * Math.PI * 2;
 
       albumList.forEach((album, albIdx) => {
-        const angle = (albIdx / albCount) * Math.PI * 2;
-        album.x = center.x + Math.cos(angle) * albumOrbit;
-        album.y = center.y + Math.sin(angle) * albumOrbit;
+        const ringIndex = Math.floor(albIdx / 5);
+        const posInRing = albIdx % 5;
+        const ringSize = Math.min(5, albCount - ringIndex * 5);
+        const ringRadius = 90 + ringIndex * 50;
+        const angle = baseSeed + (posInRing / Math.max(1, ringSize)) * Math.PI * 2 + ringIndex * 0.5;
+
+        album.x = center.x + Math.cos(angle) * ringRadius;
+        album.y = center.y + Math.sin(angle) * ringRadius;
         album.radius = album.radius || GalaxyLayoutEngine.RADIUS_MAP.album;
         album.color = album.color || GalaxyLayoutEngine.COLOR_MAP.album;
 
@@ -142,24 +166,29 @@ export class GalaxyLayoutEngine {
 
     unparentedAlbums.forEach((album, idx) => {
       const angle = (idx / (unparentedAlbums.length || 1)) * Math.PI * 2;
-      album.x = originX + Math.cos(angle) * 300;
-      album.y = originY + Math.sin(angle) * 300;
+      album.x = originX + Math.cos(angle) * 400;
+      album.y = originY + Math.sin(angle) * 400;
       album.radius = album.radius || GalaxyLayoutEngine.RADIUS_MAP.album;
       album.color = album.color || GalaxyLayoutEngine.COLOR_MAP.album;
     });
 
-    // 4. Position Tracks in satellite cluster around their parent Album
+    // 4. Position Tracks in satellite clusters around their parent Album
     const unparentedTracks = [...tracks];
     for (const [albumId, trackList] of albumToTracks.entries()) {
-      const parentAlbum = albums.find(al => al.id === albumId);
+      const parentAlbum = albumMap.get(albumId);
       const center = parentAlbum ? { x: parentAlbum.x, y: parentAlbum.y } : defaultCenter;
       const tCount = trackList.length || 1;
-      const trackOrbit = 50;
+      const baseSeed = GalaxyLayoutEngine.hashSeed(albumId) * Math.PI * 2;
 
       trackList.forEach((track, tIdx) => {
-        const angle = (tIdx / tCount) * Math.PI * 2;
-        track.x = center.x + Math.cos(angle) * trackOrbit;
-        track.y = center.y + Math.sin(angle) * trackOrbit;
+        const ringIndex = Math.floor(tIdx / 8);
+        const posInRing = tIdx % 8;
+        const ringSize = Math.min(8, tCount - ringIndex * 8);
+        const ringRadius = 38 + ringIndex * 24;
+        const angle = baseSeed + (posInRing / Math.max(1, ringSize)) * Math.PI * 2 + ringIndex * 0.3;
+
+        track.x = center.x + Math.cos(angle) * ringRadius;
+        track.y = center.y + Math.sin(angle) * ringRadius;
         track.radius = track.radius || GalaxyLayoutEngine.RADIUS_MAP.track;
         track.color = track.color || GalaxyLayoutEngine.COLOR_MAP.track;
 
@@ -170,8 +199,8 @@ export class GalaxyLayoutEngine {
 
     unparentedTracks.forEach((track, idx) => {
       const angle = (idx / (unparentedTracks.length || 1)) * Math.PI * 2;
-      track.x = originX + Math.cos(angle) * 200;
-      track.y = originY + Math.sin(angle) * 200;
+      track.x = originX + Math.cos(angle) * 300;
+      track.y = originY + Math.sin(angle) * 300;
       track.radius = track.radius || GalaxyLayoutEngine.RADIUS_MAP.track;
       track.color = track.color || GalaxyLayoutEngine.COLOR_MAP.track;
     });
@@ -179,94 +208,20 @@ export class GalaxyLayoutEngine {
     // 5. Outer Orbits for Playlists & Folders
     playlists.forEach((pl, idx) => {
       const angle = (idx / (playlists.length || 1)) * Math.PI * 2 + 0.5;
-      pl.x = originX + Math.cos(angle) * 1100;
-      pl.y = originY + Math.sin(angle) * 1100;
+      pl.x = originX + Math.cos(angle) * (genreOrbitRadius + 450);
+      pl.y = originY + Math.sin(angle) * (genreOrbitRadius + 450);
       pl.radius = pl.radius || GalaxyLayoutEngine.RADIUS_MAP.playlist;
       pl.color = pl.color || GalaxyLayoutEngine.COLOR_MAP.playlist;
     });
 
     folders.forEach((f, idx) => {
       const angle = (idx / (folders.length || 1)) * Math.PI * 2 + 1.0;
-      f.x = originX + Math.cos(angle) * 1250;
-      f.y = originY + Math.sin(angle) * 1250;
+      f.x = originX + Math.cos(angle) * (genreOrbitRadius + 650);
+      f.y = originY + Math.sin(angle) * (genreOrbitRadius + 650);
       f.radius = f.radius || GalaxyLayoutEngine.RADIUS_MAP.folder;
       f.color = f.color || GalaxyLayoutEngine.COLOR_MAP.folder;
     });
 
-    // 6. Optional bounded relaxation pass (capped at max 50 iterations)
-    const iterations = Math.min(options?.relaxationIterations ?? 15, 50);
-    this.relaxNodes(nodes, edges, iterations);
-
     return nodes;
-  }
-
-  /**
-   * Bounded force relaxation to prevent node collisions while preserving radial stability.
-   */
-  private relaxNodes(nodes: GalaxyNode[], edges: GalaxyEdge[], iterations: number): void {
-    if (nodes.length <= 1 || iterations <= 0) return;
-
-    const nodeMap = new Map<string, GalaxyNode>();
-    nodes.forEach(n => nodeMap.set(n.id, n));
-
-    const k = 80; // Ideal resting distance
-    const damping = 0.85;
-
-    for (let iter = 0; iter < iterations; iter++) {
-      const tempStep = 1.0 / (iter + 1);
-
-      // Repulsion between close node pairs
-      for (let i = 0; i < nodes.length; i++) {
-        const n1 = nodes[i]!;
-        for (let j = i + 1; j < nodes.length; j++) {
-          const n2 = nodes[j]!;
-          const dx = n2.x - n1.x;
-          const dy = n2.y - n1.y;
-          const distSq = dx * dx + dy * dy || 1;
-          const minDist = n1.radius + n2.radius + 15;
-
-          if (distSq < minDist * minDist) {
-            const dist = Math.sqrt(distSq);
-            const force = ((minDist - dist) / dist) * 0.5 * tempStep;
-            const fx = dx * force;
-            const fy = dy * force;
-
-            if (n1.type !== 'genre') {
-              n1.x -= fx * damping;
-              n1.y -= fy * damping;
-            }
-            if (n2.type !== 'genre') {
-              n2.x += fx * damping;
-              n2.y += fy * damping;
-            }
-          }
-        }
-      }
-
-      // Edge spring attraction
-      for (const edge of edges) {
-        const source = nodeMap.get(edge.sourceId);
-        const target = nodeMap.get(edge.targetId);
-        if (!source || !target) continue;
-
-        const dx = target.x - source.x;
-        const dy = target.y - source.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const displacement = dist - k;
-        const springForce = (displacement / dist) * 0.05 * tempStep;
-
-        const fx = dx * springForce;
-        const fy = dy * springForce;
-
-        if (source.type !== 'genre') {
-          source.x += fx;
-          source.y += fy;
-        }
-        if (target.type !== 'genre') {
-          target.x -= fx;
-          target.y -= fy;
-        }
-      }
-    }
   }
 }

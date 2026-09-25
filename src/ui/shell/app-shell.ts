@@ -87,7 +87,7 @@ export class AppShell {
     this.eventBus = deps.eventBus;
     this.router = new RouterService('home');
     this.header = new HeaderComponent(this.router);
-    this.sidebar = new SidebarComponent(this.router, deps.libraryService);
+    this.sidebar = new SidebarComponent(this.router, deps.libraryService, deps.eventBus);
     this.miniPlayer = new MiniPlayerComponent({
       playbackManager: deps.playbackManager,
       artworkService: deps.artworkService,

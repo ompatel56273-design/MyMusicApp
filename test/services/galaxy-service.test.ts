@@ -234,4 +234,106 @@ describe('GalaxyService', () => {
     const loaded = await galaxyService.getSettings();
     expect(loaded).toEqual(updated);
   });
+
+  it('handles missing metadata safely with fallbacks', async () => {
+    mockLibraryService.listTracks = vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: 'track_orphan',
+          fileId: 'file_orphan',
+          title: 'Unknown Title Track',
+          artistId: '',
+          artistName: '',
+          albumId: '',
+          albumTitle: '',
+          genreId: '',
+          genreName: '',
+          durationMs: 180000,
+          format: { container: 'mp3', codec: 'mp3', sampleRate: 44100, channels: 2 },
+          dateAdded: Date.now(),
+          dateModified: Date.now(),
+          playCount: 0,
+          isFavorite: false,
+          hasLyrics: false,
+          availability: 'available'
+        }
+      ],
+      total: 1,
+      offset: 0,
+      limit: 50
+    });
+    mockLibraryService.listArtists = vi.fn().mockResolvedValue({ items: [], total: 0, offset: 0, limit: 50 });
+    mockLibraryService.listAlbums = vi.fn().mockResolvedValue({ items: [], total: 0, offset: 0, limit: 50 });
+    mockLibraryService.listGenres = vi.fn().mockResolvedValue({ items: [], total: 0, offset: 0, limit: 50 });
+
+    galaxyService.invalidateCache();
+    const graph = await galaxyService.getGraph();
+
+    expect(graph.nodes.some(n => n.id === 'genre:genre_unknown')).toBe(true);
+    expect(graph.nodes.some(n => n.id === 'artist:artist_unknown')).toBe(true);
+    expect(graph.nodes.some(n => n.id === 'album:album_unknown_artist_unknown')).toBe(true);
+    expect(graph.nodes.some(n => n.id === 'track:track_orphan')).toBe(true);
+  });
+
+  it('handles 5,000 tracks with excellent performance without infinite loops or memory leaks', async () => {
+    const fakeTracks = Array.from({ length: 5000 }, (_, i) => ({
+      id: `track_${i}`,
+      fileId: `file_${i}`,
+      title: `Track ${i}`,
+      artistId: `artist_${i % 100}`,
+      artistName: `Artist ${i % 100}`,
+      albumId: `album_${i % 250}`,
+      albumTitle: `Album ${i % 250}`,
+      genreId: `genre_${i % 10}`,
+      genreName: `Genre ${i % 10}`,
+      durationMs: 200000 + (i % 10000),
+      format: { container: 'mp3', codec: 'mp3', sampleRate: 44100, channels: 2 },
+      dateAdded: Date.now(),
+      dateModified: Date.now(),
+      playCount: i % 50,
+      isFavorite: i % 10 === 0,
+      hasLyrics: false,
+      availability: 'available' as const
+    }));
+
+    const fakeArtists = Array.from({ length: 100 }, (_, i) => ({
+      id: `artist_${i}`,
+      name: `Artist ${i}`,
+      trackCount: 50,
+      albumCount: 3
+    }));
+
+    const fakeAlbums = Array.from({ length: 250 }, (_, i) => ({
+      id: `album_${i}`,
+      title: `Album ${i}`,
+      artistId: `artist_${i % 100}`,
+      artistName: `Artist ${i % 100}`,
+      genreId: `genre_${i % 10}`,
+      year: 2020,
+      trackCount: 20,
+      durationMs: 4000000,
+      isCompilation: false,
+      dateAdded: Date.now()
+    }));
+
+    const fakeGenres = Array.from({ length: 10 }, (_, i) => ({
+      id: `genre_${i}`,
+      name: `Genre ${i}`,
+      trackCount: 500
+    }));
+
+    mockLibraryService.listTracks = vi.fn().mockResolvedValue({ items: fakeTracks, total: 5000, offset: 0, limit: 100000 });
+    mockLibraryService.listArtists = vi.fn().mockResolvedValue({ items: fakeArtists, total: 100, offset: 0, limit: 100000 });
+    mockLibraryService.listAlbums = vi.fn().mockResolvedValue({ items: fakeAlbums, total: 250, offset: 0, limit: 100000 });
+    mockLibraryService.listGenres = vi.fn().mockResolvedValue({ items: fakeGenres, total: 10, offset: 0, limit: 100000 });
+
+    galaxyService.invalidateCache();
+    const startTime = performance.now();
+    const graph = await galaxyService.getGraph();
+    const duration = performance.now() - startTime;
+
+    expect(graph.totalNodes).toBe(5000 + 100 + 250 + 10 + 1 + 1); // 5000 tracks + 100 artists + 250 albums + 10 genres + 1 playlist + 1 folder
+    expect(graph.nodes.every(n => Number.isFinite(n.x) && Number.isFinite(n.y))).toBe(true);
+    expect(duration).toBeLessThan(1500); // Must generate and position in under 1.5s
+  });
 });
