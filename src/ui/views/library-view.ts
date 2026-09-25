@@ -1,6 +1,10 @@
 import type { IView } from './view-interface';
 import type { RouteParams, LibraryTab } from '../navigation/route-types';
-import type { ILibraryService, IPlaybackManager, IArtworkService } from '../../services/contracts/service-contracts';
+import type { ILibraryService, IPlaybackManager, IArtworkService, IScannerService } from '../../services/contracts/service-contracts';
+import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-filesystem-adapter';
+import type { EventBus } from '../../core/events/event-bus';
+import { DomainEvents } from '../../domain/events/domain-events';
+import type { Disposable } from '../../core/types/common';
 import { LibraryToolbar, type LibraryToolbarState } from '../components/library/library-toolbar';
 import { TrackInspectorComponent } from '../components/library/track-inspector-component';
 import { SongsTabView } from './library/songs-tab-view';
@@ -15,6 +19,9 @@ export interface LibraryViewDependencies {
   libraryService: ILibraryService;
   playbackManager?: IPlaybackManager | undefined;
   artworkService?: IArtworkService | undefined;
+  scannerService?: IScannerService | undefined;
+  fsAdapter?: BrowserFilesystemAdapter | undefined;
+  eventBus?: EventBus | undefined;
 }
 
 /**
@@ -34,6 +41,10 @@ export class LibraryView implements IView {
   private readonly libraryService: ILibraryService;
   private readonly playbackManager?: IPlaybackManager | undefined;
   private readonly artworkService?: IArtworkService | undefined;
+  private readonly scannerService?: IScannerService | undefined;
+  private readonly fsAdapter?: BrowserFilesystemAdapter | undefined;
+  private readonly eventBus?: EventBus | undefined;
+  private libraryUpdateSub: Disposable | null = null;
 
   private toolbar: LibraryToolbar | null = null;
   private inspector: TrackInspectorComponent | null = null;
@@ -51,6 +62,9 @@ export class LibraryView implements IView {
       this.libraryService = depsOrService.libraryService;
       this.playbackManager = depsOrService.playbackManager;
       this.artworkService = depsOrService.artworkService;
+      this.scannerService = depsOrService.scannerService;
+      this.fsAdapter = depsOrService.fsAdapter;
+      this.eventBus = depsOrService.eventBus;
     } else {
       this.libraryService = depsOrService as ILibraryService;
     }
@@ -61,10 +75,22 @@ export class LibraryView implements IView {
     if (params?.tab) {
       this.currentTab = params.tab;
     }
+
+    if (this.eventBus) {
+      this.libraryUpdateSub = this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, async () => {
+        await this.updateStats();
+        this.mountActiveTab();
+      });
+    }
+
     this.render();
   }
 
   public unmount(): void {
+    if (this.libraryUpdateSub) {
+      this.libraryUpdateSub.dispose();
+      this.libraryUpdateSub = null;
+    }
     if (this.toolbar) {
       this.toolbar.unmount();
       this.toolbar = null;
@@ -456,19 +482,78 @@ export class LibraryView implements IView {
   private bindHeaderEvents(): void {
     if (!this.container) return;
     const scanBtn = this.container.querySelector<HTMLButtonElement>('#library-scan-quick-btn');
-    scanBtn?.addEventListener('click', () => {
+    scanBtn?.addEventListener('click', async () => {
+      console.log('[FolderPicker] selection started');
+
+      // 1. If showDirectoryPicker is supported in the browser environment, try it first
+      if (typeof (window as any).showDirectoryPicker === 'function') {
+        try {
+          const handle: FileSystemDirectoryHandle = await (window as any).showDirectoryPicker({
+            mode: 'read'
+          });
+
+          if (handle) {
+            console.log(`[FolderPicker] selected directory: ${handle.name}`);
+            const rootPath = `folder://${handle.name}`;
+
+            if (this.fsAdapter) {
+              this.fsAdapter.registerDirectoryHandle(rootPath, handle);
+            }
+
+            if (this.scannerService) {
+              await this.scannerService.scanDirectory(rootPath);
+            }
+
+            await this.updateStats();
+            this.mountActiveTab();
+            return;
+          }
+        } catch (err: any) {
+          if (err?.name === 'AbortError') {
+            console.log('[FolderPicker] user cancelled directory selection');
+            return;
+          }
+          console.warn('[FolderPicker] showDirectoryPicker fallback to webkitdirectory:', err);
+        }
+      }
+
+      // 2. Browser folder upload fallback (<input type="file" webkitdirectory multiple>)
       const fileInput = document.createElement('input');
       fileInput.type = 'file';
       (fileInput as any).webkitdirectory = true;
       fileInput.multiple = true;
       fileInput.style.display = 'none';
       document.body.appendChild(fileInput);
-      fileInput.addEventListener('change', () => {
-        if (fileInput.parentElement) {
-          fileInput.parentElement.removeChild(fileInput);
+
+      fileInput.addEventListener('change', async () => {
+        try {
+          const files = fileInput.files;
+          const rawCount = files ? files.length : 0;
+          console.log(`[FolderPicker] raw files received: ${rawCount}`);
+
+          if (files && rawCount > 0) {
+            const firstFile = files[0];
+            const dirName = (firstFile as any)?.webkitRelativePath
+              ? (firstFile as any).webkitRelativePath.split('/')[0]
+              : 'Selected Folder';
+            console.log(`[FolderPicker] selected directory: ${dirName}`);
+
+            if (this.scannerService?.importFiles) {
+              const res = await this.scannerService.importFiles(files);
+              console.log('[FolderPicker] import result:', res);
+            }
+          }
+        } catch (importErr) {
+          console.error('[FolderPicker] import failed:', importErr);
+        } finally {
+          if (fileInput.parentElement) {
+            fileInput.parentElement.removeChild(fileInput);
+          }
+          await this.updateStats();
+          this.mountActiveTab();
         }
-        this.render();
       });
+
       fileInput.click();
     });
   }

@@ -150,7 +150,10 @@ export class AppShell {
         new LibraryView({
           libraryService: deps.libraryService,
           playbackManager: deps.playbackManager,
-          artworkService: deps.artworkService
+          artworkService: deps.artworkService,
+          scannerService: deps.scannerService,
+          fsAdapter: deps.fsAdapter,
+          eventBus: deps.eventBus
         })
       ],
       [

@@ -38,6 +38,15 @@ export class ScannerService implements IScannerService {
     this.metadataService = metadataService;
   }
 
+  private static idSequence = 0;
+
+  private generateUniqueId(prefix: string): string {
+    ScannerService.idSequence = (ScannerService.idSequence + 1) % 1000000;
+    const perf = typeof performance !== 'undefined' ? performance.now().toString().replace('.', '') : '0';
+    const rand = Math.random().toString(36).substring(2, 9);
+    return `${prefix}_${Date.now()}_${perf}_${ScannerService.idSequence}_${rand}`;
+  }
+
   public get isScanning(): boolean {
     return this._state === 'scanning' || this._state === 'preparing' || this._state === 'synchronizing';
   }
@@ -68,10 +77,13 @@ export class ScannerService implements IScannerService {
     this.logger.info(`Starting library scan for root: ${normalizedRoot}`, { sessionId });
 
     let filesDiscovered = 0;
+    let filesSupported = 0;
+    let filesUnsupported = 0;
     let filesAdded = 0;
     let filesUpdated = 0;
     let filesUnchanged = 0;
     let filesMissing = 0;
+    let filesFailed = 0;
     const errors: { path: string; message: string }[] = [];
 
     const discoveredPaths = new Set<string>();
@@ -92,7 +104,7 @@ export class ScannerService implements IScannerService {
           state: this._state,
           currentFile: currentPath,
           filesDiscovered,
-          filesProcessed: filesAdded + filesUpdated + filesUnchanged,
+          filesProcessed: filesAdded + filesUpdated + filesUnchanged + filesFailed,
           filesAdded,
           filesUpdated,
           filesMissing,
@@ -124,6 +136,7 @@ export class ScannerService implements IScannerService {
           if (signal.aborted) return;
 
           filesDiscovered++;
+          filesSupported++;
           discoveredPaths.add(entry.path);
 
           const existing = existingRootFiles.get(entry.path);
@@ -149,8 +162,8 @@ export class ScannerService implements IScannerService {
           } else {
             // New physical file discovered
             filesAdded++;
-            const fileId = `file_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-            const trackId = `track_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            const fileId = this.generateUniqueId('file');
+            const trackId = this.generateUniqueId('track');
 
             const newFile: AudioFile = {
               id: fileId,
@@ -166,7 +179,8 @@ export class ScannerService implements IScannerService {
             // Derive safe placeholder title from filename without extension
             const lastDot = entry.name.lastIndexOf('.');
             const cleanTitle = lastDot > 0 ? entry.name.substring(0, lastDot) : entry.name;
-            const container = (entry.extension.toLowerCase() || 'unknown') as AudioContainer;
+            const normalizedExt = entry.extension.toLowerCase();
+            const container: AudioContainer = (normalizedExt === 'aif' ? 'aiff' : normalizedExt || 'unknown') as AudioContainer;
             const codec = container as unknown as AudioCodec;
 
             const newTrack: Track = {
@@ -213,9 +227,18 @@ export class ScannerService implements IScannerService {
               lastScannedAt: Date.now(),
               trackCount: 0
             };
-            await this.folderRepo.save(folder);
+            try {
+              await this.folderRepo.save(folder);
+            } catch (folderErr) {
+              this.logger.warn(`Failed to save folder record for ${dirPath}`, { error: String(folderErr) });
+            }
+          },
+          onUnsupported: (_entryPath: string, _filename: string) => {
+            filesDiscovered++;
+            filesUnsupported++;
           },
           onError: (errPath: string, err: Error) => {
+            filesFailed++;
             this.logger.warn(`Filesystem error during scan at: ${errPath}`, { error: err.message });
             errors.push({ path: errPath, message: err.message });
           },
@@ -312,10 +335,21 @@ export class ScannerService implements IScannerService {
    */
   public async importFiles(
     files: readonly File[] | FileList
-  ): Promise<{ filesAdded: number; filesSkipped: number }> {
+  ): Promise<{ filesAdded: number; filesSkipped: number; filesFailed?: number; unsupported?: number }> {
     const fileList = Array.from(files);
+    const totalFiles = fileList.length;
+    const audioCandidates = fileList.filter(f => isSupportedAudioFile(f)).length;
+    const unsupportedFiles = totalFiles - audioCandidates;
+
+    this.logger.info('[Scanner] importFiles() called');
+    this.logger.info(`[Scanner] input file count: ${totalFiles}`);
+    this.logger.info(`[Scanner] audio candidate count: ${audioCandidates}`);
+    this.logger.info(`[Scanner] unsupported files count: ${unsupportedFiles}`);
+
     let filesAdded = 0;
     let filesSkipped = 0;
+    let filesFailed = 0;
+    let filesUnsupported = 0;
     const sessionId = `import_${Date.now()}`;
 
     const existingPaths = await this.audioFileRepo.listAllPaths();
@@ -323,75 +357,83 @@ export class ScannerService implements IScannerService {
     for (const file of fileList) {
       if (!isSupportedAudioFile(file)) {
         filesSkipped++;
+        filesUnsupported++;
         continue;
       }
 
-      const ext = getAudioExtension(file.name) || 'mp3';
-      const virtualPath = `local://files/${file.name}`;
+      try {
+        const ext = getAudioExtension(file.name) || 'mp3';
+        const relativePath = (file as any).webkitRelativePath || file.name;
+        const virtualPath = `local://files/${relativePath.replace(/\\/g, '/')}`;
 
-      // Register file in adapter if supported
-      if ('registerFile' in this.fsAdapter && typeof (this.fsAdapter as any).registerFile === 'function') {
-        (this.fsAdapter as any).registerFile(virtualPath, file);
-      }
-
-      // Check if already in repository with same name/size/modified
-      const existing = existingPaths.get(virtualPath);
-      if (existing && existing.sizeBytes === file.size && existing.modifiedTimeMs === file.lastModified) {
-        filesSkipped++;
-        continue;
-      }
-
-      const fileId = `file_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const trackId = `track_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-      const audioFile: AudioFile = {
-        id: fileId,
-        path: virtualPath,
-        filename: file.name,
-        extension: ext,
-        sizeBytes: file.size,
-        modifiedTimeMs: file.lastModified,
-        scanSessionId: sessionId,
-        availability: 'available'
-      };
-
-      const lastDot = file.name.lastIndexOf('.');
-      const cleanTitle = lastDot > 0 ? file.name.substring(0, lastDot) : file.name;
-      const container = ext as AudioContainer;
-
-      const track: Track = {
-        id: trackId,
-        fileId,
-        title: cleanTitle,
-        durationMs: 0,
-        format: {
-          container,
-          codec: container as unknown as AudioCodec,
-          sampleRate: 44100,
-          channels: 2,
-          isLossless: container === 'flac' || container === 'wav' || container === 'alac' || container === 'aiff'
-        },
-        dateAdded: Date.now(),
-        dateModified: file.lastModified,
-        playCount: 0,
-        isFavorite: false,
-        hasLyrics: false,
-        availability: 'available'
-      };
-
-      await this.audioFileRepo.save(audioFile);
-      await this.trackRepo.save(track);
-      filesAdded++;
-
-      // Enrich metadata
-      if (this.metadataService) {
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          const buffer = new Uint8Array(arrayBuffer);
-          await this.metadataService.enrichTrackMetadata(trackId, buffer, container);
-        } catch (enrichErr) {
-          this.logger.warn(`Metadata extraction failed for ${file.name}:`, { error: String(enrichErr) });
+        // Register file in adapter if supported
+        if ('registerFile' in this.fsAdapter && typeof (this.fsAdapter as any).registerFile === 'function') {
+          (this.fsAdapter as any).registerFile(virtualPath, file);
         }
+
+        // Check if already in repository with same name/size/modified
+        const existing = existingPaths.get(virtualPath);
+        if (existing && existing.sizeBytes === file.size && existing.modifiedTimeMs === file.lastModified) {
+          filesSkipped++;
+          continue;
+        }
+
+        const fileId = this.generateUniqueId('file');
+        const trackId = this.generateUniqueId('track');
+
+        const audioFile: AudioFile = {
+          id: fileId,
+          path: virtualPath,
+          filename: file.name,
+          extension: ext,
+          sizeBytes: file.size,
+          modifiedTimeMs: file.lastModified,
+          scanSessionId: sessionId,
+          availability: 'available'
+        };
+
+        const lastDot = file.name.lastIndexOf('.');
+        const cleanTitle = lastDot > 0 ? file.name.substring(0, lastDot) : file.name;
+        const container: AudioContainer = (ext === 'aif' ? 'aiff' : ext || 'unknown') as AudioContainer;
+
+        const track: Track = {
+          id: trackId,
+          fileId,
+          title: cleanTitle,
+          durationMs: 0,
+          format: {
+            container,
+            codec: container as unknown as AudioCodec,
+            sampleRate: 44100,
+            channels: 2,
+            isLossless: container === 'flac' || container === 'wav' || container === 'alac' || container === 'aiff'
+          },
+          dateAdded: Date.now(),
+          dateModified: file.lastModified,
+          playCount: 0,
+          isFavorite: false,
+          hasLyrics: false,
+          availability: 'available'
+        };
+
+        await this.audioFileRepo.save(audioFile);
+        await this.trackRepo.save(track);
+        existingPaths.set(virtualPath, { id: fileId, sizeBytes: file.size, modifiedTimeMs: file.lastModified });
+        filesAdded++;
+
+        // Enrich metadata
+        if (this.metadataService) {
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            const buffer = new Uint8Array(arrayBuffer);
+            await this.metadataService.enrichTrackMetadata(trackId, buffer, container);
+          } catch (enrichErr) {
+            this.logger.warn(`Metadata extraction failed for ${file.name}:`, { error: String(enrichErr) });
+          }
+        }
+      } catch (fileErr) {
+        filesFailed++;
+        this.logger.error(`Failed to import audio file ${file.name}:`, fileErr);
       }
     }
 
@@ -404,7 +446,11 @@ export class ScannerService implements IScannerService {
       });
     }
 
-    return { filesAdded, filesSkipped };
+    this.logger.info(`[Scanner] successful imports: ${filesAdded}`);
+    this.logger.info(`[Scanner] already existing / skipped: ${filesSkipped}`);
+    this.logger.info(`[Scanner] failed imports: ${filesFailed}`);
+
+    return { filesAdded, filesSkipped, filesFailed, unsupported: filesUnsupported };
   }
 
   public async cancelScan(): Promise<void> {
@@ -417,11 +463,33 @@ export class ScannerService implements IScannerService {
 
   private async flushBatch(files: AudioFile[], tracks: Track[]): Promise<void> {
     if (files.length > 0) {
-      await this.audioFileRepo.saveBatch([...files]);
+      try {
+        await this.audioFileRepo.saveBatch([...files]);
+      } catch (err) {
+        this.logger.warn('Batch save failed for audio files; saving individually', { error: String(err) });
+        for (const f of files) {
+          try {
+            await this.audioFileRepo.save(f);
+          } catch (itemErr) {
+            this.logger.error(`Individual save failed for file ${f.path}`, itemErr);
+          }
+        }
+      }
       files.length = 0;
     }
     if (tracks.length > 0) {
-      await this.trackRepo.saveBatch([...tracks]);
+      try {
+        await this.trackRepo.saveBatch([...tracks]);
+      } catch (err) {
+        this.logger.warn('Batch save failed for tracks; saving individually', { error: String(err) });
+        for (const t of tracks) {
+          try {
+            await this.trackRepo.save(t);
+          } catch (itemErr) {
+            this.logger.error(`Individual save failed for track ${t.id}`, itemErr);
+          }
+        }
+      }
       tracks.length = 0;
     }
   }

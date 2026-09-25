@@ -18,6 +18,7 @@ export interface IFilesystemAdapter {
     onFile: (entry: DiscoveredFileEntry) => void | Promise<void>,
     options?: {
       onDirectory?: (dirPath: string) => void | Promise<void>;
+      onUnsupported?: (entryPath: string, filename: string) => void | Promise<void>;
       onError?: (path: string, error: Error) => void;
       signal?: AbortSignal;
     }
@@ -155,6 +156,7 @@ export class VirtualFilesystemAdapter extends BaseFilesystemAdapter implements I
     onFile: (entry: DiscoveredFileEntry) => void | Promise<void>,
     options?: {
       onDirectory?: (dirPath: string) => void | Promise<void>;
+      onUnsupported?: (entryPath: string, filename: string) => void | Promise<void>;
       onError?: (path: string, error: Error) => void;
       signal?: AbortSignal;
     }
@@ -184,6 +186,12 @@ export class VirtualFilesystemAdapter extends BaseFilesystemAdapter implements I
           filesCount++;
           try {
             await onFile(entry);
+          } catch (e) {
+            options?.onError?.(filePath, e as Error);
+          }
+        } else {
+          try {
+            await options?.onUnsupported?.(filePath, entry.name);
           } catch (e) {
             options?.onError?.(filePath, e as Error);
           }
