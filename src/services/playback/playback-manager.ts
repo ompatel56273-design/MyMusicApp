@@ -1052,7 +1052,7 @@ export class PlaybackManager implements IPlaybackManager {
     if (isPlaying && this.currentState !== 'playing') {
       this.transitionToState('playing');
     } else if (!isPlaying && this.currentState === 'playing') {
-      this.transitionToState('playing');
+      this.transitionToState('paused');
     }
   }
 

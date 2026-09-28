@@ -71,4 +71,10 @@ describe('Mp4AtomParser', () => {
     expect(parsed.album).toBe('Random Access Memories');
     expect(parsed.container).toBe('m4a');
   });
+
+  it('should tolerate empty or truncated buffers safely', () => {
+    expect(Mp4AtomParser.parse(new Uint8Array([]))).toEqual({});
+    expect(Mp4AtomParser.parse(new Uint8Array([0, 0, 0, 4]))).toEqual({});
+    expect(Mp4AtomParser.parse(new Uint8Array([0, 0, 0, 10, 0x66, 0x74, 0x79, 0x70, 0x00]))).toBeDefined();
+  });
 });

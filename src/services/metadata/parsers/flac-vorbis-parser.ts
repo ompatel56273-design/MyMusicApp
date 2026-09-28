@@ -173,6 +173,7 @@ export class FlacVorbisParser {
     const view = new DataView(block.buffer, block.byteOffset, block.byteLength);
 
     let offset = 4; // Skip picture type (4 bytes)
+    if (offset + 4 > block.length) return undefined;
     const mimeLength = view.getUint32(offset);
     offset += 4;
 
@@ -180,6 +181,7 @@ export class FlacVorbisParser {
     const mimeType = this.textDecoder.decode(block.subarray(offset, offset + mimeLength)).toLowerCase() || 'image/jpeg';
     offset += mimeLength;
 
+    if (offset + 4 > block.length) return undefined;
     const descLength = view.getUint32(offset);
     offset += 4 + descLength; // Skip description
     offset += 16; // Skip width(4), height(4), depth(4), colors(4)

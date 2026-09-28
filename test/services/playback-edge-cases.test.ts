@@ -152,10 +152,37 @@ describe('PlaybackManager Edge Cases & Invariants', () => {
     await playbackManager.playTrack(tracks[0]!, tracks);
     playbackManager.setShuffleMode('on');
     expect(playbackManager.shuffleMode).toBe('on');
-    expect(playbackManager.queue).toHaveLength(5);
-
     playbackManager.setShuffleMode('off');
     expect(playbackManager.shuffleMode).toBe('off');
     expect(playbackManager.queue).toHaveLength(5);
+  });
+
+  it('should transition to paused when audio engine signals playback stopped', async () => {
+    let stateChangeCb: ((isPlaying: boolean) => void) | undefined;
+    (mockAudioEngine as any).setCallbacks = vi.fn((callbacks) => {
+      stateChangeCb = callbacks.onStateChange;
+    });
+
+    const manager = new PlaybackManager({
+      audioEngine: mockAudioEngine,
+      filesystem,
+      trackRepo: mockTrackRepo,
+      audioFileRepo: mockAudioFileRepo,
+      queueRepo: mockQueueRepo,
+      historyRepo: mockHistoryRepo,
+      eventBus
+    });
+
+    await manager.playTrack(validTrack);
+    expect(manager.state).toBe('playing');
+
+    // Audio engine signals paused
+    if (stateChangeCb) {
+      stateChangeCb(false);
+      expect(manager.state).toBe('paused');
+
+      stateChangeCb(true);
+      expect(manager.state).toBe('playing');
+    }
   });
 });

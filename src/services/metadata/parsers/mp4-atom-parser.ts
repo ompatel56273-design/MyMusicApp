@@ -14,6 +14,7 @@ export class Mp4AtomParser {
   }
 
   public static parse(buffer: Uint8Array): Partial<ExtractedMetadata> {
+    if (buffer.length < 8) return {};
     const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
     const tags: Record<string, any> = {};
     let artwork: ExtractedArtwork | undefined;

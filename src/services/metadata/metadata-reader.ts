@@ -14,16 +14,20 @@ export class MetadataReader implements IMetadataReader {
     let parsed: Partial<ExtractedMetadata> = {};
 
     // 1. Auto-detect from binary magic bytes or container hint
-    if (ID3Parser.isID3(buffer) || container === 'mp3' || container === 'aiff') {
-      parsed = ID3Parser.parse(buffer);
-    } else if (FlacVorbisParser.isFlac(buffer) || container === 'flac') {
-      parsed = FlacVorbisParser.parse(buffer);
-    } else if (FlacVorbisParser.isOgg(buffer) || container === 'ogg' || container === 'opus') {
-      parsed = FlacVorbisParser.parse(buffer);
-    } else if (Mp4AtomParser.isMp4(buffer) || container === 'm4a' || container === 'aac' || container === 'alac') {
-      parsed = Mp4AtomParser.parse(buffer);
-    } else if (WavRiffParser.isWav(buffer) || container === 'wav') {
-      parsed = WavRiffParser.parse(buffer);
+    try {
+      if (ID3Parser.isID3(buffer) || container === 'mp3' || container === 'aiff') {
+        parsed = ID3Parser.parse(buffer);
+      } else if (FlacVorbisParser.isFlac(buffer) || container === 'flac') {
+        parsed = FlacVorbisParser.parse(buffer);
+      } else if (FlacVorbisParser.isOgg(buffer) || container === 'ogg' || container === 'opus') {
+        parsed = FlacVorbisParser.parse(buffer);
+      } else if (Mp4AtomParser.isMp4(buffer) || container === 'm4a' || container === 'aac' || container === 'alac') {
+        parsed = Mp4AtomParser.parse(buffer);
+      } else if (WavRiffParser.isWav(buffer) || container === 'wav') {
+        parsed = WavRiffParser.parse(buffer);
+      }
+    } catch {
+      parsed = {};
     }
 
     // Default container & codec mapping

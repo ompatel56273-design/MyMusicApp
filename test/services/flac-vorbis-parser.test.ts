@@ -84,4 +84,17 @@ describe('FlacVorbisParser', () => {
     expect(parsed.sampleRate).toBe(96000);
     expect(parsed.channels).toBe(2);
   });
+
+  it('should tolerate truncated or malformed buffers without throwing RangeError', () => {
+    // 1. Truncated FLAC header
+    const truncated = new Uint8Array([0x66, 0x4c, 0x61, 0x43, 0x00, 0x00]);
+    const res1 = FlacVorbisParser.parse(truncated);
+    expect(res1).toBeDefined();
+
+    // 2. Corrupted Picture block
+    const corruptedPic = new Uint8Array([0x66, 0x4c, 0x61, 0x43, 0x86, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x03]);
+    const res2 = FlacVorbisParser.parse(corruptedPic);
+    expect(res2).toBeDefined();
+    expect(res2.artwork).toBeUndefined();
+  });
 });
