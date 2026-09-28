@@ -9,6 +9,7 @@ export interface NormalizedArtistEntry {
 export interface NormalizedMetadataResult {
   readonly title: string;
   readonly primaryArtist: string;
+  readonly hasRealArtist: boolean;
   readonly allArtists: readonly NormalizedArtistEntry[];
   readonly albumTitle?: string | undefined;
   readonly albumArtist?: string | undefined;
@@ -30,9 +31,11 @@ export class MetadataNormalizer {
     // Standardize raw strings
     let rawTitle = (raw.title || '').trim();
     let rawArtist = (raw.artist || '').trim();
+    let extractedAlbum: string | undefined;
+    let extractedTrackNumber: number | undefined;
 
     // 1. Filename Parsing Fallback if embedded title or artist is missing
-    if ((!rawTitle || !rawArtist) && fallbackFilename) {
+    if (fallbackFilename) {
       const lastDot = fallbackFilename.lastIndexOf('.');
       const baseName = lastDot > 0 ? fallbackFilename.substring(0, lastDot).trim() : fallbackFilename.trim();
 
@@ -45,6 +48,7 @@ export class MetadataNormalizer {
         const matchSimple = baseName.match(/^(.+?)\s+-\s+(.+)$/);
 
         if (matchWithTrack) {
+          extractedTrackNumber = parseInt(matchWithTrack[1]!, 10);
           if (!rawArtist) rawArtist = matchWithTrack[2]!.trim();
           if (!rawTitle) rawTitle = matchWithTrack[3]!.trim();
         } else if (matchSimple) {
@@ -56,7 +60,9 @@ export class MetadataNormalizer {
       }
     }
 
-    let title = rawTitle || 'Unknown Track';
+    const title = rawTitle || 'Unknown Track';
+    const effectiveArtist = rawArtist || '';
+    const hasRealArtist = !!effectiveArtist && effectiveArtist.toLowerCase() !== 'unknown artist';
 
     // 2. Multi-Artist Extraction
     const artistList: NormalizedArtistEntry[] = [];
@@ -71,32 +77,31 @@ export class MetadataNormalizer {
           });
         }
       }
-    } else if (rawArtist) {
-      // Split on delimiters
-      const tokens = rawArtist.split(this.ARTIST_DELIMITERS).map(s => s.trim()).filter(Boolean);
+    } else if (effectiveArtist) {
+      const tokens = effectiveArtist.split(this.ARTIST_DELIMITERS).map(s => s.trim()).filter(Boolean);
       if (tokens.length > 0) {
-        artistList.push({ name: tokens[0], role: 'primary' });
+        artistList.push({ name: tokens[0]!, role: 'primary' });
         for (let i = 1; i < tokens.length; i++) {
-          if (!artistList.some(item => item.name.toLowerCase() === tokens[i].toLowerCase())) {
-            artistList.push({ name: tokens[i], role: 'featured' });
+          if (!artistList.some(item => item.name.toLowerCase() === tokens[i]!.toLowerCase())) {
+            artistList.push({ name: tokens[i]!, role: 'featured' });
           }
         }
       } else {
-        artistList.push({ name: rawArtist, role: 'primary' });
+        artistList.push({ name: effectiveArtist, role: 'primary' });
       }
     }
 
-    const primaryArtist = artistList.length > 0 ? artistList[0].name : (rawArtist || 'Unknown Artist');
+    const primaryArtist = artistList.length > 0 ? artistList[0]!.name : (effectiveArtist || 'Unknown Artist');
 
     // 3. Album & Album Artist
-    const albumTitle = (raw.album || '').trim() || undefined;
+    const albumTitle = (raw.album || '').trim() || extractedAlbum || undefined;
     const albumArtist = (raw.albumArtist || '').trim() || (raw.isCompilation ? 'Various Artists' : undefined);
 
     // 4. Genre
     const genreName = (raw.genre || '').trim() || undefined;
 
     // 5. Track & Disc Numbers
-    const trackNumber = raw.trackNumber && raw.trackNumber > 0 ? raw.trackNumber : undefined;
+    const trackNumber = (raw.trackNumber && raw.trackNumber > 0) ? raw.trackNumber : extractedTrackNumber;
     const discNumber = raw.discNumber && raw.discNumber > 0 ? raw.discNumber : undefined;
 
     // 6. Year
@@ -113,6 +118,7 @@ export class MetadataNormalizer {
     return {
       title,
       primaryArtist,
+      hasRealArtist,
       allArtists: artistList.length > 0 ? artistList : [{ name: primaryArtist, role: 'primary' }],
       albumTitle,
       albumArtist,

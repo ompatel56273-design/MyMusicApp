@@ -283,3 +283,8 @@ export interface IAudioEngine {
   setCrossfade?(enabled: boolean, durationSec?: number): void;
   readonly isCrossfading?: boolean;
 }
+
+export interface IDuplicateDetectorService {
+  detectDuplicates(options?: import('../../domain/entities/duplicate-types').DuplicateDetectionOptions): Promise<import('../../domain/entities/duplicate-types').DuplicateScanResult>;
+  resolveDuplicates(actions: readonly import('../../domain/entities/duplicate-types').DuplicateResolutionAction[]): Promise<import('../../domain/entities/duplicate-types').DuplicateResolutionResult>;
+}

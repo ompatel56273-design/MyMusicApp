@@ -18,26 +18,7 @@ export class Mp4AtomParser {
     const tags: Record<string, any> = {};
     let artwork: ExtractedArtwork | undefined;
 
-    // Traverse root atoms searching for 'moov' -> 'mvhd' for duration
-    let durationMs: number | undefined;
-    const mvhdAtom = this.findAtomPath(buffer, view, 0, buffer.length, ['moov', 'mvhd']);
-    if (mvhdAtom) {
-      const version = buffer[mvhdAtom.offset + 8];
-      let timescale = 0;
-      let duration = 0;
-      if (version === 0 && mvhdAtom.size >= 28) {
-        timescale = view.getUint32(mvhdAtom.offset + 20);
-        duration = view.getUint32(mvhdAtom.offset + 24);
-      } else if (version === 1 && mvhdAtom.size >= 40) {
-        timescale = view.getUint32(mvhdAtom.offset + 28);
-        duration = Number(view.getBigUint64(mvhdAtom.offset + 32));
-      }
-      if (timescale > 0 && duration > 0) {
-        durationMs = Math.round((duration / timescale) * 1000);
-      }
-    }
-
-    // Traverse root atoms searching for 'moov'
+    // Traverse root atoms searching for 'moov' -> 'udta' -> 'meta' -> 'ilst'
     const ilstAtom = this.findAtomPath(buffer, view, 0, buffer.length, ['moov', 'udta', 'meta', 'ilst']);
 
     if (ilstAtom) {
@@ -94,6 +75,27 @@ export class Mp4AtomParser {
         }
 
         offset += atomSize;
+      }
+    }
+
+    // 2. Extract duration from 'mvhd' atom
+    let durationMs: number | undefined;
+    const mvhdAtom = this.findAtomPath(buffer, view, 0, buffer.length, ['moov', 'mvhd']);
+    if (mvhdAtom && mvhdAtom.size >= 28) {
+      const version = view.getUint8(mvhdAtom.offset + 8);
+      let timescale = 0;
+      let duration = 0;
+      if (version === 0 && mvhdAtom.size >= 32) {
+        timescale = view.getUint32(mvhdAtom.offset + 20);
+        duration = view.getUint32(mvhdAtom.offset + 24);
+      } else if (version === 1 && mvhdAtom.size >= 44) {
+        timescale = view.getUint32(mvhdAtom.offset + 28);
+        const high = view.getUint32(mvhdAtom.offset + 32);
+        const low = view.getUint32(mvhdAtom.offset + 36);
+        duration = high * 4294967296 + low;
+      }
+      if (timescale > 0 && duration > 0) {
+        durationMs = Math.round((duration / timescale) * 1000);
       }
     }
 

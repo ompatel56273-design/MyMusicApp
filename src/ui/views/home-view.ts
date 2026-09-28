@@ -1692,6 +1692,12 @@ export class HomeView implements IView {
     );
 
     this.subscriptions.push(
+      this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, () => {
+        void this.loadData();
+      })
+    );
+
+    this.subscriptions.push(
       this.eventBus.subscribe('dashboard:settings-changed', () => {
         this.renderDynamicSections();
         void this.loadData();

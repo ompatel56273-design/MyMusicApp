@@ -2,10 +2,9 @@ import type { RouterService } from '../navigation/router-service';
 import type { AppRoute, RouteState } from '../navigation/route-types';
 import type { Disposable } from '../../core/types/common';
 import type { ILibraryService } from '../../services/contracts/service-contracts';
-import { getIconSvg, type IconName } from '../icons/icon-registry';
-
-import { EventBus } from '../../core/events/event-bus';
+import type { EventBus } from '../../core/events/event-bus';
 import { DomainEvents } from '../../domain/events/domain-events';
+import { getIconSvg, type IconName } from '../icons/icon-registry';
 
 export interface NavItem {
   id: AppRoute;
@@ -56,7 +55,7 @@ export class SidebarComponent {
 
     if (this.eventBus) {
       this.eventBusSub = this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, () => {
-        this.fetchLibraryStats();
+        void this.fetchLibraryStats();
       });
     }
 

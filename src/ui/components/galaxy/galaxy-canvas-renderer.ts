@@ -459,7 +459,18 @@ export class GalaxyCanvasRenderer {
     }
 
     // 7. Draw Nodes with 3D Spherical Gradients & Saturn-like Rings
-    for (const node of visibleNodes) {
+    const renderedLabelBoxes: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+
+    // Sort nodes to draw and register labels in hierarchy order (selected/playing/genres/artists first)
+    const priorityOrder: Record<string, number> = { genre: 1, artist: 2, album: 3, playlist: 4, folder: 5, track: 6 };
+    const sortedNodes = [...visibleNodes].sort((a, b) => {
+      const aSelected = a.id === this.selectedNodeId || a.id === this.focusedNodeId || a.entityId === this.playingEntityId ? 0 : 1;
+      const bSelected = b.id === this.selectedNodeId || b.id === this.focusedNodeId || b.entityId === this.playingEntityId ? 0 : 1;
+      if (aSelected !== bSelected) return aSelected - bSelected;
+      return (priorityOrder[a.type] ?? 99) - (priorityOrder[b.type] ?? 99);
+    });
+
+    for (const node of sortedNodes) {
       const sx = toScreenX(node.x);
       const sy = toScreenY(node.y);
       const screenRadius = Math.max(4, node.radius * zoom);
@@ -540,52 +551,43 @@ export class GalaxyCanvasRenderer {
       ctx.lineWidth = isSelected ? 2.5 : isFocused ? 2 : 1;
       ctx.strokeStyle = isSelected ? '#ffffff' : isFocused ? '#38bdf8' : isFavorite ? '#fbbf24' : 'rgba(255, 255, 255, 0.45)';
       ctx.stroke();
-    }
 
-    // 8. Node Labels Pass with Bounding Box Collision Suppression
-    const placedLabelBoxes: { minX: number; maxX: number; minY: number; maxY: number }[] = [];
+      // Node Labels with Collision Detection
+      const isHighPriority = isSelected || isFocused || isPlaying || node.type === 'genre' || (node.type === 'artist' && zoom >= 0.4);
+      const shouldAttemptLabel = isHighPriority || (node.type === 'album' && zoom >= 0.5) || (node.type === 'track' && zoom >= 0.6) || (zoom >= 0.7);
 
-    for (const node of visibleNodes) {
-      const sx = toScreenX(node.x);
-      const sy = toScreenY(node.y);
-      const screenRadius = Math.max(4, node.radius * zoom);
-
-      const isSelected = node.id === this.selectedNodeId;
-      const isFocused = node.id === this.focusedNodeId;
-      const isPlaying = node.entityId === this.playingEntityId;
-      const isFavorite = node.metadata.isFavorite;
-
-      const isHighPriority = isSelected || isFocused || isPlaying || node.type === 'genre';
-      const isVisibleByZoom = zoom >= 0.65 || (node.type === 'artist' && zoom >= 0.45);
-
-      if (isHighPriority || isVisibleByZoom) {
+      if (shouldAttemptLabel) {
         const fontSize = Math.max(10, Math.min(14, 11 * zoom));
-        ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-        const textWidth = ctx.measureText(node.label).width;
-        const textHeight = fontSize + (node.metadata.trackCount !== undefined ? fontSize + 6 : 0);
+        const fontStr = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+        ctx.font = fontStr;
 
-        const boxMinX = sx - textWidth / 2 - 6;
-        const boxMaxX = sx + textWidth / 2 + 6;
-        const boxMinY = sy + screenRadius + 2;
-        const boxMaxY = sy + screenRadius + textHeight + 6;
+        const labelText = node.label.length > 24 ? node.label.substring(0, 22) + '…' : node.label;
+        const textMetrics = ctx.measureText(labelText);
+        const textWidth = textMetrics.width;
+        const pad = 4;
+        const boxX1 = sx - textWidth / 2 - pad;
+        const boxX2 = sx + textWidth / 2 + pad;
+        const boxY1 = sy + screenRadius + 2;
+        const boxY2 = sy + screenRadius + fontSize + (node.metadata.trackCount !== undefined && (zoom >= 0.75 || isSelected || node.type === 'genre') ? fontSize + 8 : 6);
 
-        let hasOverlap = false;
+        let collides = false;
         if (!isHighPriority) {
-          for (const b of placedLabelBoxes) {
-            if (boxMinX < b.maxX && boxMaxX > b.minX && boxMinY < b.maxY && boxMaxY > b.minY) {
-              hasOverlap = true;
+          for (const box of renderedLabelBoxes) {
+            if (!(boxX2 < box.x1 || boxX1 > box.x2 || boxY2 < box.y1 || boxY1 > box.y2)) {
+              collides = true;
               break;
             }
           }
         }
 
-        if (!hasOverlap) {
-          placedLabelBoxes.push({ minX: boxMinX, maxX: boxMaxX, minY: boxMinY, maxY: boxMaxY });
+        if (!collides || isHighPriority) {
+          renderedLabelBoxes.push({ x1: boxX1, y1: boxY1, x2: boxX2, y2: boxY2 });
 
-          ctx.fillStyle = isSelected ? '#ffffff' : isFocused ? '#38bdf8' : isPlaying ? '#34d399' : 'rgba(255, 255, 255, 0.95)';
+          ctx.font = fontStr;
+          ctx.fillStyle = isSelected ? '#ffffff' : isFocused ? '#38bdf8' : 'rgba(255, 255, 255, 0.95)';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'top';
-          ctx.fillText(node.label, sx, sy + screenRadius + 4);
+          ctx.fillText(labelText, sx, sy + screenRadius + 4);
 
           // Subtitle (Track count or Favorite Star)
           const trackCount = node.metadata.trackCount;

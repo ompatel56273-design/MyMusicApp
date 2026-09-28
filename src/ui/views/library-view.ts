@@ -1,12 +1,20 @@
 import type { IView } from './view-interface';
 import type { RouteParams, LibraryTab } from '../navigation/route-types';
-import type { ILibraryService, IPlaybackManager, IArtworkService, IScannerService, IPlaylistService } from '../../services/contracts/service-contracts';
+import type {
+  ILibraryService,
+  IPlaybackManager,
+  IArtworkService,
+  IScannerService,
+  IPlaylistService,
+  IDuplicateDetectorService
+} from '../../services/contracts/service-contracts';
 import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-filesystem-adapter';
 import type { EventBus } from '../../core/events/event-bus';
 import { DomainEvents } from '../../domain/events/domain-events';
 import type { Disposable } from '../../core/types/common';
 import { LibraryToolbar, type LibraryToolbarState } from '../components/library/library-toolbar';
 import { TrackInspectorComponent } from '../components/library/track-inspector-component';
+import { DuplicateDetectionModalComponent } from '../components/library/duplicate-detection-modal';
 import { SongsTabView } from './library/songs-tab-view';
 import { AlbumsTabView } from './library/albums-tab-view';
 import { ArtistsTabView } from './library/artists-tab-view';
@@ -17,7 +25,6 @@ import { getIconSvg, type IconName } from '../icons/icon-registry';
 
 import type { DuplicateDetectorService } from '../../services/duplicate/duplicate-detector-service';
 import type { LibraryHealthService } from '../../services/library/library-health-service';
-import { DuplicateDetectionModal } from '../components/library/duplicate-detection-modal';
 import { LibraryHealthDashboard } from '../components/library/library-health-dashboard';
 import type { AlbumMergeService } from '../../services/library/album-merge-service';
 
@@ -29,7 +36,7 @@ export interface LibraryViewDependencies {
   scannerService?: IScannerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   eventBus?: EventBus | undefined;
-  duplicateDetectorService?: DuplicateDetectorService | undefined;
+  duplicateDetectorService?: (IDuplicateDetectorService | DuplicateDetectorService) | undefined;
   healthService?: LibraryHealthService | undefined;
   playlistService?: IPlaylistService | undefined;
 }
@@ -55,7 +62,7 @@ export class LibraryView implements IView {
   private readonly scannerService?: IScannerService | undefined;
   private readonly fsAdapter?: BrowserFilesystemAdapter | undefined;
   private readonly eventBus?: EventBus | undefined;
-  private readonly duplicateDetectorService?: DuplicateDetectorService | undefined;
+  private readonly duplicateDetectorService?: (IDuplicateDetectorService | DuplicateDetectorService) | undefined;
   private readonly healthService?: LibraryHealthService | undefined;
   private readonly playlistService?: IPlaylistService | undefined;
   private libraryUpdateSub: Disposable | null = null;
@@ -387,7 +394,7 @@ export class LibraryView implements IView {
             </button>
             ${this.duplicateDetectorService ? `
               <button id="library-duplicates-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; border: 1px solid var(--glass-border-interactive); background: rgba(168, 85, 247, 0.12); color: var(--color-text-primary); transition: all var(--duration-fast) var(--ease-smooth);">
-                <span>${getIconSvg('sparkles', { size: 16, color: 'var(--color-accent-purple-glow)' })}</span>
+                <span style="color: var(--color-accent-purple-glow); display: flex;">${getIconSvg('filter', { size: 15 })}</span>
                 <span>Find Duplicates</span>
               </button>
             ` : ''}
@@ -514,14 +521,13 @@ export class LibraryView implements IView {
     const dupBtn = this.container.querySelector<HTMLButtonElement>('#library-duplicates-btn');
     dupBtn?.addEventListener('click', () => {
       if (this.duplicateDetectorService) {
-        const modal = new DuplicateDetectionModal({
-          duplicateDetectorService: this.duplicateDetectorService,
-          onResolved: async () => {
+        DuplicateDetectionModalComponent.show({
+          duplicateDetector: this.duplicateDetectorService,
+          onCompleted: async () => {
             await this.updateStats();
             this.mountActiveTab();
           }
         });
-        modal.mount();
       }
     });
 
@@ -532,27 +538,25 @@ export class LibraryView implements IView {
           healthService: this.healthService,
           onOpenDuplicates: () => {
             if (this.duplicateDetectorService) {
-              const modal = new DuplicateDetectionModal({
-                duplicateDetectorService: this.duplicateDetectorService,
-                onResolved: async () => {
+              DuplicateDetectionModalComponent.show({
+                duplicateDetector: this.duplicateDetectorService,
+                onCompleted: async () => {
                   await this.updateStats();
                   this.mountActiveTab();
                 }
               });
-              modal.mount();
             }
           },
           onNavigateTab: (tab) => {
             if (tab === 'duplicates') {
               if (this.duplicateDetectorService) {
-                const modal = new DuplicateDetectionModal({
-                  duplicateDetectorService: this.duplicateDetectorService,
-                  onResolved: async () => {
+                DuplicateDetectionModalComponent.show({
+                  duplicateDetector: this.duplicateDetectorService,
+                  onCompleted: async () => {
                     await this.updateStats();
                     this.mountActiveTab();
                   }
                 });
-                modal.mount();
               }
             } else {
               this.currentTab = tab as LibraryTab;

@@ -220,9 +220,10 @@ export class StatsService {
       const artistMap = new Map<string, TopArtistItem>();
 
       for (const track of result.items) {
-        const name = (track.artistName && track.artistName.trim()) || '';
-        if (!name || name.toLowerCase() === 'unknown artist') continue;
-
+        const name = track.artistName?.trim();
+        if (!name || name.toLowerCase() === 'unknown artist') {
+          continue;
+        }
         const existing = artistMap.get(name);
         const pCount = track.playCount || 0;
 
@@ -266,9 +267,10 @@ export class StatsService {
       const albumMap = new Map<string, TopAlbumItem>();
 
       for (const track of result.items) {
-        const title = (track.albumTitle && track.albumTitle.trim()) || '';
-        if (!title || title.toLowerCase() === 'unknown album') continue;
-
+        const title = track.albumTitle?.trim();
+        if (!title || title.toLowerCase() === 'unknown album') {
+          continue;
+        }
         const artist = (track.artistName && track.artistName.trim()) || 'Unknown Artist';
         const key = `${title}:::${artist}`;
         const existing = albumMap.get(key);

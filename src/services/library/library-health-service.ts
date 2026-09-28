@@ -207,12 +207,13 @@ export class LibraryHealthService {
       if (this.duplicateDetectorService) {
         try {
           const dupSummary = await this.duplicateDetectorService.detectDuplicates();
-          duplicateGroupsCount = dupSummary.duplicateGroupsFound;
-          duplicateTracksCount = dupSummary.totalDuplicatesFound;
-          potentialSpaceSavingsBytes = dupSummary.potentialSpaceSavingsBytes;
+          duplicateGroupsCount = dupSummary.totalGroups;
+          duplicateTracksCount = dupSummary.totalDuplicateTracks;
+          potentialSpaceSavingsBytes = dupSummary.potentialSavingsBytes;
 
           for (const group of dupSummary.groups) {
-            for (const dup of group.duplicateTracks) {
+            for (const candidate of group.candidates) {
+              const dup = candidate.track;
               issues.push({
                 id: `issue_dup_${dup.id}`,
                 category: 'duplicates',

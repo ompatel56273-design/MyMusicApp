@@ -28,7 +28,8 @@ import type {
   IVisualizerService,
   IGalaxyService,
   IDashboardService,
-  IScannerService
+  IScannerService,
+  IDuplicateDetectorService
 } from '../../services/contracts/service-contracts';
 import { EventBus } from '../../core/events/event-bus';
 import type { Disposable } from '../../core/types/common';
@@ -36,11 +37,6 @@ import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-fi
 import type { IDatabaseAdapter } from '../../data/db/database-adapter';
 import { ThemeManager } from '../theme/theme-manager';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
-
-import type { LibraryAnalyticsService } from '../../services/analytics/library-analytics-service';
-import type { AlbumMergeService } from '../../services/library/album-merge-service';
-import type { DuplicateDetectorService } from '../../services/duplicate/duplicate-detector-service';
-import type { LibraryHealthService } from '../../services/library/library-health-service';
 
 export interface AppShellDependencies {
   playbackManager: IPlaybackManager;
@@ -56,14 +52,11 @@ export interface AppShellDependencies {
   dashboardService?: IDashboardService | undefined;
   scannerService?: IScannerService | undefined;
   statsService?: StatsService | undefined;
-  libraryAnalyticsService?: LibraryAnalyticsService | undefined;
-  albumMergeService?: AlbumMergeService | undefined;
-  duplicateDetectorService?: DuplicateDetectorService | undefined;
-  healthService?: LibraryHealthService | undefined;
   sleepTimerService?: SleepTimerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   dbAdapter?: IDatabaseAdapter | undefined;
   eventBus: EventBus;
+  duplicateDetectorService?: IDuplicateDetectorService | undefined;
 }
 
 /**
@@ -158,13 +151,12 @@ export class AppShell {
         'library',
         new LibraryView({
           libraryService: deps.libraryService,
-          albumMergeService: deps.albumMergeService,
           playbackManager: deps.playbackManager,
           artworkService: deps.artworkService,
           scannerService: deps.scannerService,
           fsAdapter: deps.fsAdapter,
           eventBus: deps.eventBus,
-          playlistService: deps.playlistService
+          duplicateDetectorService: deps.duplicateDetectorService
         })
       ],
       [
@@ -228,7 +220,6 @@ export class AppShell {
             },
             dbAdapter: deps.dbAdapter
           }),
-          analyticsService: deps.libraryAnalyticsService,
           playbackManager: deps.playbackManager,
           artworkService: deps.artworkService,
           router: this.router,

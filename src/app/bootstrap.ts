@@ -27,8 +27,7 @@ import { PlaylistRepository } from '../data/repositories/playlist-repository';
 import { HistoryRepository } from '../data/repositories/history-repository';
 import { QueueRepository } from '../data/repositories/queue-repository';
 import { LyricsRepository } from '../data/repositories/lyrics-repository';
-import { LibraryAnalyticsService } from '../services/analytics/library-analytics-service';
-import { AlbumMergeService } from '../services/library/album-merge-service';
+
 import { BrowserFilesystemAdapter } from '../services/scanner/browser-filesystem-adapter';
 import { AudioEngine } from '../services/audio/audio-engine';
 import { ArtworkService } from '../services/artwork/artwork-service';
@@ -47,7 +46,6 @@ import { DashboardService } from '../services/dashboard/dashboard-service';
 import { StatsService } from '../services/stats/stats-service';
 import { SleepTimerService } from '../services/playback/sleep-timer-service';
 import { DuplicateDetectorService } from '../services/duplicate/duplicate-detector-service';
-import { LibraryHealthService } from '../services/library/library-health-service';
 import { FileAccessCapabilityService } from '../services/scanner/file-access-capability';
 import { LocalMusicOnboardingModal } from '../ui/components/onboarding/local-music-onboarding-modal';
 
@@ -221,34 +219,7 @@ export class AppBootstrap {
       eventBus: this.eventBus,
       logger: this.logger
     });
-    const duplicateDetectorService = new DuplicateDetectorService(
-      trackRepo,
-      audioFileRepo,
-      this.eventBus
-    );
-    const healthService = new LibraryHealthService({
-      libraryService,
-      trackRepo,
-      audioFileRepo,
-      playlistRepo,
-      duplicateDetectorService,
-      eventBus: this.eventBus
-    });
-    const libraryAnalyticsService = new LibraryAnalyticsService({
-      trackRepo,
-      audioFileRepo,
-      artistRepo,
-      albumRepo,
-      genreRepo,
-      playlistRepo,
-      historyRepo,
-      statsService,
-      libraryHealthService: healthService,
-      duplicateDetectorService,
-      eventBus: this.eventBus
-    });
-    const albumMergeService = new AlbumMergeService({
-      albumRepo,
+    const duplicateDetectorService = new DuplicateDetectorService({
       trackRepo,
       eventBus: this.eventBus
     });
@@ -304,14 +275,11 @@ export class AppBootstrap {
       dashboardService,
       scannerService,
       statsService,
-      libraryAnalyticsService,
-      albumMergeService,
       sleepTimerService,
-      duplicateDetectorService,
-      healthService,
       fsAdapter,
       dbAdapter: adapter,
-      eventBus: this.eventBus
+      eventBus: this.eventBus,
+      duplicateDetectorService
     });
     this.appShell.mount(root);
 

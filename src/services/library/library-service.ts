@@ -103,38 +103,44 @@ export class LibraryService implements ILibraryService {
   }
 
   public async getLibraryStats(): Promise<{ trackCount: number; albumCount: number; artistCount: number }> {
-    const [trackCount, albumsResult, artistsResult, allTracksResult] = await Promise.all([
+    const [trackCount, allTracksResult, albumsResult, artistsResult] = await Promise.all([
       this.trackRepo.count(),
-      this.albumRepo.list({ offset: 0, limit: 10000 }),
-      this.artistRepo.list({ offset: 0, limit: 10000 }),
-      this.trackRepo.list({ limit: 10000 })
+      this.trackRepo.list({ limit: 10000 }),
+      this.albumRepo.list({ limit: 10000 }),
+      this.artistRepo.list({ limit: 10000 })
     ]);
 
-    const realArtistsInRepo = (artistsResult.items || []).filter(a => a.name && a.name.toLowerCase() !== 'unknown artist');
-    const realAlbumsInRepo = (albumsResult.items || []).filter(a => a.title && a.title.toLowerCase() !== 'unknown album');
+    // Count real artist entities (excluding empty or Unknown Artist)
+    const unknownArtistCount = artistsResult.items.filter(
+      a => a.name && a.name.trim().toLowerCase() === 'unknown artist'
+    ).length;
+    let artistCount = Math.max(0, (artistsResult.total ?? artistsResult.items.length) - unknownArtistCount);
 
-    let artistCount = artistsResult.total > 0 && artistsResult.items.length === artistsResult.total ? realArtistsInRepo.length : artistsResult.total;
-    let albumCount = albumsResult.total > 0 && albumsResult.items.length === albumsResult.total ? realAlbumsInRepo.length : albumsResult.total;
+    // Count real album entities (excluding empty or Unknown Album)
+    const unknownAlbumCount = albumsResult.items.filter(
+      a => a.title && a.title.trim().toLowerCase() === 'unknown album'
+    ).length;
+    let albumCount = Math.max(0, (albumsResult.total ?? albumsResult.items.length) - unknownAlbumCount);
 
+    // Fallback: If entities were not populated in stores but tracks have metadata
     if (artistCount === 0 && allTracksResult.items.length > 0) {
-      const distinctArtists = new Set<string>();
+      const uniqueArtists = new Set<string>();
       for (const t of allTracksResult.items) {
-        if (t.artistName && t.artistName.toLowerCase() !== 'unknown artist') {
-          distinctArtists.add(t.artistName.trim().toLowerCase());
+        if (t.artistName && t.artistName.trim() && t.artistName.trim().toLowerCase() !== 'unknown artist') {
+          uniqueArtists.add(t.artistName.trim().toLowerCase());
         }
       }
-      artistCount = distinctArtists.size;
+      artistCount = uniqueArtists.size;
     }
 
     if (albumCount === 0 && allTracksResult.items.length > 0) {
-      const distinctAlbums = new Set<string>();
+      const uniqueAlbums = new Set<string>();
       for (const t of allTracksResult.items) {
-        if (t.albumTitle && t.albumTitle.toLowerCase() !== 'unknown album') {
-          const key = `${t.albumTitle.trim().toLowerCase()}:::${(t.artistName || '').trim().toLowerCase()}`;
-          distinctAlbums.add(key);
+        if (t.albumTitle && t.albumTitle.trim() && t.albumTitle.trim().toLowerCase() !== 'unknown album') {
+          uniqueAlbums.add(t.albumTitle.trim().toLowerCase());
         }
       }
-      albumCount = distinctAlbums.size;
+      albumCount = uniqueAlbums.size;
     }
 
     return {

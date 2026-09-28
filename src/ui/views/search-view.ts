@@ -402,7 +402,7 @@ export class SearchView implements IView {
               </h1>
             </div>
             <p style="font-size: var(--font-size-xs); color: var(--color-text-secondary); margin: 0;">
-              Find tracks, artists, albums, and genres across your local lossless library.
+              Find tracks, artists, albums, and genres across your local music library.
             </p>
           </div>
 
