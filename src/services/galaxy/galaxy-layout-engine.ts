@@ -44,35 +44,62 @@ export class GalaxyLayoutEngine {
     const originX = options?.centerOriginX ?? 0;
     const originY = options?.centerOriginY ?? 0;
 
-    // Group nodes by type
-    const genres = nodes.filter(n => n.type === 'genre');
-    const artists = nodes.filter(n => n.type === 'artist');
-    const albums = nodes.filter(n => n.type === 'album');
-    const tracks = nodes.filter(n => n.type === 'track');
-    const playlists = nodes.filter(n => n.type === 'playlist');
-    const folders = nodes.filter(n => n.type === 'folder');
+    // Index all nodes and categorize by type in a single pass O(N)
+    const genres: GalaxyNode[] = [];
+    const artists: GalaxyNode[] = [];
+    const albums: GalaxyNode[] = [];
+    const tracks: GalaxyNode[] = [];
+    const playlists: GalaxyNode[] = [];
+    const folders: GalaxyNode[] = [];
+    const nodeById = new Map<string, GalaxyNode>();
 
-    // Build relationship maps from edges
+    for (const node of nodes) {
+      nodeById.set(node.id, node);
+      switch (node.type) {
+        case 'genre': genres.push(node); break;
+        case 'artist': artists.push(node); break;
+        case 'album': albums.push(node); break;
+        case 'track': tracks.push(node); break;
+        case 'playlist': playlists.push(node); break;
+        case 'folder': folders.push(node); break;
+      }
+    }
+
+    // Build relationship maps from edges in O(E) using map lookups
     const genreToArtists = new Map<string, GalaxyNode[]>();
     const artistToAlbums = new Map<string, GalaxyNode[]>();
     const albumToTracks = new Map<string, GalaxyNode[]>();
+    const seenEdges = new Set<string>();
 
     for (const edge of edges) {
+      const edgeKey = `${edge.sourceId}:${edge.targetId}`;
+      if (seenEdges.has(edgeKey)) continue;
+      seenEdges.add(edgeKey);
+
+      const targetNode = nodeById.get(edge.targetId);
+      if (!targetNode) continue;
+
       if (edge.type === 'genre-artist') {
-        const list = genreToArtists.get(edge.sourceId) ?? [];
-        const artist = artists.find(a => a.id === edge.targetId);
-        if (artist && !list.includes(artist)) list.push(artist);
-        genreToArtists.set(edge.sourceId, list);
+        let list = genreToArtists.get(edge.sourceId);
+        if (!list) {
+          list = [];
+          genreToArtists.set(edge.sourceId, list);
+        }
+        list.push(targetNode);
       } else if (edge.type === 'artist-album') {
-        const list = artistToAlbums.get(edge.sourceId) ?? [];
-        const album = albums.find(al => al.id === edge.targetId);
-        if (album && !list.includes(album)) list.push(album);
-        artistToAlbums.set(edge.sourceId, list);
+        let list = artistToAlbums.get(edge.sourceId);
+        if (!list) {
+          list = [];
+          artistToAlbums.set(edge.sourceId, list);
+        }
+        list.push(targetNode);
       } else if (edge.type === 'album-track') {
-        const list = albumToTracks.get(edge.sourceId) ?? [];
-        const track = tracks.find(t => t.id === edge.targetId);
-        if (track && !list.includes(track)) list.push(track);
-        albumToTracks.set(edge.sourceId, list);
+        let list = albumToTracks.get(edge.sourceId);
+        if (!list) {
+          list = [];
+          albumToTracks.set(edge.sourceId, list);
+        }
+        list.push(targetNode);
       }
     }
 
@@ -92,26 +119,25 @@ export class GalaxyLayoutEngine {
     const defaultCenter = { x: originX, y: originY };
 
     // 2. Position Artists around their primary Genre center
-    const unparentedArtists: GalaxyNode[] = [...artists];
+    const parentedArtists = new Set<string>();
     for (const [genreId, artistList] of genreToArtists.entries()) {
-      const parentGenre = genres.find(g => g.id === genreId);
+      const parentGenre = nodeById.get(genreId);
       const center = parentGenre ? { x: parentGenre.x, y: parentGenre.y } : defaultCenter;
       const aCount = artistList.length || 1;
       const artistOrbit = 260;
 
       artistList.forEach((artist, aIdx) => {
+        parentedArtists.add(artist.id);
         const angle = (aIdx / aCount) * Math.PI * 2 + (parentGenre ? (parentGenre.x * 0.001) : 0);
         artist.x = center.x + Math.cos(angle) * artistOrbit;
         artist.y = center.y + Math.sin(angle) * artistOrbit;
         artist.radius = artist.radius || GalaxyLayoutEngine.RADIUS_MAP.artist;
         artist.color = artist.color || GalaxyLayoutEngine.COLOR_MAP.artist;
-
-        const uIdx = unparentedArtists.indexOf(artist);
-        if (uIdx !== -1) unparentedArtists.splice(uIdx, 1);
       });
     }
 
     // Position any orphan artists around main origin across expanding concentric shells
+    const unparentedArtists = artists.filter(a => !parentedArtists.has(a.id));
     unparentedArtists.forEach((artist, idx) => {
       let shellIndex = 0;
       let capacity = 8;
@@ -131,25 +157,24 @@ export class GalaxyLayoutEngine {
     });
 
     // 3. Position Albums around their parent Artist
-    const unparentedAlbums = [...albums];
+    const parentedAlbums = new Set<string>();
     for (const [artistId, albumList] of artistToAlbums.entries()) {
-      const parentArtist = artists.find(a => a.id === artistId);
+      const parentArtist = nodeById.get(artistId);
       const center = parentArtist ? { x: parentArtist.x, y: parentArtist.y } : defaultCenter;
       const albCount = albumList.length || 1;
       const albumOrbit = 120;
 
       albumList.forEach((album, albIdx) => {
+        parentedAlbums.add(album.id);
         const angle = (albIdx / albCount) * Math.PI * 2;
         album.x = center.x + Math.cos(angle) * albumOrbit;
         album.y = center.y + Math.sin(angle) * albumOrbit;
         album.radius = album.radius || GalaxyLayoutEngine.RADIUS_MAP.album;
         album.color = album.color || GalaxyLayoutEngine.COLOR_MAP.album;
-
-        const uIdx = unparentedAlbums.indexOf(album);
-        if (uIdx !== -1) unparentedAlbums.splice(uIdx, 1);
       });
     }
 
+    const unparentedAlbums = albums.filter(al => !parentedAlbums.has(al.id));
     unparentedAlbums.forEach((album, idx) => {
       let shellIndex = 0;
       let capacity = 10;
@@ -169,25 +194,24 @@ export class GalaxyLayoutEngine {
     });
 
     // 4. Position Tracks in satellite cluster around their parent Album
-    const unparentedTracks = [...tracks];
+    const parentedTracks = new Set<string>();
     for (const [albumId, trackList] of albumToTracks.entries()) {
-      const parentAlbum = albums.find(al => al.id === albumId);
+      const parentAlbum = nodeById.get(albumId);
       const center = parentAlbum ? { x: parentAlbum.x, y: parentAlbum.y } : defaultCenter;
       const tCount = trackList.length || 1;
       const trackOrbit = 50;
 
       trackList.forEach((track, tIdx) => {
+        parentedTracks.add(track.id);
         const angle = (tIdx / tCount) * Math.PI * 2;
         track.x = center.x + Math.cos(angle) * trackOrbit;
         track.y = center.y + Math.sin(angle) * trackOrbit;
         track.radius = track.radius || GalaxyLayoutEngine.RADIUS_MAP.track;
         track.color = track.color || GalaxyLayoutEngine.COLOR_MAP.track;
-
-        const uIdx = unparentedTracks.indexOf(track);
-        if (uIdx !== -1) unparentedTracks.splice(uIdx, 1);
       });
     }
 
+    const unparentedTracks = tracks.filter(t => !parentedTracks.has(t.id));
     unparentedTracks.forEach((track, idx) => {
       let shellIndex = 0;
       let capacity = 12;
@@ -225,49 +249,113 @@ export class GalaxyLayoutEngine {
 
     // 6. Optional bounded relaxation pass (capped at max 50 iterations)
     const iterations = Math.min(options?.relaxationIterations ?? 15, 50);
-    this.relaxNodes(nodes, edges, iterations);
+    this.relaxNodes(nodes, edges, nodeById, iterations);
 
     return nodes;
   }
 
   /**
-   * Bounded force relaxation to prevent node collisions while preserving radial stability.
+   * Bounded force relaxation to prevent node collisions using spatial hashing.
    */
-  private relaxNodes(nodes: GalaxyNode[], edges: GalaxyEdge[], iterations: number): void {
+  private relaxNodes(
+    nodes: GalaxyNode[],
+    edges: GalaxyEdge[],
+    nodeMap: Map<string, GalaxyNode>,
+    iterations: number
+  ): void {
     if (nodes.length <= 1 || iterations <= 0) return;
-
-    const nodeMap = new Map<string, GalaxyNode>();
-    nodes.forEach(n => nodeMap.set(n.id, n));
 
     const k = 80; // Ideal resting distance
     const damping = 0.85;
+    const cellSize = 150; // Cell size exceeds max collision distance (56 + 56 + 35 = 147)
 
     for (let iter = 0; iter < iterations; iter++) {
       const tempStep = 1.0 / (iter + 1);
 
-      // Repulsion between close node pairs
-      for (let i = 0; i < nodes.length; i++) {
-        const n1 = nodes[i]!;
-        for (let j = i + 1; j < nodes.length; j++) {
-          const n2 = nodes[j]!;
-          const dx = n2.x - n1.x;
-          const dy = n2.y - n1.y;
-          const distSq = dx * dx + dy * dy || 1;
-          const minDist = n1.radius + n2.radius + 35;
+      // Build 2D spatial grid map for O(N) neighbor repulsion
+      const grid = new Map<string, GalaxyNode[]>();
+      for (const node of nodes) {
+        const cellX = Math.floor(node.x / cellSize);
+        const cellY = Math.floor(node.y / cellSize);
+        const cellKey = `${cellX},${cellY}`;
+        let cellNodes = grid.get(cellKey);
+        if (!cellNodes) {
+          cellNodes = [];
+          grid.set(cellKey, cellNodes);
+        }
+        cellNodes.push(node);
+      }
 
-          if (distSq < minDist * minDist) {
-            const dist = Math.sqrt(distSq);
-            const force = ((minDist - dist) / dist) * 0.5 * tempStep;
-            const fx = dx * force;
-            const fy = dy * force;
+      // Neighbor cell relative offsets: self and 4 forward neighbors for symmetric pair check
+      const neighborOffsets = [
+        [1, 0],
+        [-1, 1],
+        [0, 1],
+        [1, 1]
+      ];
 
-            if (n1.type !== 'genre') {
-              n1.x -= fx * damping;
-              n1.y -= fy * damping;
+      for (const [cellKey, cellNodes] of grid.entries()) {
+        const commaIdx = cellKey.indexOf(',');
+        const cx = Number(cellKey.substring(0, commaIdx));
+        const cy = Number(cellKey.substring(commaIdx + 1));
+
+        // 1. Check pairs within the same cell
+        const count = cellNodes.length;
+        for (let i = 0; i < count; i++) {
+          const n1 = cellNodes[i]!;
+          for (let j = i + 1; j < count; j++) {
+            const n2 = cellNodes[j]!;
+            const dx = n2.x - n1.x;
+            const dy = n2.y - n1.y;
+            const distSq = dx * dx + dy * dy || 1;
+            const minDist = n1.radius + n2.radius + 35;
+
+            if (distSq < minDist * minDist) {
+              const dist = Math.sqrt(distSq);
+              const force = ((minDist - dist) / dist) * 0.5 * tempStep;
+              const fx = dx * force;
+              const fy = dy * force;
+
+              if (n1.type !== 'genre') {
+                n1.x -= fx * damping;
+                n1.y -= fy * damping;
+              }
+              if (n2.type !== 'genre') {
+                n2.x += fx * damping;
+                n2.y += fy * damping;
+              }
             }
-            if (n2.type !== 'genre') {
-              n2.x += fx * damping;
-              n2.y += fy * damping;
+          }
+        }
+
+        // 2. Check pairs against 4 forward neighboring cells
+        for (const [ox, oy] of neighborOffsets) {
+          const neighborKey = `${cx + ox!},${cy + oy!}`;
+          const neighborNodes = grid.get(neighborKey);
+          if (!neighborNodes) continue;
+
+          for (const n1 of cellNodes) {
+            for (const n2 of neighborNodes) {
+              const dx = n2.x - n1.x;
+              const dy = n2.y - n1.y;
+              const distSq = dx * dx + dy * dy || 1;
+              const minDist = n1.radius + n2.radius + 35;
+
+              if (distSq < minDist * minDist) {
+                const dist = Math.sqrt(distSq);
+                const force = ((minDist - dist) / dist) * 0.5 * tempStep;
+                const fx = dx * force;
+                const fy = dy * force;
+
+                if (n1.type !== 'genre') {
+                  n1.x -= fx * damping;
+                  n1.y -= fy * damping;
+                }
+                if (n2.type !== 'genre') {
+                  n2.x += fx * damping;
+                  n2.y += fy * damping;
+                }
+              }
             }
           }
         }

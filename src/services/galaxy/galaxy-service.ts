@@ -164,7 +164,7 @@ export class GalaxyService implements IGalaxyService {
     const tracksByAlbum = new Map<string, Track[]>();
     const tracksByArtist = new Map<string, Track[]>();
     const tracksByGenre = new Map<string, Track[]>();
-    const albumsByArtist = new Map<string, string[]>(); // artistId -> albumIds[]
+    const albumsByArtist = new Map<string, Set<string>>(); // artistId -> Set<albumIds>
     const artistsByGenre = new Map<string, Set<string>>(); // genreId -> artistIds[]
 
     for (const t of tracks) {
@@ -207,9 +207,12 @@ export class GalaxyService implements IGalaxyService {
       if (artistEntry && (!artistEntry.genreId || artistEntry.genreId === DEFAULT_GENRE_ID)) {
         artistEntry.genreId = gId;
       }
-      const gArtists = artistsByGenre.get(gId) || new Set<string>();
+      let gArtists = artistsByGenre.get(gId);
+      if (!gArtists) {
+        gArtists = new Set<string>();
+        artistsByGenre.set(gId, gArtists);
+      }
       gArtists.add(aId);
-      artistsByGenre.set(gId, gArtists);
 
       // Resolve Album
       let alId = t.albumId;
@@ -229,11 +232,12 @@ export class GalaxyService implements IGalaxyService {
       }
 
       // Associate Album with Artist
-      const aAlbums = albumsByArtist.get(aId) || [];
-      if (!aAlbums.includes(alId)) {
-        aAlbums.push(alId);
+      let aAlbums = albumsByArtist.get(aId);
+      if (!aAlbums) {
+        aAlbums = new Set<string>();
         albumsByArtist.set(aId, aAlbums);
       }
+      aAlbums.add(alId);
 
       // Group tracks
       const alTrackList = tracksByAlbum.get(alId) || [];
@@ -314,7 +318,7 @@ export class GalaxyService implements IGalaxyService {
       const artistTracks = tracksByArtist.get(aId) || [];
       if (artistTracks.length === 0 && artists.length > 0) continue;
 
-      const artistAlbumIds = albumsByArtist.get(aId) || [];
+      const artistAlbumIds = albumsByArtist.get(aId) ? Array.from(albumsByArtist.get(aId)!) : [];
       const artistPlayCount = artistTracks.reduce((sum, t) => sum + (t.playCount || 0), 0);
       const trackCount = artistTracks.length;
       const hasFavorites = artistTracks.some(t => t.isFavorite);
