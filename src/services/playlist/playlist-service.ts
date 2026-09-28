@@ -41,6 +41,28 @@ export class PlaylistService implements IPlaylistService {
     this.playlistRepo = deps.playlistRepo;
     this.trackRepo = deps.trackRepo;
     this.eventBus = deps.eventBus;
+    this.subscribeToLibraryEvents();
+  }
+
+  private subscribeToLibraryEvents(): void {
+    if (!this.eventBus) return;
+    const handler = () => {
+      this.eventBus.publish<PlaylistUpdatedEvent>(DomainEvents.PLAYLIST_UPDATED, {
+        playlist: {
+          id: '__smart_refresh__',
+          name: 'Smart Playlists Refresh',
+          isSmart: true,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          trackCount: 0,
+          durationMs: 0
+        },
+        action: 'updated'
+      });
+    };
+
+    this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, handler);
+    this.eventBus.subscribe(DomainEvents.FAVORITE_CHANGED, handler);
   }
 
   public async getPlaylist(id: EntityId): Promise<Playlist | null> {
