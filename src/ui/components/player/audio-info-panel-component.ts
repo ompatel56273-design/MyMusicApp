@@ -1,22 +1,35 @@
-import type { Track } from '../../../domain/entities/models';
+import type { Track, AudioFile } from '../../../domain/entities/models';
+import type { IAudioFileRepository } from '../../../domain/repositories/repository-contracts';
 import { getIconSvg } from '../../icons/icon-registry';
 import { escapeHtml } from '../../../core/security/html-sanitizer';
 
+export interface AudioInfoPanelDependencies {
+  audioFileRepo?: IAudioFileRepository | undefined;
+}
+
 /**
- * Phase 8 Audio Information Panel Component (Templates 6 & 7 / About Tab).
+ * Phase 11 Audio Information Panel Component.
  * Features:
- * - Real audio stream technical specifications (container, codec, sample rate, bit depth, bitrate, channels)
+ * - Real audio stream technical specifications (container, codec, sample rate, bit depth, bitrate, channels, duration)
+ * - File specifications (file size, file path)
  * - HI-RES AUDIO and LOSSLESS indicator badges
- * - Accurate zero-guess technical display
+ * - Accurate zero-guess technical display (never invents fake data)
  */
 export class AudioInfoPanelComponent {
   private container: HTMLElement | null = null;
   private currentTrack: Track | null = null;
+  private currentAudioFile: AudioFile | null = null;
+  private readonly audioFileRepo?: IAudioFileRepository | undefined;
+
+  constructor(deps?: AudioInfoPanelDependencies) {
+    this.audioFileRepo = deps?.audioFileRepo;
+  }
 
   public mount(container: HTMLElement, track: Track | null): void {
     this.container = container;
     this.currentTrack = track;
-    this.render();
+    this.currentAudioFile = null;
+    void this.loadDetailsAndRender();
   }
 
   public unmount(): void {
@@ -24,11 +37,40 @@ export class AudioInfoPanelComponent {
       this.container.innerHTML = '';
       this.container = null;
     }
+    this.currentTrack = null;
+    this.currentAudioFile = null;
   }
 
   public setTrack(track: Track | null): void {
     this.currentTrack = track;
+    this.currentAudioFile = null;
+    void this.loadDetailsAndRender();
+  }
+
+  private async loadDetailsAndRender(): Promise<void> {
+    if (this.currentTrack && this.audioFileRepo && this.currentTrack.fileId) {
+      try {
+        this.currentAudioFile = await this.audioFileRepo.getById(this.currentTrack.fileId);
+      } catch {
+        this.currentAudioFile = null;
+      }
+    }
     this.render();
+  }
+
+  private formatDuration(ms?: number): string {
+    if (!ms || ms <= 0) return 'Unavailable';
+    const totalSecs = Math.floor(ms / 1000);
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  private formatFileSize(bytes?: number): string {
+    if (!bytes || bytes <= 0) return 'Unavailable';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   }
 
   private render(): void {
@@ -49,6 +91,7 @@ export class AudioInfoPanelComponent {
 
     const t = this.currentTrack;
     const f = t.format;
+    const file = this.currentAudioFile;
 
     const isHiRes = (f.sampleRate && f.sampleRate > 48000) || (f.bitDepth && f.bitDepth > 16);
 
@@ -58,9 +101,12 @@ export class AudioInfoPanelComponent {
       ? `<span style="font-size: 10px; font-weight: var(--font-weight-extrabold); letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 10px; border-radius: var(--radius-full); background: linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(168, 85, 247, 0.15) 100%); border: 1px solid rgba(6, 182, 212, 0.4); color: var(--color-accent-cyan); box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);">LOSSLESS</span>`
       : `<span style="font-size: 10px; font-weight: var(--font-weight-bold); letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 10px; border-radius: var(--radius-full); background: var(--glass-bg-subtle); border: 1px solid var(--glass-border); color: var(--color-text-muted);">STANDARD</span>`;
 
-    const genreText = (t as any).genre || (t as any).genreId || 'Unavailable';
-    const yearText = (t as any).year ? String((t as any).year) : (t as any).releaseYear ? String((t as any).releaseYear) : 'Unavailable';
-    const trackNumText = (t as any).trackNumber ? String((t as any).trackNumber) : 'Unavailable';
+    const genreText = t.genreName || (t as any).genre || (t as any).genreId || 'Unavailable';
+    const yearText = t.year ? String(t.year) : (t as any).releaseYear ? String((t as any).releaseYear) : 'Unavailable';
+    const trackNumText = t.trackNumber ? String(t.trackNumber) : 'Unavailable';
+    const durationFormatted = this.formatDuration(t.durationMs);
+    const fileSizeFormatted = this.formatFileSize(file?.sizeBytes);
+    const filePathFormatted = file?.path ? escapeHtml(file.path) : 'Unavailable';
 
     this.container.innerHTML = `
       <div
@@ -137,6 +183,13 @@ export class AudioInfoPanelComponent {
             </div>
 
             <div class="info-cell" style="background: rgba(255, 255, 255, 0.02); padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--glass-border);">
+              <div style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); margin-bottom: 2px;">Duration</div>
+              <div style="font-size: 13px; font-weight: 700; color: #ffffff;">
+                ${durationFormatted}
+              </div>
+            </div>
+
+            <div class="info-cell" style="background: rgba(255, 255, 255, 0.02); padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--glass-border);">
               <div style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); margin-bottom: 2px;">Play Count</div>
               <div style="font-size: 13px; font-weight: 700; color: var(--color-accent-purple-glow);">
                 ${t.playCount ?? 0} plays
@@ -183,17 +236,36 @@ export class AudioInfoPanelComponent {
             <div class="info-cell" style="background: rgba(255, 255, 255, 0.02); padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--glass-border);">
               <div style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); margin-bottom: 2px;">Bitrate</div>
               <div style="font-size: 13px; font-weight: 700; color: #ffffff;">
-                ${f.bitrate ? `${f.bitrate} kbps` : 'Variable / Lossless'}
+                ${f.bitrate ? `${f.bitrate} kbps` : (f.isLossless ? 'Lossless' : 'Variable / Lossless')}
               </div>
             </div>
 
             <div class="info-cell" style="background: rgba(255, 255, 255, 0.02); padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--glass-border);">
               <div style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); margin-bottom: 2px;">Channels</div>
               <div style="font-size: 13px; font-weight: 700; color: #ffffff;">
-                ${f.channels === 1 ? '1 (Mono)' : f.channels === 2 ? '2 (Stereo 2.0)' : `${f.channels} Channels`}
+                ${f.channels === 1 ? '1 (Mono)' : f.channels === 2 ? '2 (Stereo 2.0)' : (f.channels ? `${f.channels} Channels` : 'Unavailable')}
               </div>
             </div>
 
+            <div class="info-cell" style="background: rgba(255, 255, 255, 0.02); padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--glass-border);">
+              <div style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); margin-bottom: 2px;">File Size</div>
+              <div style="font-size: 13px; font-weight: 700; color: #ffffff;">
+                ${fileSizeFormatted}
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Section 3: File Location -->
+        <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+          <span style="font-size: 10px; font-weight: var(--font-weight-extrabold); text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted);">
+            File Location
+          </span>
+          <div class="info-cell" style="background: rgba(255, 255, 255, 0.02); padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--glass-border); word-break: break-all;">
+            <div style="font-size: 12px; font-family: monospace; color: var(--color-text-secondary); line-height: 1.5;">
+              ${filePathFormatted}
+            </div>
           </div>
         </div>
 

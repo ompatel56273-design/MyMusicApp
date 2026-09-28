@@ -107,6 +107,7 @@ export class Mp4AtomParser {
     const dateStr = tags['©day'];
     const composer = tags['©wrt'];
     const isCompilation = tags['cpil'] === true;
+    const lyrics = tags['©lyr'] ? String(tags['©lyr']).trim() || undefined : undefined;
 
     let year: number | undefined;
     if (dateStr) {
@@ -129,6 +130,7 @@ export class Mp4AtomParser {
       composer,
       isCompilation,
       artwork,
+      lyrics,
       container: 'm4a',
       codec: 'aac',
       isLossless: false

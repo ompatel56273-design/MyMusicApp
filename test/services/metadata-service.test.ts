@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import { IndexedDbAdapter } from '../../src/data/db/database-adapter';
 import { TrackRepository } from '../../src/data/repositories/track-repository';
@@ -127,5 +127,89 @@ describe('MetadataService Integration', () => {
 
     const genre = await genreRepo.getByName('Progressive Rock');
     expect(genre).toBeDefined();
+  });
+
+  it('should extract embedded lyrics from FLAC Vorbis comment and save to LyricsRepository', async () => {
+    const lyricsRepo = {
+      save: vi.fn().mockResolvedValue(undefined),
+      getByTrackId: vi.fn(),
+      deleteByTrackId: vi.fn()
+    };
+
+    const service = new MetadataService(
+      new MetadataReader(),
+      artworkService,
+      trackRepo,
+      fileRepo,
+      artistRepo,
+      albumRepo,
+      genreRepo,
+      eventBus,
+      lyricsRepo as any
+    );
+
+    const audioFile: AudioFile = {
+      id: 'f_test_lyr',
+      path: 'C:/Music/Rock/lyrics_test.flac',
+      filename: 'lyrics_test.flac',
+      extension: 'flac',
+      sizeBytes: 5000000,
+      modifiedTimeMs: Date.now(),
+      availability: 'available'
+    };
+    await fileRepo.save(audioFile);
+
+    const initialTrack: Track = {
+      id: 't_test_lyr',
+      fileId: audioFile.id,
+      title: 'lyrics_test',
+      durationMs: 0,
+      format: { container: 'flac', codec: 'flac', sampleRate: 44100, channels: 2, isLossless: true },
+      dateAdded: Date.now(),
+      dateModified: Date.now(),
+      playCount: 0,
+      isFavorite: false,
+      hasLyrics: false,
+      availability: 'available'
+    };
+    await trackRepo.save(initialTrack);
+
+    const comments = ['TITLE=Echoes', 'ARTIST=Pink Floyd', 'LYRICS=[00:01.00]Overhead the albatross hangs motionless upon the air'];
+    const commentBytes = comments.map(c => new TextEncoder().encode(c));
+    const vendor = new TextEncoder().encode('libFLAC');
+    let vLen = 4 + vendor.length + 4;
+    for (const b of commentBytes) vLen += 4 + b.length;
+
+    const vorbis = new Uint8Array(vLen);
+    const view = new DataView(vorbis.buffer);
+    view.setUint32(0, vendor.length, true);
+    vorbis.set(vendor, 4);
+    let off = 4 + vendor.length;
+    view.setUint32(off, commentBytes.length, true);
+    off += 4;
+    for (const b of commentBytes) {
+      view.setUint32(off, b.length, true);
+      off += 4;
+      vorbis.set(b, off);
+      off += b.length;
+    }
+
+    const flacBuffer = new Uint8Array(4 + 4 + 34 + 4 + vLen);
+    flacBuffer[0] = 0x66; flacBuffer[1] = 0x4c; flacBuffer[2] = 0x61; flacBuffer[3] = 0x43;
+    flacBuffer[4] = 0x00; flacBuffer[7] = 34;
+    flacBuffer[8 + 34] = 0x84;
+    flacBuffer[8 + 34 + 3] = vLen;
+    flacBuffer.set(vorbis, 8 + 34 + 4);
+
+    const enriched = await service.enrichTrackMetadata('t_test_lyr', flacBuffer);
+
+    expect(enriched?.hasLyrics).toBe(true);
+    expect(lyricsRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trackId: 't_test_lyr',
+        type: 'synced',
+        source: 'embedded'
+      })
+    );
   });
 });

@@ -97,6 +97,7 @@ export class ID3Parser {
     const tags: Record<string, string> = {};
     const txxxTags: Record<string, string> = {};
     let artwork: ExtractedArtwork | undefined;
+    let lyrics: string | undefined;
 
     while (offset < totalHeaderLength) {
       if (buffer[offset] === 0) break;
@@ -107,19 +108,19 @@ export class ID3Parser {
 
       if (versionMajor === 2) {
         if (offset + 6 > totalHeaderLength) break;
-        frameId = String.fromCharCode(buffer[offset], buffer[offset + 1], buffer[offset + 2]);
-        frameSize = (buffer[offset + 3] << 16) | (buffer[offset + 4] << 8) | buffer[offset + 5];
+        frameId = String.fromCharCode(buffer[offset]!, buffer[offset + 1]!, buffer[offset + 2]!);
+        frameSize = (buffer[offset + 3]! << 16) | (buffer[offset + 4]! << 8) | buffer[offset + 5]!;
         headerLength = 6;
       } else {
         if (offset + 10 > totalHeaderLength) break;
-        frameId = String.fromCharCode(buffer[offset], buffer[offset + 1], buffer[offset + 2], buffer[offset + 3]);
+        frameId = String.fromCharCode(buffer[offset]!, buffer[offset + 1]!, buffer[offset + 2]!, buffer[offset + 3]!);
 
         if (versionMajor === 4) {
           frameSize =
-            ((buffer[offset + 4] & 0x7f) << 21) |
-            ((buffer[offset + 5] & 0x7f) << 14) |
-            ((buffer[offset + 6] & 0x7f) << 7) |
-            (buffer[offset + 7] & 0x7f);
+            ((buffer[offset + 4]! & 0x7f) << 21) |
+            ((buffer[offset + 5]! & 0x7f) << 14) |
+            ((buffer[offset + 6]! & 0x7f) << 7) |
+            (buffer[offset + 7]! & 0x7f);
         } else {
           frameSize = view.getUint32(offset + 4);
         }
@@ -140,6 +141,10 @@ export class ID3Parser {
       } else if (frameId === 'APIC' || frameId === 'PIC') {
         if (!artwork) {
           artwork = this.decodeApicFrame(frameData, versionMajor);
+        }
+      } else if (frameId === 'USLT' || frameId === 'ULT') {
+        if (!lyrics) {
+          lyrics = this.decodeUsltFrame(frameData);
         }
       }
     }
@@ -211,6 +216,7 @@ export class ID3Parser {
       composer,
       isCompilation,
       artwork,
+      lyrics,
       replayGain,
       container: 'mp3',
       codec: 'mp3',
@@ -287,6 +293,43 @@ export class ID3Parser {
       desc: (parts[0] || '').trim(),
       value: (parts[1] || '').replace(/\0+$/, '').trim()
     };
+  }
+
+  private static decodeUsltFrame(data: Uint8Array): string | undefined {
+    if (data.length < 5) return undefined;
+    const encoding = data[0]!;
+    let offset = 4; // Skip encoding (1 byte) and language (3 bytes)
+
+    // Find end of null-terminated description string
+    if (encoding === 1 || encoding === 2) {
+      while (offset + 1 < data.length) {
+        if (data[offset] === 0 && data[offset + 1] === 0) {
+          offset += 2;
+          break;
+        }
+        offset += 2;
+      }
+    } else {
+      while (offset < data.length) {
+        if (data[offset] === 0) {
+          offset += 1;
+          break;
+        }
+        offset += 1;
+      }
+    }
+
+    if (offset >= data.length) return undefined;
+    const textData = data.subarray(offset);
+
+    let decoded = '';
+    if (encoding === 0) decoded = this.textDecoderLatin1.decode(textData);
+    else if (encoding === 1) decoded = this.textDecoderUtf16.decode(textData);
+    else if (encoding === 2) decoded = this.textDecoderUtf16be.decode(textData);
+    else if (encoding === 3) decoded = this.textDecoderUtf8.decode(textData);
+
+    const cleaned = decoded.replace(/\0+$/, '').trim();
+    return cleaned || undefined;
   }
 
   private static decodeApicFrame(data: Uint8Array, version: number): ExtractedArtwork | undefined {

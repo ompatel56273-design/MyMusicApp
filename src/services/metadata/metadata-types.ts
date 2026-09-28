@@ -40,6 +40,9 @@ export interface ExtractedMetadata {
 
   // Embedded Artwork
   readonly artwork?: ExtractedArtwork | undefined;
+
+  // Embedded Lyrics
+  readonly lyrics?: string | undefined;
 }
 
 export interface IMetadataReader {

@@ -1,6 +1,11 @@
 import type { IScannerService } from '../contracts/service-contracts';
 import type { IFilesystemAdapter, DiscoveredFileEntry } from './filesystem-adapter';
-import type { IAudioFileRepository, ITrackRepository, IFolderRepository } from '../../domain/repositories/repository-contracts';
+import type {
+  IAudioFileRepository,
+  ITrackRepository,
+  IFolderRepository,
+  ILyricsRepository
+} from '../../domain/repositories/repository-contracts';
 import type { AudioFile, Track, Folder } from '../../domain/entities/models';
 import type { AudioContainer, AudioCodec } from '../../domain/value-objects/audio-types';
 import type { ScanSessionStats, ScannerState, ScanProgressReport } from './scanner-types';
@@ -10,6 +15,7 @@ import { DomainEvents } from '../../domain/events/domain-events';
 import { ScannerError } from '../../core/errors/app-error';
 import { isSupportedAudioFile, getAudioExtension } from '../../core/audio/audio-validator';
 import type { MetadataService } from '../metadata/metadata-service';
+import { LrcParser } from '../lyrics/lrc-parser';
 
 export class ScannerService implements IScannerService {
   private _state: ScannerState = 'idle';
@@ -20,6 +26,7 @@ export class ScannerService implements IScannerService {
   private readonly folderRepo: IFolderRepository;
   private readonly eventBus: EventBus;
   private readonly metadataService?: MetadataService | undefined;
+  private readonly lyricsRepo?: ILyricsRepository | undefined;
   private readonly logger = new Logger('ScannerService');
 
   constructor(
@@ -28,7 +35,8 @@ export class ScannerService implements IScannerService {
     trackRepo: ITrackRepository,
     folderRepo: IFolderRepository,
     eventBus: EventBus,
-    metadataService?: MetadataService
+    metadataService?: MetadataService,
+    lyricsRepo?: ILyricsRepository
   ) {
     this.fsAdapter = fsAdapter;
     this.audioFileRepo = audioFileRepo;
@@ -36,6 +44,7 @@ export class ScannerService implements IScannerService {
     this.folderRepo = folderRepo;
     this.eventBus = eventBus;
     this.metadataService = metadataService;
+    this.lyricsRepo = lyricsRepo;
   }
 
   private static idSequence = 0;
@@ -87,6 +96,7 @@ export class ScannerService implements IScannerService {
     const errors: { path: string; message: string }[] = [];
 
     const discoveredPaths = new Set<string>();
+    const discoveredLrcPaths = new Map<string, string>();
     const pendingFileBatches: AudioFile[] = [];
     const pendingTrackBatches: Track[] = [];
     const newlyAddedTrackIds: { trackId: string; filePath: string; container: AudioContainer }[] = [];
@@ -282,9 +292,12 @@ export class ScannerService implements IScannerService {
               this.logger.warn(`Failed to save folder record for ${dirPath}`, { error: String(folderErr) });
             }
           },
-          onUnsupported: (_entryPath: string, _filename: string) => {
+          onUnsupported: (entryPath: string, filename: string) => {
             filesDiscovered++;
             filesUnsupported++;
+            if (filename.toLowerCase().endsWith('.lrc')) {
+              discoveredLrcPaths.set(this.fsAdapter.normalizePath(entryPath), entryPath);
+            }
           },
           onError: (errPath: string, err: Error) => {
             filesFailed++;
@@ -298,6 +311,38 @@ export class ScannerService implements IScannerService {
       // Flush remaining batch
       if (pendingFileBatches.length > 0) {
         await this.flushBatch(pendingFileBatches, pendingTrackBatches);
+      }
+
+      // Process companion .lrc files if lyricsRepo is present
+      if (this.lyricsRepo && newlyAddedTrackIds.length > 0 && !signal.aborted) {
+        const textDecoder = new TextDecoder('utf-8');
+        for (const item of newlyAddedTrackIds) {
+          if (signal.aborted) break;
+          const normalizedTrackPath = this.fsAdapter.normalizePath(item.filePath);
+          const lastDot = normalizedTrackPath.lastIndexOf('.');
+          if (lastDot > 0) {
+            const expectedLrcPath = normalizedTrackPath.substring(0, lastDot) + '.lrc';
+            if (discoveredLrcPaths.has(expectedLrcPath)) {
+              try {
+                const lrcBuf = await this.fsAdapter.readFile(expectedLrcPath);
+                const lrcContent = textDecoder.decode(lrcBuf);
+                if (lrcContent.trim()) {
+                  const parsed = LrcParser.parse(lrcContent, item.trackId);
+                  await this.lyricsRepo.save({
+                    ...parsed,
+                    source: 'lrc_file'
+                  });
+                  const trk = await this.trackRepo.getById(item.trackId);
+                  if (trk && !trk.hasLyrics) {
+                    await this.trackRepo.save({ ...trk, hasLyrics: true });
+                  }
+                }
+              } catch (lrcErr) {
+                this.logger.warn(`Failed to parse local .lrc file for ${item.filePath}:`, { error: String(lrcErr) });
+              }
+            }
+          }
+        }
       }
 
       // Enrich metadata for newly added tracks if metadataService is present

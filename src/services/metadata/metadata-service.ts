@@ -6,10 +6,12 @@ import type {
   IAudioFileRepository,
   IArtistRepository,
   IAlbumRepository,
-  IGenreRepository
+  IGenreRepository,
+  ILyricsRepository
 } from '../../domain/repositories/repository-contracts';
 import type { Track, Artist, Album, Genre } from '../../domain/entities/models';
 import type { AudioContainer, EntityId } from '../../domain/value-objects/audio-types';
+import { LrcParser } from '../lyrics/lrc-parser';
 import { Logger } from '../../core/logging/logger';
 import { EventBus } from '../../core/events/event-bus';
 import { DomainEvents } from '../../domain/events/domain-events';
@@ -23,6 +25,7 @@ export class MetadataService {
   private readonly albumRepo: IAlbumRepository;
   private readonly genreRepo: IGenreRepository;
   private readonly eventBus: EventBus;
+  private readonly lyricsRepo?: ILyricsRepository | undefined;
   private readonly logger = new Logger('MetadataService');
 
   constructor(
@@ -33,7 +36,8 @@ export class MetadataService {
     artistRepo: IArtistRepository,
     albumRepo: IAlbumRepository,
     genreRepo: IGenreRepository,
-    eventBus: EventBus
+    eventBus: EventBus,
+    lyricsRepo?: ILyricsRepository | undefined
   ) {
     this.reader = reader;
     this.artworkService = artworkService;
@@ -43,6 +47,7 @@ export class MetadataService {
     this.albumRepo = albumRepo;
     this.genreRepo = genreRepo;
     this.eventBus = eventBus;
+    this.lyricsRepo = lyricsRepo;
   }
 
   /**
@@ -181,6 +186,21 @@ export class MetadataService {
         }
       }
 
+      // 4.5. Process Embedded Lyrics
+      let hasLyrics = track.hasLyrics;
+      if (rawMetadata.lyrics && rawMetadata.lyrics.trim() && this.lyricsRepo) {
+        try {
+          const parsedLyrics = LrcParser.parse(rawMetadata.lyrics, trackId);
+          await this.lyricsRepo.save({
+            ...parsedLyrics,
+            source: 'embedded'
+          });
+          hasLyrics = true;
+        } catch (lrcErr) {
+          this.logger.warn(`Failed to parse or save embedded lyrics for track ${trackId}:`, { error: String(lrcErr) });
+        }
+      }
+
       // 5. Update Track (Strictly Preserving User State: isFavorite, playCount, lastPlayedAt)
       const updatedTrack: Track = {
         ...track,
@@ -192,6 +212,7 @@ export class MetadataService {
         genreId,
         genreName: hasValidGenre ? cleanGenre : track.genreName,
         artworkId,
+        hasLyrics,
         trackNumber: normalized.trackNumber ?? track.trackNumber,
         discNumber: normalized.discNumber ?? track.discNumber,
         year: normalized.year ?? track.year,

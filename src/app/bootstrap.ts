@@ -152,7 +152,8 @@ export class AppBootstrap {
       artistRepo,
       albumRepo,
       genreRepo,
-      this.eventBus
+      this.eventBus,
+      lyricsRepo
     );
     const scannerService = new ScannerService(
       fsAdapter,
@@ -160,7 +161,8 @@ export class AppBootstrap {
       trackRepo,
       folderRepo,
       this.eventBus,
-      metadataService
+      metadataService,
+      lyricsRepo
     );
     const libraryService = new LibraryService({
       trackRepo,
@@ -279,7 +281,8 @@ export class AppBootstrap {
       fsAdapter,
       dbAdapter: adapter,
       eventBus: this.eventBus,
-      duplicateDetectorService
+      duplicateDetectorService,
+      audioFileRepo
     });
     this.appShell.mount(root);
 

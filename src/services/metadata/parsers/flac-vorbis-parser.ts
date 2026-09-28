@@ -257,6 +257,8 @@ export class FlacVorbisParser {
       };
     }
 
+    const lyrics = getFirst('LYRICS') || getFirst('UNSYNCEDLYRICS') || getFirst('UNSYNCED LYRICS') || getFirst('UNSYNCED_LYRICS') || getFirst('SYNCEDLYRICS') || getFirst('SYNCED LYRICS');
+
     return {
       ...base,
       title,
@@ -273,6 +275,7 @@ export class FlacVorbisParser {
       year,
       composer,
       isCompilation,
+      lyrics: lyrics ? lyrics.trim() || undefined : undefined,
       replayGain
     };
   }

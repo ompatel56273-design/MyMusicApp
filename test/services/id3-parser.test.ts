@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { ID3Parser } from '../../src/services/metadata/parsers/id3-parser';
 
 describe('ID3Parser', () => {
-  function createSyntheticID3v23Buffer(tags: { title?: string; artist?: string; album?: string; year?: string; track?: string; hasArtwork?: boolean }): Uint8Array {
+  function createSyntheticID3v23Buffer(tags: { title?: string; artist?: string; album?: string; year?: string; track?: string; hasArtwork?: boolean; lyrics?: string }): Uint8Array {
     const frames: Uint8Array[] = [];
 
     const createTextFrame = (id: string, text: string) => {
@@ -55,6 +55,26 @@ describe('ID3Parser', () => {
       frames.push(frame);
     }
 
+    if (tags.lyrics) {
+      // USLT Frame: encoding (1 byte) + language (3 bytes) + null descriptor + lyrics text
+      const lyrBytes = new TextEncoder().encode(tags.lyrics);
+      const usltData = new Uint8Array(1 + 3 + 1 + lyrBytes.length);
+      usltData[0] = 3; // UTF-8
+      usltData[1] = 101; usltData[2] = 110; usltData[3] = 103; // 'eng'
+      usltData[4] = 0; // null terminator for description
+      usltData.set(lyrBytes, 5);
+
+      const frame = new Uint8Array(10 + usltData.length);
+      frame[0] = 0x55; frame[1] = 0x53; frame[2] = 0x4c; frame[3] = 0x54; // 'USLT'
+      const size = usltData.length;
+      frame[4] = (size >> 24) & 0xff;
+      frame[5] = (size >> 16) & 0xff;
+      frame[6] = (size >> 8) & 0xff;
+      frame[7] = size & 0xff;
+      frame.set(usltData, 10);
+      frames.push(frame);
+    }
+
     const totalPayloadSize = frames.reduce((acc, f) => acc + f.length, 0);
     const header = new Uint8Array(10 + totalPayloadSize);
     header[0] = 0x49; header[1] = 0x44; header[2] = 0x33; // 'ID3'
@@ -98,5 +118,18 @@ describe('ID3Parser', () => {
     expect(parsed.artwork).toBeDefined();
     expect(parsed.artwork?.mimeType).toBe('image/jpeg');
     expect(parsed.artwork?.data.length).toBeGreaterThan(0);
+  });
+
+  it('should parse USLT embedded lyrics frame accurately', () => {
+    const buffer = createSyntheticID3v23Buffer({
+      title: 'Imagine',
+      artist: 'John Lennon',
+      lyrics: '[00:01.00]Imagine there is no heaven\n[00:05.00]It is easy if you try'
+    } as any);
+
+    const parsed = ID3Parser.parse(buffer);
+    expect(parsed.title).toBe('Imagine');
+    expect(parsed.artist).toBe('John Lennon');
+    expect(parsed.lyrics).toBe('[00:01.00]Imagine there is no heaven\n[00:05.00]It is easy if you try');
   });
 });

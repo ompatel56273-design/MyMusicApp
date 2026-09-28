@@ -32,11 +32,14 @@ import { SleepTimerModalComponent } from '../components/player/sleep-timer-modal
 import { escapeHtml } from '../../core/security/html-sanitizer';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
+import type { IAudioFileRepository } from '../../domain/repositories/repository-contracts';
+
 export type NowPlayingTab = 'queue' | 'lyrics' | 'info' | 'visualizer';
 
 export interface NowPlayingViewDependencies {
   playbackManager: IPlaybackManager;
   libraryService?: ILibraryService | undefined;
+  audioFileRepo?: IAudioFileRepository | undefined;
   artworkService?: IArtworkService | undefined;
   lyricsService?: ILyricsService | undefined;
   audioEngine?: IAudioEngine | undefined;
@@ -59,6 +62,7 @@ export class NowPlayingView implements IView {
   private container: HTMLElement | null = null;
   private readonly playbackManager: IPlaybackManager;
   private readonly libraryService?: ILibraryService | undefined;
+  private readonly audioFileRepo?: IAudioFileRepository | undefined;
   private readonly artworkService?: IArtworkService | undefined;
   private readonly lyricsService?: ILyricsService | undefined;
   private readonly audioEngine?: IAudioEngine | undefined;
@@ -81,6 +85,7 @@ export class NowPlayingView implements IView {
   constructor(deps: NowPlayingViewDependencies) {
     this.playbackManager = deps.playbackManager;
     this.libraryService = deps.libraryService;
+    this.audioFileRepo = deps.audioFileRepo;
     this.artworkService = deps.artworkService;
     this.lyricsService = deps.lyricsService;
     this.audioEngine = deps.audioEngine;
@@ -587,7 +592,9 @@ export class NowPlayingView implements IView {
       });
       this.lyricsComponent.mount(tabSlot, this.currentTrack);
     } else if (this.activeTab === 'info') {
-      this.audioInfoComponent = new AudioInfoPanelComponent();
+      this.audioInfoComponent = new AudioInfoPanelComponent({
+        audioFileRepo: this.audioFileRepo
+      });
       this.audioInfoComponent.mount(tabSlot, this.currentTrack);
     } else if (this.activeTab === 'visualizer' && this.audioEngine) {
       this.visualizerComponent = new VisualizerComponent({

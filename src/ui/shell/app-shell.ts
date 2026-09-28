@@ -38,6 +38,8 @@ import type { IDatabaseAdapter } from '../../data/db/database-adapter';
 import { ThemeManager } from '../theme/theme-manager';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
+import type { IAudioFileRepository } from '../../domain/repositories/repository-contracts';
+
 export interface AppShellDependencies {
   playbackManager: IPlaybackManager;
   libraryService: ILibraryService;
@@ -57,6 +59,7 @@ export interface AppShellDependencies {
   dbAdapter?: IDatabaseAdapter | undefined;
   eventBus: EventBus;
   duplicateDetectorService?: IDuplicateDetectorService | undefined;
+  audioFileRepo?: IAudioFileRepository | undefined;
 }
 
 /**
@@ -194,6 +197,7 @@ export class AppShell {
         new NowPlayingView({
           playbackManager: deps.playbackManager,
           libraryService: deps.libraryService,
+          audioFileRepo: deps.audioFileRepo,
           artworkService: deps.artworkService,
           lyricsService: deps.lyricsService,
           audioEngine: deps.audioEngine,
