@@ -1,6 +1,6 @@
 import type { IView } from './view-interface';
 import type { RouteParams } from '../navigation/route-types';
-import type { StatsService, MusicStatsOverview, TopSongItem, TopArtistItem, TopAlbumItem, RecentHistoryItem, DailyActivityItem } from '../../services/stats/stats-service';
+import type { StatsService, MusicStatsOverview, TopSongItem, TopArtistItem, TopAlbumItem, RecentHistoryItem, DailyActivityItem, TimeRangeStats } from '../../services/stats/stats-service';
 import type { IPlaybackManager, IArtworkService } from '../../services/contracts/service-contracts';
 import type { RouterService } from '../navigation/router-service';
 import type { EventBus } from '../../core/events/event-bus';
@@ -37,6 +37,10 @@ export class StatsView implements IView {
     totalGenres: 0,
     totalListeningTimeMs: 0,
     totalPlays: 0,
+    uniqueTracksPlayed: 0,
+    uniqueArtistsPlayed: 0,
+    uniqueAlbumsPlayed: 0,
+    averageListeningDurationMs: 0,
     favoriteSongsCount: 0
   };
   private topSongs: readonly TopSongItem[] = [];
@@ -44,6 +48,8 @@ export class StatsView implements IView {
   private topAlbums: readonly TopAlbumItem[] = [];
   private recentHistory: readonly RecentHistoryItem[] = [];
   private activity: readonly DailyActivityItem[] = [];
+  private timeRangeStats: TimeRangeStats | null = null;
+  private selectedTimeRange: 'all' | 'today' | 'last7days' | 'last30days' = 'all';
 
   private isLoading = true;
   private subscriptions: Disposable[] = [];
@@ -77,27 +83,34 @@ export class StatsView implements IView {
   private subscribeEvents(): void {
     if (!this.eventBus) return;
 
-    // Refresh stats when playback state changes or library updates
+    // Refresh stats when playback state changes, library updates, history changes, or favorites toggle
     const sub1 = this.eventBus.subscribe(DomainEvents.PLAYBACK_STATE_CHANGED, () => {
       void this.loadStatistics();
     });
     const sub2 = this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, () => {
       void this.loadStatistics();
     });
+    const sub3 = this.eventBus.subscribe(DomainEvents.HISTORY_UPDATED, () => {
+      void this.loadStatistics();
+    });
+    const sub4 = this.eventBus.subscribe(DomainEvents.FAVORITE_CHANGED, () => {
+      void this.loadStatistics();
+    });
 
-    this.subscriptions.push(sub1, sub2);
+    this.subscriptions.push(sub1, sub2, sub3, sub4);
   }
 
   public async loadStatistics(): Promise<void> {
     this.isLoading = true;
     try {
-      const [overview, topSongs, topArtists, topAlbums, recentHistory, activity, analyticsSnapshot] = await Promise.all([
+      const [overview, topSongs, topArtists, topAlbums, recentHistory, activity, timeRangeStats, analyticsSnapshot] = await Promise.all([
         this.statsService.getOverview(),
         this.statsService.getTopSongs(10),
         this.statsService.getTopArtists(8),
         this.statsService.getTopAlbums(8),
         this.statsService.getRecentHistory(15),
         this.statsService.getListeningActivity(7),
+        this.statsService.getTimeRangeStats ? this.statsService.getTimeRangeStats(this.selectedTimeRange) : Promise.resolve(null),
         this.analyticsService ? this.analyticsService.getAnalyticsSnapshot({ forceRefresh: true }) : Promise.resolve(null)
       ]);
 
@@ -107,6 +120,7 @@ export class StatsView implements IView {
       this.topAlbums = topAlbums;
       this.recentHistory = recentHistory;
       this.activity = activity;
+      this.timeRangeStats = timeRangeStats;
       this.analyticsSnapshot = analyticsSnapshot;
     } catch (err) {
       console.error('Failed to load music statistics:', err);
@@ -239,7 +253,7 @@ export class StatsView implements IView {
         /* Overview Metrics Cards */
         .stats-metrics-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
           gap: var(--space-4);
         }
 
@@ -286,10 +300,65 @@ export class StatsView implements IView {
         }
 
         .stats-metric-value {
-          font-size: clamp(20px, 2.5vw, 26px);
+          font-size: clamp(18px, 2.2vw, 24px);
           font-weight: 800;
           color: #ffffff;
           line-height: 1.1;
+        }
+
+        /* Time Range Selector */
+        .stats-filter-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: var(--space-3);
+          padding: var(--space-3) var(--space-4);
+          background: var(--color-bg-surface-elevated);
+          border: 1px solid var(--glass-border);
+          border-radius: var(--radius-lg);
+        }
+
+        .stats-filter-pills {
+          display: flex;
+          gap: var(--space-2);
+          flex-wrap: wrap;
+        }
+
+        .stats-filter-pill {
+          padding: 6px 14px;
+          border-radius: var(--radius-full);
+          border: 1px solid var(--glass-border);
+          background: transparent;
+          color: var(--color-text-secondary);
+          font-size: var(--font-size-xs);
+          font-weight: 600;
+          cursor: pointer;
+          transition: all var(--duration-fast);
+        }
+
+        .stats-filter-pill:hover {
+          color: #ffffff;
+          border-color: var(--color-accent-purple-glow);
+        }
+
+        .stats-filter-pill.active {
+          background: var(--color-primary);
+          color: #ffffff;
+          border-color: var(--color-primary);
+          box-shadow: 0 0 12px rgba(139, 92, 246, 0.35);
+        }
+
+        .stats-period-summary {
+          display: flex;
+          align-items: center;
+          gap: var(--space-4);
+          font-size: var(--font-size-xs);
+          color: var(--color-text-muted);
+        }
+
+        .stats-period-summary strong {
+          color: #ffffff;
         }
 
         /* Activity Section */
@@ -311,6 +380,47 @@ export class StatsView implements IView {
           display: flex;
           align-items: center;
           justify-content: space-between;
+        }
+
+        .stats-danger-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--space-1);
+          padding: 4px 10px;
+          border-radius: var(--radius-full);
+          border: 1px solid rgba(239, 68, 68, 0.3);
+          background: rgba(239, 68, 68, 0.08);
+          color: #f87171;
+          font-size: var(--font-size-xs);
+          font-weight: 600;
+          cursor: pointer;
+          transition: all var(--duration-fast);
+        }
+
+        .stats-danger-btn:hover {
+          background: rgba(239, 68, 68, 0.2);
+          border-color: #ef4444;
+          color: #ffffff;
+        }
+
+        .stats-item-action-btn {
+          width: 32px;
+          height: 32px;
+          border-radius: var(--radius-full);
+          border: none;
+          background: transparent;
+          color: var(--color-text-muted);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all var(--duration-fast);
+          flex-shrink: 0;
+        }
+
+        .stats-item-action-btn:hover {
+          color: #f87171;
+          background: rgba(239, 68, 68, 0.15);
         }
 
         .stats-activity-chart {
@@ -464,8 +574,8 @@ export class StatsView implements IView {
         }
 
         .stats-play-btn {
-          width: 44px;
-          height: 44px;
+          width: 36px;
+          height: 36px;
           border-radius: var(--radius-full);
           border: none;
           background: transparent;
@@ -550,13 +660,28 @@ export class StatsView implements IView {
               </span>
               Music Statistics
             </h1>
-            <p class="stats-header-subtitle">Real-time listening habits & local library analytics</p>
+            <p class="stats-header-subtitle">Real-time listening habits & local library intelligence</p>
           </div>
           <button class="stats-refresh-btn" id="stats-refresh-btn" aria-label="Refresh statistics">
             ${getIconSvg('refresh', { size: 16 })}
             <span>Refresh</span>
           </button>
         </header>
+
+        <!-- Time Range Selector -->
+        <div class="stats-filter-bar">
+          <div class="stats-filter-pills" role="radiogroup" aria-label="Statistics Time Range">
+            <button class="stats-filter-pill ${this.selectedTimeRange === 'all' ? 'active' : ''}" data-range="all">All Time</button>
+            <button class="stats-filter-pill ${this.selectedTimeRange === 'today' ? 'active' : ''}" data-range="today">Today</button>
+            <button class="stats-filter-pill ${this.selectedTimeRange === 'last7days' ? 'active' : ''}" data-range="last7days">Last 7 Days</button>
+            <button class="stats-filter-pill ${this.selectedTimeRange === 'last30days' ? 'active' : ''}" data-range="last30days">Last 30 Days</button>
+          </div>
+          <div class="stats-period-summary">
+            <span>Plays: <strong>${this.timeRangeStats?.playCount ?? this.overview.totalPlays}</strong></span>
+            <span>Listened: <strong>${this.formatListeningTime(this.timeRangeStats?.totalListeningTimeMs ?? this.overview.totalListeningTimeMs)}</strong></span>
+            <span>Unique: <strong>${this.timeRangeStats?.uniqueTracksCount ?? this.overview.uniqueTracksPlayed} tracks</strong></span>
+          </div>
+        </div>
 
         <!-- Overview Metrics Grid -->
         <section class="stats-metrics-grid" aria-label="Library & Listening Metrics">
@@ -567,7 +692,7 @@ export class StatsView implements IView {
             </div>
             <div class="stats-metric-info">
               <span class="stats-metric-label">Total Songs</span>
-              <span class="stats-metric-value">${this.overview.totalSongs.toLocaleString()}</span>
+              <span class="stats-metric-value">${(this.overview.totalSongs ?? 0).toLocaleString()}</span>
             </div>
           </div>
 
@@ -578,7 +703,7 @@ export class StatsView implements IView {
             </div>
             <div class="stats-metric-info">
               <span class="stats-metric-label">Artists</span>
-              <span class="stats-metric-value">${this.overview.totalArtists.toLocaleString()}</span>
+              <span class="stats-metric-value">${(this.overview.totalArtists ?? 0).toLocaleString()}</span>
             </div>
           </div>
 
@@ -589,18 +714,7 @@ export class StatsView implements IView {
             </div>
             <div class="stats-metric-info">
               <span class="stats-metric-label">Albums</span>
-              <span class="stats-metric-value">${this.overview.totalAlbums.toLocaleString()}</span>
-            </div>
-          </div>
-
-          <!-- Total Genres -->
-          <div class="stats-metric-card">
-            <div class="stats-metric-icon" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">
-              ${getIconSvg('sparkles', { size: 22 })}
-            </div>
-            <div class="stats-metric-info">
-              <span class="stats-metric-label">Genres</span>
-              <span class="stats-metric-value">${this.overview.totalGenres.toLocaleString()}</span>
+              <span class="stats-metric-value">${(this.overview.totalAlbums ?? 0).toLocaleString()}</span>
             </div>
           </div>
 
@@ -611,7 +725,7 @@ export class StatsView implements IView {
             </div>
             <div class="stats-metric-info">
               <span class="stats-metric-label">Time Listened</span>
-              <span class="stats-metric-value">${this.formatListeningTime(this.overview.totalListeningTimeMs)}</span>
+              <span class="stats-metric-value">${this.formatListeningTime(this.overview.totalListeningTimeMs ?? 0)}</span>
             </div>
           </div>
 
@@ -622,7 +736,40 @@ export class StatsView implements IView {
             </div>
             <div class="stats-metric-info">
               <span class="stats-metric-label">Total Plays</span>
-              <span class="stats-metric-value">${this.overview.totalPlays.toLocaleString()}</span>
+              <span class="stats-metric-value">${(this.overview.totalPlays ?? 0).toLocaleString()}</span>
+            </div>
+          </div>
+
+          <!-- Unique Tracks Played -->
+          <div class="stats-metric-card">
+            <div class="stats-metric-icon" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">
+              ${getIconSvg('sparkles', { size: 22 })}
+            </div>
+            <div class="stats-metric-info">
+              <span class="stats-metric-label">Unique Played</span>
+              <span class="stats-metric-value">${(this.overview.uniqueTracksPlayed ?? 0).toLocaleString()}</span>
+            </div>
+          </div>
+
+          <!-- Average Session Duration -->
+          <div class="stats-metric-card">
+            <div class="stats-metric-icon" style="background: rgba(6, 182, 212, 0.15); color: #22d3ee;">
+              ${getIconSvg('clock', { size: 22 })}
+            </div>
+            <div class="stats-metric-info">
+              <span class="stats-metric-label">Avg Session</span>
+              <span class="stats-metric-value">${this.formatListeningTime(this.overview.averageListeningDurationMs ?? 0)}</span>
+            </div>
+          </div>
+
+          <!-- Favorite Tracks Count -->
+          <div class="stats-metric-card">
+            <div class="stats-metric-icon" style="background: rgba(244, 63, 94, 0.15); color: #fb7185;">
+              ${getIconSvg('heart', { size: 22 })}
+            </div>
+            <div class="stats-metric-info">
+              <span class="stats-metric-label">Favorites</span>
+              <span class="stats-metric-value">${(this.overview.favoriteSongsCount ?? 0).toLocaleString()}</span>
             </div>
           </div>
         </section>
@@ -672,9 +819,17 @@ export class StatsView implements IView {
         <section class="stats-panel-card" aria-label="Listening History">
           <div class="stats-section-title">
             <span>Recent Listening History</span>
-            <span style="font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: normal;">
-              ${this.recentHistory.length} recent sessions
-            </span>
+            <div style="display: flex; align-items: center; gap: var(--space-3);">
+              <span style="font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: normal;">
+                ${this.recentHistory.length} recent sessions
+              </span>
+              ${this.recentHistory.length > 0 ? `
+                <button class="stats-danger-btn" id="stats-clear-history-btn" title="Clear all listening history">
+                  ${getIconSvg('trash', { size: 14 })}
+                  <span>Clear History</span>
+                </button>
+              ` : ''}
+            </div>
           </div>
           ${this.renderRecentHistoryList()}
         </section>
@@ -866,6 +1021,14 @@ export class StatsView implements IView {
               >
                 ${getIconSvg('play', { size: 16 })}
               </button>
+              <button
+                class="stats-item-action-btn"
+                data-delete-history-id="${item.historyId}"
+                aria-label="Remove from history"
+                title="Remove entry"
+              >
+                ${getIconSvg('trash', { size: 14 })}
+              </button>
             </div>
           `)
           .join('')}
@@ -968,6 +1131,41 @@ export class StatsView implements IView {
     const refreshBtn = this.container.querySelector<HTMLButtonElement>('#stats-refresh-btn');
     refreshBtn?.addEventListener('click', () => {
       void this.loadStatistics();
+    });
+
+    // Time Range Filter Pills
+    const filterPills = this.container.querySelectorAll<HTMLButtonElement>('[data-range]');
+    filterPills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        const range = pill.getAttribute('data-range') as 'all' | 'today' | 'last7days' | 'last30days';
+        if (range && range !== this.selectedTimeRange) {
+          this.selectedTimeRange = range;
+          void this.loadStatistics();
+        }
+      });
+    });
+
+    // Clear History Button
+    const clearHistoryBtn = this.container.querySelector<HTMLButtonElement>('#stats-clear-history-btn');
+    clearHistoryBtn?.addEventListener('click', () => {
+      if (window.confirm('Are you sure you want to clear your listening history? This cannot be undone.')) {
+        void this.statsService.clearAllHistory().then(() => {
+          void this.loadStatistics();
+        });
+      }
+    });
+
+    // Delete Individual History Item Buttons
+    const deleteButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-delete-history-id]');
+    deleteButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const historyId = btn.getAttribute('data-delete-history-id');
+        if (historyId) {
+          void this.statsService.deleteHistoryItem(historyId).then(() => {
+            void this.loadStatistics();
+          });
+        }
+      });
     });
 
     // Play Buttons for Top Songs & History

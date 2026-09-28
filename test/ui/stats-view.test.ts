@@ -74,7 +74,17 @@ describe('StatsView', () => {
       ]),
       getListeningActivity: vi.fn().mockResolvedValue([
         { dateStr: '2026-09-23', dayLabel: 'Wed', timestamp: Date.now(), playsCount: 15, durationMs: 1800000 }
-      ])
+      ]),
+      getTimeRangeStats: vi.fn().mockResolvedValue({
+        timeRange: 'all',
+        playCount: 350,
+        totalListeningTimeMs: 7200000,
+        uniqueTracksCount: 120,
+        uniqueArtistsCount: 35,
+        topGenre: 'Synthwave',
+        topArtist: 'Cyber Artist',
+        completedPlays: 300
+      })
     };
 
     mockPlaybackManager = {

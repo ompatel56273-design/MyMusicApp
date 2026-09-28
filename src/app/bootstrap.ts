@@ -207,8 +207,10 @@ export class AppBootstrap {
       artistRepo,
       albumRepo,
       genreRepo,
+      folderRepo,
       historyRepo,
-      dbAdapter: adapter
+      dbAdapter: adapter,
+      eventBus: this.eventBus
     });
     const galaxyService = new GalaxyService({
       libraryService,

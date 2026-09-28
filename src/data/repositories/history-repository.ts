@@ -25,6 +25,21 @@ export class HistoryRepository implements IHistoryRepository {
     await this.db.put(STORES.PLAYBACK_HISTORY, fullRecord);
   }
 
+  public async deleteRecord(id: EntityId): Promise<void> {
+    await this.db.delete(STORES.PLAYBACK_HISTORY, id);
+  }
+
+  public async clearHistory(): Promise<void> {
+    await this.db.clear(STORES.PLAYBACK_HISTORY);
+  }
+
+  public async getByDateRange(startTime: number, endTime: number): Promise<readonly PlaybackHistoryItem[]> {
+    const records = await this.db.getAll<PlaybackHistoryItem>(STORES.PLAYBACK_HISTORY);
+    return records
+      .filter(r => r.playedAt >= startTime && r.playedAt <= endTime)
+      .sort((a, b) => b.playedAt - a.playedAt);
+  }
+
   public async getResumePosition(trackId: EntityId): Promise<PlaybackPosition | null> {
     return this.db.get<PlaybackPosition>(STORES.PLAYBACK_POSITIONS, trackId);
   }

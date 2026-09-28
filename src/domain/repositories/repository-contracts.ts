@@ -104,6 +104,9 @@ export interface IPlaylistRepository {
 export interface IHistoryRepository {
   getRecent(limit?: number): Promise<readonly PlaybackHistoryItem[]>;
   addRecord(record: Omit<PlaybackHistoryItem, 'id'>): Promise<void>;
+  deleteRecord?(id: EntityId): Promise<void>;
+  clearHistory?(): Promise<void>;
+  getByDateRange?(startTime: number, endTime: number): Promise<readonly PlaybackHistoryItem[]>;
   getResumePosition(trackId: EntityId): Promise<PlaybackPosition | null>;
   saveResumePosition(position: PlaybackPosition): Promise<void>;
   clearResumePosition(trackId: EntityId): Promise<void>;

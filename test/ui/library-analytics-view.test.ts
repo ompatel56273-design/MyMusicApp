@@ -81,7 +81,17 @@ describe('StatsView with Library Analytics Integration', () => {
       getTopArtists: vi.fn().mockResolvedValue([]),
       getTopAlbums: vi.fn().mockResolvedValue([]),
       getRecentHistory: vi.fn().mockResolvedValue([]),
-      getListeningActivity: vi.fn().mockResolvedValue([])
+      getListeningActivity: vi.fn().mockResolvedValue([]),
+      getTimeRangeStats: vi.fn().mockResolvedValue({
+        timeRange: 'all',
+        playCount: 150,
+        totalListeningTimeMs: 10000000,
+        uniqueTracksCount: 83,
+        uniqueArtistsCount: 5,
+        topGenre: 'Rock',
+        topArtist: 'Linkin Park',
+        completedPlays: 120
+      })
     };
 
     mockAnalyticsService = {
