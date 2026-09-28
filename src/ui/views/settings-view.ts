@@ -7,13 +7,15 @@ import type {
   IGalaxyService,
   IScannerService,
   ILibraryService,
-  IPlaybackManager
+  IPlaybackManager,
+  IDashboardService
 } from '../../services/contracts/service-contracts';
 import type { VisualizerMode } from '../../domain/entities/visualizer-settings';
 import type { RepeatMode, ShuffleMode } from '../../domain/value-objects/audio-types';
 import { EqualizerComponent } from '../components/audio/equalizer-component';
 import { ReplayGainControlsComponent } from '../components/audio/replaygain-controls-component';
 import { ThemeManager, type ThemePreference, type ResolvedTheme } from '../theme/theme-manager';
+import type { AccentThemeId, AccentThemeDefinition } from '../theme/accent-theme';
 import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-filesystem-adapter';
 import type { IDatabaseAdapter } from '../../data/db/database-adapter';
 import { STORES } from '../../data/db/schema';
@@ -40,6 +42,7 @@ export interface SettingsViewDependencies {
   dbAdapter?: IDatabaseAdapter | undefined;
   eventBus?: EventBus | undefined;
   router?: RouterService | undefined;
+  dashboardService?: IDashboardService | undefined;
 }
 
 export type SettingsSectionId =
@@ -47,6 +50,7 @@ export type SettingsSectionId =
   | 'playback'
   | 'audio'
   | 'appearance'
+  | 'dashboard'
   | 'visualizer'
   | 'galaxy'
   | 'storage'
@@ -79,11 +83,17 @@ export class SettingsView implements IView {
   private readonly dbAdapter?: IDatabaseAdapter | undefined;
   private readonly eventBus?: EventBus | undefined;
   private readonly router?: RouterService | undefined;
+  private readonly dashboardService?: IDashboardService | undefined;
   private readonly capabilityService = FileAccessCapabilityService.getInstance();
 
   private equalizerComponent: EqualizerComponent | null = null;
   private replayGainComponent: ReplayGainControlsComponent | null = null;
   private themeUnsub: (() => void) | null = null;
+  private accentUnsub: (() => void) | null = null;
+  private ambientUnsub: (() => void) | null = null;
+  private dynamicArtworkUnsub: (() => void) | null = null;
+  private playerLayoutUnsub: (() => void) | null = null;
+  private densityUnsub: (() => void) | null = null;
   private eventBusSubs: Disposable[] = [];
   private connectedFolderName: string | null = null;
   private activeSection: SettingsSectionId = 'music-access';
@@ -93,6 +103,7 @@ export class SettingsView implements IView {
     { id: 'playback', label: 'Playback Preferences', icon: 'play' },
     { id: 'audio', label: 'Audio DSP & EQ', icon: 'volume' },
     { id: 'appearance', label: 'Theme & Style', icon: 'settings' },
+    { id: 'dashboard', label: 'Dashboard Customization', icon: 'grid' },
     { id: 'visualizer', label: 'Audio Visualizer', icon: 'maximize' },
     { id: 'galaxy', label: 'Audio Galaxy', icon: 'galaxy' },
     { id: 'storage', label: 'Storage & Database', icon: 'library' },
@@ -114,6 +125,7 @@ export class SettingsView implements IView {
     this.dbAdapter = deps?.dbAdapter;
     this.eventBus = deps?.eventBus;
     this.router = deps?.router;
+    this.dashboardService = deps?.dashboardService;
   }
 
   public mount(container: HTMLElement, params?: RouteParams): void {
@@ -133,6 +145,7 @@ export class SettingsView implements IView {
     this.attachMusicAccessListeners();
     this.attachStorageListeners();
     this.attachDeviceListeners();
+    this.renderDashboardSectionList();
     this.attachEventBusSubscriptions();
     this.refreshAllStats();
   }
@@ -141,6 +154,26 @@ export class SettingsView implements IView {
     if (this.themeUnsub) {
       this.themeUnsub();
       this.themeUnsub = null;
+    }
+    if (this.accentUnsub) {
+      this.accentUnsub();
+      this.accentUnsub = null;
+    }
+    if (this.ambientUnsub) {
+      this.ambientUnsub();
+      this.ambientUnsub = null;
+    }
+    if (this.dynamicArtworkUnsub) {
+      this.dynamicArtworkUnsub();
+      this.dynamicArtworkUnsub = null;
+    }
+    if (this.playerLayoutUnsub) {
+      this.playerLayoutUnsub();
+      this.playerLayoutUnsub = null;
+    }
+    if (this.densityUnsub) {
+      this.densityUnsub();
+      this.densityUnsub = null;
     }
     for (const sub of this.eventBusSubs) {
       sub.dispose();
@@ -404,8 +437,147 @@ export class SettingsView implements IView {
 
         .settings-theme-option.active {
           border-color: var(--color-accent-primary);
-          background: rgba(168, 85, 247, 0.12);
-          box-shadow: var(--shadow-glow-purple);
+          background: var(--color-accent-subtle);
+          box-shadow: var(--shadow-glow);
+        }
+
+        /* Accent Theme Selection Grid */
+        .settings-accent-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+          gap: var(--space-3);
+          width: 100%;
+        }
+
+        .settings-accent-option {
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid var(--glass-border);
+          border-radius: var(--radius-lg);
+          padding: 12px 14px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: var(--space-3);
+          transition: all var(--duration-fast) var(--ease-smooth);
+          outline: none;
+        }
+
+        .settings-accent-option:hover {
+          background: var(--glass-bg-subtle-hover);
+          border-color: var(--glass-border-interactive);
+          transform: translateY(-1px);
+        }
+
+        .settings-accent-option:focus-visible {
+          border-color: var(--color-accent-primary);
+          box-shadow: var(--shadow-glow);
+        }
+
+        .settings-accent-option.active {
+          background: var(--color-accent-subtle);
+          border-color: var(--color-accent-primary);
+          box-shadow: 0 0 16px var(--color-accent-muted);
+        }
+
+        .settings-accent-swatch {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: transform var(--duration-fast);
+        }
+
+        .settings-accent-option:hover .settings-accent-swatch {
+          transform: scale(1.08);
+        }
+
+        .settings-accent-details {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          min-width: 0;
+        }
+
+        .settings-accent-name {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--color-text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .settings-accent-desc {
+          font-size: 11px;
+          color: var(--color-text-muted);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          margin-top: 1px;
+        }
+
+        .settings-ambient-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: var(--space-3);
+          width: 100%;
+        }
+
+        .settings-ambient-option {
+          display: flex;
+          align-items: center;
+          gap: var(--space-3);
+          padding: 12px 14px;
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid var(--glass-border);
+          border-radius: var(--radius-lg);
+          cursor: pointer;
+          transition: all var(--duration-fast) var(--ease-smooth);
+          user-select: none;
+          outline: none;
+        }
+
+        .settings-ambient-option:hover {
+          background: rgba(255, 255, 255, 0.05);
+          border-color: var(--glass-border-interactive);
+          transform: translateY(-1px);
+        }
+
+        .settings-ambient-option:focus-visible {
+          border-color: var(--color-accent-primary);
+          box-shadow: var(--shadow-glow);
+        }
+
+        .settings-ambient-option.active {
+          background: var(--color-accent-subtle);
+          border-color: var(--color-accent-primary);
+          box-shadow: 0 0 16px var(--color-accent-muted);
+        }
+
+        .settings-ambient-swatch {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: var(--color-bg-surface-elevated);
+          border: 1px solid var(--glass-border);
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+        }
+
+        .settings-ambient-check {
+          position: absolute;
+          inset: 0;
+          border-radius: 50%;
+          background: var(--color-accent-primary);
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .settings-form-row {
@@ -767,6 +939,35 @@ export class SettingsView implements IView {
 
               <div class="settings-form-row">
                 <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Crossfade Playback</span>
+                  <span class="settings-form-row-desc">Smoothly blend consecutive tracks with overlapping volume ramps</span>
+                </div>
+                <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer; font-size: 13px; font-weight: 700; color: var(--color-text-primary); background: rgba(255, 255, 255, 0.04); padding: 6px 14px; border-radius: var(--radius-full); border: 1px solid var(--glass-border);">
+                  <input type="checkbox" id="settings-crossfade-enabled" style="accent-color: var(--color-accent-secondary);" />
+                  Enable Crossfade
+                </label>
+              </div>
+
+              <div class="settings-form-row" id="settings-crossfade-duration-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Crossfade Duration</span>
+                  <span class="settings-form-row-desc">Transition overlap length between tracks (1s – 12s)</span>
+                </div>
+                <select id="settings-crossfade-duration" class="settings-input-control">
+                  <option value="1">1 Second</option>
+                  <option value="2">2 Seconds</option>
+                  <option value="3" selected>3 Seconds (Default)</option>
+                  <option value="4">4 Seconds</option>
+                  <option value="5">5 Seconds</option>
+                  <option value="6">6 Seconds</option>
+                  <option value="8">8 Seconds</option>
+                  <option value="10">10 Seconds</option>
+                  <option value="12">12 Seconds</option>
+                </select>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
                   <span class="settings-form-row-title">Direct Equalizer Navigation</span>
                   <span class="settings-form-row-desc">Open the dedicated 10-Band Graphic Equalizer view</span>
                 </div>
@@ -829,6 +1030,189 @@ export class SettingsView implements IView {
                   <span style="font-size: 11px; color: var(--color-text-muted);">Dynamically syncs with OS color mode</span>
                 </div>
               </div>
+
+              <!-- Accent Color Theme Selection -->
+              <div style="margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--glass-border);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); flex-wrap: wrap; gap: 8px;">
+                  <div>
+                    <h3 style="font-size: 15px; font-weight: 700; color: var(--color-text-primary); margin: 0;">Accent Color</h3>
+                    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 2px 0 0 0;">Personalize highlights, glows, sliders, and interactive controls across the app</p>
+                  </div>
+                  <span id="settings-accent-status-badge" style="font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: var(--radius-full); background: var(--color-accent-muted); color: var(--color-accent-primary); border: 1px solid var(--glass-border-highlight);">
+                    Neon Purple Active
+                  </span>
+                </div>
+
+                <div class="settings-accent-grid" role="radiogroup" aria-label="Accent Color Selection">
+                  ${ThemeManager.getInstance().getAvailableAccentThemes().map(theme => `
+                    <div
+                      class="settings-accent-option ${theme.id === ThemeManager.getInstance().getAccentTheme() ? 'active' : ''}"
+                      data-accent-val="${theme.id}"
+                      role="radio"
+                      tabindex="0"
+                      aria-checked="${theme.id === ThemeManager.getInstance().getAccentTheme() ? 'true' : 'false'}"
+                      aria-label="Select ${theme.name} Accent Theme"
+                    >
+                      <div class="settings-accent-swatch" style="background: ${theme.gradient}; box-shadow: 0 0 12px ${theme.glowColor}66;">
+                        <span class="settings-accent-check" style="display: ${theme.id === ThemeManager.getInstance().getAccentTheme() ? 'flex' : 'none'};">${getIconSvg('check', { size: 14, color: '#ffffff' })}</span>
+                      </div>
+                      <div class="settings-accent-details">
+                        <span class="settings-accent-name">${theme.name}</span>
+                        <span class="settings-accent-desc">${theme.description}</span>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+
+              <!-- Ambient Background Mode Selection -->
+              <div style="margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--glass-border);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); flex-wrap: wrap; gap: 8px;">
+                  <div>
+                    <h3 style="font-size: 15px; font-weight: 700; color: var(--color-text-primary); margin: 0;">Ambient Background</h3>
+                    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 2px 0 0 0;">Subtle animated or static atmospheric background visuals behind the application</p>
+                  </div>
+                  <span id="settings-ambient-status-badge" style="font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: var(--radius-full); background: var(--color-accent-muted); color: var(--color-accent-primary); border: 1px solid var(--glass-border-highlight);">
+                    ${ThemeManager.getInstance().getAmbientModeDefinition().name} Active
+                  </span>
+                </div>
+
+                <div class="settings-ambient-grid" role="radiogroup" aria-label="Ambient Background Selection">
+                  ${ThemeManager.getInstance().getAvailableAmbientModes().map(mode => `
+                    <div
+                      class="settings-ambient-option ${mode.id === ThemeManager.getInstance().getAmbientMode() ? 'active' : ''}"
+                      data-ambient-val="${mode.id}"
+                      role="radio"
+                      tabindex="0"
+                      aria-checked="${mode.id === ThemeManager.getInstance().getAmbientMode() ? 'true' : 'false'}"
+                      aria-label="Select ${mode.name} Ambient Mode"
+                    >
+                      <div class="settings-ambient-swatch">
+                        <span style="font-size: 16px;">${mode.animated ? '✨' : '🎨'}</span>
+                        <span class="settings-ambient-check" style="display: ${mode.id === ThemeManager.getInstance().getAmbientMode() ? 'flex' : 'none'};">${getIconSvg('check', { size: 14, color: '#ffffff' })}</span>
+                      </div>
+                      <div class="settings-accent-details">
+                        <span class="settings-accent-name">${mode.name}</span>
+                        <span class="settings-accent-desc">${mode.description}</span>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+
+              <!-- Dynamic Artwork Colors Toggle -->
+              <div style="margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--glass-border);">
+                <div class="settings-form-row" style="background: transparent; border: none; padding: 0;">
+                  <div class="settings-form-row-label">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span class="settings-form-row-title">Dynamic Artwork Colors</span>
+                      <span id="settings-dynamic-artwork-status-badge" style="font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: var(--radius-full); background: ${ThemeManager.getInstance().isDynamicArtworkColorsEnabled() ? 'var(--color-accent-muted)' : 'rgba(255, 255, 255, 0.05)'}; color: ${ThemeManager.getInstance().isDynamicArtworkColorsEnabled() ? 'var(--color-accent-primary)' : 'var(--color-text-muted)'}; border: 1px solid var(--glass-border);">
+                        ${ThemeManager.getInstance().isDynamicArtworkColorsEnabled() ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+                    <span class="settings-form-row-desc">Extract atmospheric color accents dynamically from currently displayed album artwork</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    id="settings-toggle-dynamic-artwork"
+                    style="accent-color: var(--color-accent-primary); width: 22px; height: 22px; cursor: pointer;"
+                    ${ThemeManager.getInstance().isDynamicArtworkColorsEnabled() ? 'checked' : ''}
+                    aria-label="Toggle Dynamic Artwork Colors"
+                  />
+                </div>
+              </div>
+
+              <!-- Player Layout Mode Selection -->
+              <div style="margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--glass-border);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); flex-wrap: wrap; gap: 8px;">
+                  <div>
+                    <h3 style="font-size: 15px; font-weight: 700; color: var(--color-text-primary); margin: 0;">Player Layout</h3>
+                    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 2px 0 0 0;">Adjust the visual arrangement and scale of the full-screen playback presentation</p>
+                  </div>
+                  <span id="settings-layout-status-badge" style="font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: var(--radius-full); background: var(--color-accent-muted); color: var(--color-accent-primary); border: 1px solid var(--glass-border-highlight);">
+                    ${ThemeManager.getInstance().getPlayerLayoutDefinition().name} Active
+                  </span>
+                </div>
+
+                <div class="settings-ambient-grid" role="radiogroup" aria-label="Player Layout Selection">
+                  ${ThemeManager.getInstance().getAvailablePlayerLayouts().map(layout => `
+                    <div
+                      class="settings-player-layout-option settings-layout-option ${layout.id === ThemeManager.getInstance().getPlayerLayout() ? 'active' : ''}"
+                      data-layout-val="${layout.id}"
+                      role="radio"
+                      tabindex="0"
+                      aria-checked="${layout.id === ThemeManager.getInstance().getPlayerLayout() ? 'true' : 'false'}"
+                      aria-label="Select ${layout.name} Player Layout"
+                    >
+                      <div class="settings-ambient-swatch">
+                        <span style="font-size: 16px;">${getIconSvg(layout.icon as any, { size: 16 })}</span>
+                        <span class="settings-ambient-check" style="display: ${layout.id === ThemeManager.getInstance().getPlayerLayout() ? 'flex' : 'none'};">${getIconSvg('check', { size: 14, color: '#ffffff' })}</span>
+                      </div>
+                      <div class="settings-accent-details">
+                        <span class="settings-accent-name">${layout.name}</span>
+                        <span class="settings-accent-desc">${layout.description}</span>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+
+              <!-- Library Information Density Selection -->
+              <div style="margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--glass-border);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); flex-wrap: wrap; gap: 8px;">
+                  <div>
+                    <h3 style="font-size: 15px; font-weight: 700; color: var(--color-text-primary); margin: 0;">Library Information Density</h3>
+                    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 2px 0 0 0;">Adjust row heights, artwork sizing, and spacing across tracks, albums, artists, playlists, and folders</p>
+                  </div>
+                  <span id="settings-density-status-badge" style="font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: var(--radius-full); background: var(--color-accent-muted); color: var(--color-accent-primary); border: 1px solid var(--glass-border-highlight);">
+                    ${ThemeManager.getInstance().getLibraryDensityDefinition().name} Active
+                  </span>
+                </div>
+
+                <div class="settings-ambient-grid" role="radiogroup" aria-label="Library Density Selection">
+                  ${ThemeManager.getInstance().getAvailableLibraryDensities().map(density => `
+                    <div
+                      class="settings-density-option settings-library-density-option ${density.id === ThemeManager.getInstance().getLibraryDensity() ? 'active' : ''}"
+                      data-density-val="${density.id}"
+                      role="radio"
+                      tabindex="0"
+                      aria-checked="${density.id === ThemeManager.getInstance().getLibraryDensity() ? 'true' : 'false'}"
+                      aria-label="Select ${density.name} Library Density"
+                    >
+                      <div class="settings-ambient-swatch">
+                        <span style="font-size: 16px;">${getIconSvg(density.icon as any, { size: 16 })}</span>
+                        <span class="settings-ambient-check" style="display: ${density.id === ThemeManager.getInstance().getLibraryDensity() ? 'flex' : 'none'};">${getIconSvg('check', { size: 14, color: '#ffffff' })}</span>
+                      </div>
+                      <div class="settings-accent-details">
+                        <span class="settings-accent-name">${density.name}</span>
+                        <span class="settings-accent-desc">${density.description}</span>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            </section>
+
+            <!-- Dashboard Customization Section -->
+            <section id="section-dashboard" class="settings-card" tabindex="-1">
+              <div class="settings-card-header">
+                <div>
+                  <span class="settings-card-category">Home Screen Layout</span>
+                  <h2 class="settings-card-title">Dashboard Customization</h2>
+                </div>
+                <button id="settings-dashboard-reset-btn" class="settings-action-btn" aria-label="Restore Default Layout">
+                  <span>🔄</span>
+                  <span>Restore Default Layout</span>
+                </button>
+              </div>
+
+              <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0;">
+                Control which sections appear on your Home Dashboard and adjust their display sequence.
+              </p>
+
+              <div id="settings-dashboard-section-list" role="list" aria-label="Dashboard Sections" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- Populated dynamically by renderDashboardSectionList() -->
+              </div>
             </section>
 
             <!-- 5. Audio Visualizer Preferences Section -->
@@ -838,35 +1222,66 @@ export class SettingsView implements IView {
                   <span class="settings-card-category">Real-time Graphics</span>
                   <h2 class="settings-card-title">Audio Visualizer Preferences</h2>
                 </div>
-                <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer; font-size: 13px; font-weight: 700; color: var(--color-text-primary); background: rgba(255, 255, 255, 0.04); padding: 6px 14px; border-radius: var(--radius-full); border: 1px solid var(--glass-border);">
-                  <input type="checkbox" id="settings-viz-enabled" style="accent-color: var(--color-accent-secondary);" />
-                  Enable Visualizer
-                </label>
               </div>
 
               <div class="settings-form-row">
                 <div class="settings-form-row-label">
-                  <span class="settings-form-row-title">Visualizer Render Mode</span>
-                  <span class="settings-form-row-desc">Algorithm used for rendering dynamic audio frequency waveforms</span>
+                  <span class="settings-form-row-title">Visualizer Style</span>
+                  <span class="settings-form-row-desc">Select visual presentation style or disable visualizer</span>
                 </div>
-                <select id="settings-viz-mode" class="settings-input-control">
-                  <option value="bars">Frequency Spectrum Bars</option>
-                  <option value="waveform">Oscilloscope Waveform</option>
-                  <option value="circular">Circular Radial Ring</option>
-                  <option value="spectrum">Continuous Filled Spectrum</option>
-                  <option value="particles">Neon Audio Particles</option>
-                  <option value="pulse">Concentric Bass Pulse</option>
-                  <option value="album-reactive">Album-Reactive Chromatic</option>
-                  <option value="minimal">Minimal Ambient Orb</option>
+                <select id="settings-viz-mode" class="settings-input-control" aria-label="Visualizer Style">
+                  <option value="off">Off</option>
+                  <option value="bars">Spectrum Bars</option>
+                  <option value="waveform">Waveform</option>
+                  <option value="circular">Circular Spectrum</option>
                 </select>
               </div>
 
-              <div class="settings-form-row">
+              <div class="settings-ambient-grid" role="radiogroup" aria-label="Visualizer Style Selection" style="margin-top: var(--space-4);">
+                <div class="settings-viz-style-option settings-viz-option" data-viz-style="off" role="radio" tabindex="0" aria-checked="false" aria-label="Off">
+                  <div class="settings-ambient-swatch">
+                    <span style="font-size: 16px;">🚫</span>
+                  </div>
+                  <div class="settings-accent-details">
+                    <span class="settings-accent-name">Off</span>
+                    <span class="settings-accent-desc">No visualizer processing or rendering</span>
+                  </div>
+                </div>
+                <div class="settings-viz-style-option settings-viz-option" data-viz-style="bars" role="radio" tabindex="0" aria-checked="false" aria-label="Spectrum Bars">
+                  <div class="settings-ambient-swatch">
+                    <span style="font-size: 16px;">📊</span>
+                  </div>
+                  <div class="settings-accent-details">
+                    <span class="settings-accent-name">Spectrum Bars</span>
+                    <span class="settings-accent-desc">Frequency-domain animated vertical bars</span>
+                  </div>
+                </div>
+                <div class="settings-viz-style-option settings-viz-option" data-viz-style="waveform" role="radio" tabindex="0" aria-checked="false" aria-label="Waveform">
+                  <div class="settings-ambient-swatch">
+                    <span style="font-size: 16px;">〰️</span>
+                  </div>
+                  <div class="settings-accent-details">
+                    <span class="settings-accent-name">Waveform</span>
+                    <span class="settings-accent-desc">Continuous time-domain oscilloscope wave</span>
+                  </div>
+                </div>
+                <div class="settings-viz-style-option settings-viz-option" data-viz-style="circular" role="radio" tabindex="0" aria-checked="false" aria-label="Circular Spectrum">
+                  <div class="settings-ambient-swatch">
+                    <span style="font-size: 16px;">⭕</span>
+                  </div>
+                  <div class="settings-accent-details">
+                    <span class="settings-accent-name">Circular Spectrum</span>
+                    <span class="settings-accent-desc">Radial frequency distribution around a circle</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-form-row" style="margin-top: var(--space-4);">
                 <div class="settings-form-row-label">
                   <span class="settings-form-row-title">Frame Rate Target</span>
-                  <span class="settings-form-row-desc">Target FPS cap for WebGL / Canvas visualizer rendering</span>
+                  <span class="settings-form-row-desc">Target FPS cap for Canvas visualizer rendering</span>
                 </div>
-                <select id="settings-viz-fps" class="settings-input-control">
+                <select id="settings-viz-fps" class="settings-input-control" aria-label="Frame Rate Target">
                   <option value="60">60 FPS (Smooth Motion)</option>
                   <option value="30">30 FPS (Power Efficient)</option>
                 </select>
@@ -1205,6 +1620,204 @@ export class SettingsView implements IView {
     this.themeUnsub = themeManager.subscribe((resolved, pref) => {
       updateThemeDisplay(pref, resolved);
     });
+
+    // Accent Theme Listeners
+    const accentOptions = this.container.querySelectorAll<HTMLElement>('.settings-accent-option');
+    const accentBadge = this.container.querySelector<HTMLElement>('#settings-accent-status-badge');
+
+    const updateAccentDisplay = (accentId: AccentThemeId, def: AccentThemeDefinition) => {
+      accentOptions.forEach(opt => {
+        const val = opt.getAttribute('data-accent-val');
+        const isActive = val === accentId;
+        opt.classList.toggle('active', isActive);
+        opt.setAttribute('aria-checked', isActive ? 'true' : 'false');
+        const check = opt.querySelector<HTMLElement>('.settings-accent-check');
+        if (check) check.style.display = isActive ? 'flex' : 'none';
+      });
+
+      if (accentBadge) {
+        accentBadge.textContent = `${def.name} Active`;
+        accentBadge.style.background = def.mutedBackground;
+        accentBadge.style.color = def.primaryColor;
+        accentBadge.style.borderColor = def.borderHighlight;
+      }
+    };
+
+    updateAccentDisplay(themeManager.getAccentTheme(), themeManager.getAccentThemeDefinition());
+
+    accentOptions.forEach(opt => {
+      opt.addEventListener('click', () => {
+        const accent = opt.getAttribute('data-accent-val') as AccentThemeId;
+        if (accent) {
+          themeManager.setAccentTheme(accent);
+        }
+      });
+      opt.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const accent = opt.getAttribute('data-accent-val') as AccentThemeId;
+          if (accent) {
+            themeManager.setAccentTheme(accent);
+          }
+        }
+      });
+    });
+
+    this.accentUnsub = themeManager.subscribeAccent((accentId, def) => {
+      updateAccentDisplay(accentId, def);
+    });
+
+    // Ambient Background Listeners
+    const ambientOptions = this.container.querySelectorAll<HTMLElement>('.settings-ambient-option');
+    const ambientBadge = this.container.querySelector<HTMLElement>('#settings-ambient-status-badge');
+
+    const updateAmbientDisplay = (modeId: any, def: any) => {
+      ambientOptions.forEach(opt => {
+        const val = opt.getAttribute('data-ambient-val');
+        const isActive = val === modeId;
+        opt.classList.toggle('active', isActive);
+        opt.setAttribute('aria-checked', isActive ? 'true' : 'false');
+        const check = opt.querySelector<HTMLElement>('.settings-ambient-check');
+        if (check) check.style.display = isActive ? 'flex' : 'none';
+      });
+
+      if (ambientBadge) {
+        ambientBadge.textContent = `${def.name} Active`;
+      }
+    };
+
+    updateAmbientDisplay(themeManager.getAmbientMode(), themeManager.getAmbientModeDefinition());
+
+    ambientOptions.forEach(opt => {
+      opt.addEventListener('click', () => {
+        const mode = opt.getAttribute('data-ambient-val');
+        if (mode) {
+          themeManager.setAmbientMode(mode);
+        }
+      });
+      opt.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const mode = opt.getAttribute('data-ambient-val');
+          if (mode) {
+            themeManager.setAmbientMode(mode);
+          }
+        }
+      });
+    });
+
+    this.ambientUnsub = themeManager.subscribeAmbient((modeId, def) => {
+      updateAmbientDisplay(modeId, def);
+    });
+
+    // Dynamic Artwork Colors Listeners
+    const dynamicToggle = this.container.querySelector<HTMLInputElement>('#settings-toggle-dynamic-artwork');
+    const dynamicBadge = this.container.querySelector<HTMLElement>('#settings-dynamic-artwork-status-badge');
+
+    const updateDynamicArtworkDisplay = (enabled: boolean) => {
+      if (dynamicToggle) dynamicToggle.checked = enabled;
+      if (dynamicBadge) {
+        dynamicBadge.textContent = enabled ? 'Enabled' : 'Disabled';
+        dynamicBadge.style.background = enabled ? 'var(--color-accent-muted)' : 'rgba(255, 255, 255, 0.05)';
+        dynamicBadge.style.color = enabled ? 'var(--color-accent-primary)' : 'var(--color-text-muted)';
+      }
+    };
+
+    updateDynamicArtworkDisplay(themeManager.isDynamicArtworkColorsEnabled());
+
+    dynamicToggle?.addEventListener('change', () => {
+      themeManager.setDynamicArtworkColorsEnabled(dynamicToggle.checked);
+    });
+
+    this.dynamicArtworkUnsub = themeManager.subscribeDynamicArtworkColors((enabled) => {
+      updateDynamicArtworkDisplay(enabled);
+    });
+
+    // Player Layout Listeners
+    const layoutOptions = this.container.querySelectorAll<HTMLElement>('.settings-layout-option');
+    const layoutBadge = this.container.querySelector<HTMLElement>('#settings-layout-status-badge');
+
+    const updateLayoutDisplay = (layoutId: string, def: any) => {
+      layoutOptions.forEach(opt => {
+        const val = opt.getAttribute('data-layout-val');
+        const isActive = val === layoutId;
+        opt.classList.toggle('active', isActive);
+        opt.setAttribute('aria-checked', isActive ? 'true' : 'false');
+        const check = opt.querySelector<HTMLElement>('.settings-ambient-check');
+        if (check) check.style.display = isActive ? 'flex' : 'none';
+      });
+
+      if (layoutBadge) {
+        layoutBadge.textContent = `${def.name} Active`;
+      }
+    };
+
+    updateLayoutDisplay(themeManager.getPlayerLayout(), themeManager.getPlayerLayoutDefinition());
+
+    layoutOptions.forEach(opt => {
+      opt.addEventListener('click', () => {
+        const layout = opt.getAttribute('data-layout-val');
+        if (layout) {
+          themeManager.setPlayerLayout(layout);
+        }
+      });
+      opt.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const layout = opt.getAttribute('data-layout-val');
+          if (layout) {
+            themeManager.setPlayerLayout(layout);
+          }
+        }
+      });
+    });
+
+    this.playerLayoutUnsub = themeManager.subscribePlayerLayout((layoutId, def) => {
+      updateLayoutDisplay(layoutId, def);
+    });
+
+    // Library Density Listeners
+    const densityOptions = this.container.querySelectorAll<HTMLElement>('.settings-density-option');
+    const densityBadge = this.container.querySelector<HTMLElement>('#settings-density-status-badge');
+
+    const updateDensityDisplay = (densityId: string, def: any) => {
+      densityOptions.forEach(opt => {
+        const val = opt.getAttribute('data-density-val');
+        const isActive = val === densityId;
+        opt.classList.toggle('active', isActive);
+        opt.setAttribute('aria-checked', isActive ? 'true' : 'false');
+        const check = opt.querySelector<HTMLElement>('.settings-ambient-check');
+        if (check) check.style.display = isActive ? 'flex' : 'none';
+      });
+
+      if (densityBadge) {
+        densityBadge.textContent = `${def.name} Active`;
+      }
+    };
+
+    updateDensityDisplay(themeManager.getLibraryDensity(), themeManager.getLibraryDensityDefinition());
+
+    densityOptions.forEach(opt => {
+      opt.addEventListener('click', () => {
+        const density = opt.getAttribute('data-density-val');
+        if (density) {
+          themeManager.setLibraryDensity(density);
+        }
+      });
+      opt.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const density = opt.getAttribute('data-density-val');
+          if (density) {
+            themeManager.setLibraryDensity(density);
+          }
+        }
+      });
+    });
+
+    this.densityUnsub = themeManager.subscribeLibraryDensity((densityId, def) => {
+      updateDensityDisplay(densityId, def);
+    });
   }
 
   private attachPlaybackSettingsListeners(): void {
@@ -1245,31 +1858,113 @@ export class SettingsView implements IView {
         });
       }
     });
+
+    const crossfadeEnabledCheckbox = this.container.querySelector<HTMLInputElement>('#settings-crossfade-enabled');
+    const crossfadeDurationSelect = this.container.querySelector<HTMLSelectElement>('#settings-crossfade-duration');
+    const crossfadeDurationRow = this.container.querySelector<HTMLElement>('#settings-crossfade-duration-row');
+
+    if (this.audioSettingsService) {
+      void this.audioSettingsService.getSettings().then(settings => {
+        if (crossfadeEnabledCheckbox) {
+          crossfadeEnabledCheckbox.checked = settings.crossfadeEnabled;
+        }
+        if (crossfadeDurationSelect) {
+          crossfadeDurationSelect.value = String(settings.crossfadeDurationSec);
+        }
+        if (crossfadeDurationRow) {
+          crossfadeDurationRow.style.opacity = settings.crossfadeEnabled ? '1' : '0.5';
+        }
+      });
+    }
+
+    crossfadeEnabledCheckbox?.addEventListener('change', async () => {
+      const enabled = crossfadeEnabledCheckbox.checked;
+      if (crossfadeDurationRow) {
+        crossfadeDurationRow.style.opacity = enabled ? '1' : '0.5';
+      }
+      if (this.playbackManager) {
+        this.playbackManager.setCrossfade?.(enabled);
+      }
+      if (this.audioEngine) {
+        this.audioEngine.setCrossfade?.(enabled);
+      }
+      if (this.audioSettingsService) {
+        await this.audioSettingsService.saveSettings({ crossfadeEnabled: enabled });
+      }
+    });
+
+    crossfadeDurationSelect?.addEventListener('change', async () => {
+      const duration = Number(crossfadeDurationSelect.value);
+      if (this.playbackManager) {
+        this.playbackManager.setCrossfade?.(crossfadeEnabledCheckbox?.checked ?? false, duration);
+      }
+      if (this.audioEngine) {
+        this.audioEngine.setCrossfade?.(crossfadeEnabledCheckbox?.checked ?? false, duration);
+      }
+      if (this.audioSettingsService) {
+        await this.audioSettingsService.saveSettings({ crossfadeDurationSec: duration });
+      }
+    });
   }
 
   private attachVisualizerSettingsListeners(): void {
     if (!this.container || !this.visualizerService) return;
 
-    const enabledCheckbox = this.container.querySelector<HTMLInputElement>('#settings-viz-enabled');
     const modeSelect = this.container.querySelector<HTMLSelectElement>('#settings-viz-mode');
     const fpsSelect = this.container.querySelector<HTMLSelectElement>('#settings-viz-fps');
+    const styleOptions = this.container.querySelectorAll<HTMLElement>('.settings-viz-style-option');
+
+    const updateUIState = (settings: { enabled?: boolean; mode?: VisualizerMode } | null | undefined) => {
+      if (!settings) return;
+      const activeMode = !settings.enabled ? 'off' : (settings.mode || 'off');
+      if (modeSelect) modeSelect.value = activeMode;
+
+      styleOptions.forEach(opt => {
+        const val = opt.getAttribute('data-viz-style');
+        const isActive = (val === 'off' && activeMode === 'off') ||
+          (val === activeMode) ||
+          (val === 'bars' && activeMode === 'spectrum-bars') ||
+          (val === 'circular' && activeMode === 'circular-spectrum');
+
+        opt.classList.toggle('active', isActive);
+        opt.setAttribute('aria-checked', isActive ? 'true' : 'false');
+
+        const checkEl = opt.querySelector('.settings-ambient-check');
+        if (checkEl) {
+          (checkEl as HTMLElement).style.display = isActive ? 'flex' : 'none';
+        }
+      });
+    };
 
     void this.visualizerService.getSettings().then(settings => {
-      if (enabledCheckbox) enabledCheckbox.checked = settings.enabled;
-      if (modeSelect) modeSelect.value = settings.mode;
+      updateUIState(settings);
       if (fpsSelect) fpsSelect.value = String(settings.fpsLimit);
     });
 
-    enabledCheckbox?.addEventListener('change', () => {
+    modeSelect?.addEventListener('change', async () => {
+      const selectedMode = modeSelect.value as VisualizerMode;
       if (this.visualizerService) {
-        void this.visualizerService.setEnabled(enabledCheckbox.checked);
+        const updated = await this.visualizerService.setMode(selectedMode);
+        updateUIState(updated);
       }
     });
 
-    modeSelect?.addEventListener('change', () => {
-      if (this.visualizerService) {
-        void this.visualizerService.setMode(modeSelect.value as VisualizerMode);
-      }
+    styleOptions.forEach(opt => {
+      const handleSelect = async () => {
+        const val = opt.getAttribute('data-viz-style') as VisualizerMode;
+        if (val && this.visualizerService) {
+          const updated = await this.visualizerService.setMode(val);
+          updateUIState(updated);
+        }
+      };
+
+      opt.addEventListener('click', handleSelect);
+      opt.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          void handleSelect();
+        }
+      });
     });
 
     fpsSelect?.addEventListener('change', () => {
@@ -1525,6 +2220,115 @@ export class SettingsView implements IView {
         }
       })
     );
+
+    this.eventBusSubs.push(
+      this.eventBus.subscribe(DomainEvents.DASHBOARD_SETTINGS_CHANGED, () => {
+        this.renderDashboardSectionList();
+      })
+    );
+  }
+
+  private renderDashboardSectionList(): void {
+    if (!this.container) return;
+    const listEl = this.container.querySelector('#settings-dashboard-section-list');
+    if (!listEl) return;
+
+    const sections = this.dashboardService
+      ? this.dashboardService.getResolvedSections()
+      : [
+          { id: 'recently-played', label: 'Recently Played', enabled: true, order: 0 },
+          { id: 'playlists', label: 'Playlists & Mixes', enabled: true, order: 1 },
+          { id: 'artists', label: 'Top Artists', enabled: true, order: 2 },
+          { id: 'favorites', label: 'Favorites', enabled: true, order: 3 },
+          { id: 'recently-added', label: 'Recently Added', enabled: true, order: 4 },
+          { id: 'most-played', label: 'Most Played', enabled: true, order: 5 },
+          { id: 'albums', label: 'Top Albums', enabled: true, order: 6 },
+          { id: 'genres', label: 'Top Genres', enabled: true, order: 7 },
+          { id: 'folders', label: 'Folders', enabled: true, order: 8 }
+        ];
+
+    const enabledSections = sections.filter(s => s.enabled);
+    const totalEnabled = enabledSections.length;
+
+    listEl.innerHTML = sections
+      .map(sec => {
+        const enabledIdx = enabledSections.findIndex(s => s.id === sec.id);
+        const isFirst = enabledIdx === 0;
+        const isLast = enabledIdx === totalEnabled - 1;
+
+        return `
+          <div class="settings-dashboard-item" role="listitem" data-section-id="${sec.id}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border); border-radius: var(--radius-xl); gap: 12px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 200px;">
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;">
+                <input type="checkbox" class="dashboard-visibility-toggle" data-section-id="${sec.id}" ${sec.enabled ? 'checked' : ''} aria-label="Toggle ${sec.label} section visibility" style="accent-color: var(--color-accent-primary); width: 20px; height: 20px; cursor: pointer;" />
+                <span style="font-size: 14px; font-weight: 600; color: ${sec.enabled ? 'var(--color-text-primary)' : 'var(--color-text-muted)'};">${sec.label}</span>
+              </label>
+              <span class="dashboard-position-badge" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-full); background: ${sec.enabled ? 'var(--color-accent-muted)' : 'rgba(255, 255, 255, 0.05)'}; color: ${sec.enabled ? 'var(--color-accent-primary)' : 'var(--color-text-muted)'}; border: 1px solid var(--glass-border);">
+                ${sec.enabled ? `Pos ${enabledIdx + 1} of ${totalEnabled}` : 'Hidden'}
+              </span>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <button class="settings-action-btn btn-move-up" data-section-id="${sec.id}" ${isFirst || !sec.enabled ? 'disabled' : ''} aria-label="Move ${sec.label} up" style="padding: 6px 12px; min-height: 36px; font-size: 12px;">
+                <span>${getIconSvg('chevron-up', { size: 16 })}</span>
+                <span>Up</span>
+              </button>
+              <button class="settings-action-btn btn-move-down" data-section-id="${sec.id}" ${isLast || !sec.enabled ? 'disabled' : ''} aria-label="Move ${sec.label} down" style="padding: 6px 12px; min-height: 36px; font-size: 12px;">
+                <span>${getIconSvg('chevron-down', { size: 16 })}</span>
+                <span>Down</span>
+              </button>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    this.attachDashboardItemEvents();
+  }
+
+  private attachDashboardItemEvents(): void {
+    if (!this.container) return;
+
+    // Toggle Visibility
+    const toggles = this.container.querySelectorAll<HTMLInputElement>('.dashboard-visibility-toggle');
+    toggles.forEach(toggle => {
+      toggle.addEventListener('change', () => {
+        const sectionId = toggle.getAttribute('data-section-id');
+        if (sectionId && this.dashboardService) {
+          void this.dashboardService.setSectionVisibility(sectionId as any, toggle.checked);
+        }
+      });
+    });
+
+    // Move Up
+    const upBtns = this.container.querySelectorAll<HTMLButtonElement>('.btn-move-up');
+    upBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const sectionId = btn.getAttribute('data-section-id');
+        if (sectionId && this.dashboardService) {
+          void this.dashboardService.moveSectionUp(sectionId as any);
+        }
+      });
+    });
+
+    // Move Down
+    const downBtns = this.container.querySelectorAll<HTMLButtonElement>('.btn-move-down');
+    downBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const sectionId = btn.getAttribute('data-section-id');
+        if (sectionId && this.dashboardService) {
+          void this.dashboardService.moveSectionDown(sectionId as any);
+        }
+      });
+    });
+
+    // Restore Defaults
+    const resetBtn = this.container.querySelector<HTMLButtonElement>('#settings-dashboard-reset-btn');
+    resetBtn?.addEventListener('click', () => {
+      if (this.dashboardService) {
+        void this.dashboardService.resetToDefaults();
+      }
+    });
   }
 
   private showScanProgress(statusText: string, processed: number, total: number): void {

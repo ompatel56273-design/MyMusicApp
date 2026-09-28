@@ -103,7 +103,8 @@ describe('HomeView Rebuild Component', () => {
     homeView.mount(container);
     expect(container.innerHTML).toContain('Music For A');
     expect(container.innerHTML).toContain('Made For You');
-    expect(container.innerHTML).toContain('Trending Now');
+    expect(container.querySelector('#home-dynamic-sections-container')).not.toBeNull();
+    expect(container.querySelector('#home-section-recently-played')).not.toBeNull();
     expect(container.innerHTML).toContain('Top Artists');
     expect(container.innerHTML).toContain('Top Genres');
     expect(container.innerHTML).toContain('Quick Actions');

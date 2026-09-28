@@ -17,10 +17,10 @@ export class ArtistCardComponent {
     card.style.display = 'flex';
     card.style.alignItems = 'center';
     card.style.gap = 'var(--space-4)';
-    card.style.padding = '12px 18px';
+    card.style.padding = 'var(--library-item-padding, 12px 18px)';
     card.style.borderRadius = 'var(--radius-lg)';
     card.style.cursor = 'pointer';
-    card.style.height = '68px';
+    card.style.height = 'calc(var(--library-row-height, 56px) + 12px)';
     card.style.boxSizing = 'border-box';
     card.style.background = 'rgba(255, 255, 255, 0.03)';
     card.style.border = '1px solid var(--glass-border)';

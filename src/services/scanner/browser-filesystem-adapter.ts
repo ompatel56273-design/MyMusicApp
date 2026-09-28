@@ -81,6 +81,7 @@ export class BrowserFilesystemAdapter extends BaseFilesystemAdapter implements I
     onFile: (entry: DiscoveredFileEntry) => void | Promise<void>,
     options?: {
       onDirectory?: (dirPath: string) => void | Promise<void>;
+      onUnsupported?: (entryPath: string, filename: string) => void | Promise<void>;
       onError?: (path: string, error: Error) => void;
       signal?: AbortSignal;
     }
@@ -108,43 +109,85 @@ export class BrowserFilesystemAdapter extends BaseFilesystemAdapter implements I
       try {
         directoriesDiscovered++;
         if (options?.onDirectory) {
-          await options.onDirectory(currentPath);
+          try {
+            await options.onDirectory(currentPath);
+          } catch (dirCbErr) {
+            options?.onError?.(currentPath, dirCbErr as Error);
+          }
         }
 
-        // Iterate entries
-        for await (const [name, entryHandle] of (dirHandle as any).entries()) {
+        // Iterate entries safely with broad API fallback (entries(), values(), or async iterator)
+        let entriesArray: Array<[string, FileSystemHandle]> = [];
+        try {
+          if (typeof (dirHandle as any).entries === 'function') {
+            for await (const entry of (dirHandle as any).entries()) {
+              entriesArray.push(entry as [string, FileSystemHandle]);
+            }
+          } else if (typeof (dirHandle as any)[Symbol.asyncIterator] === 'function') {
+            for await (const entry of dirHandle as any) {
+              if (Array.isArray(entry)) {
+                entriesArray.push(entry as [string, FileSystemHandle]);
+              } else if (entry && entry.name) {
+                entriesArray.push([entry.name, entry as FileSystemHandle]);
+              }
+            }
+          } else if (typeof (dirHandle as any).values === 'function') {
+            for await (const handleItem of (dirHandle as any).values()) {
+              if (handleItem && handleItem.name) {
+                entriesArray.push([handleItem.name, handleItem as FileSystemHandle]);
+              }
+            }
+          }
+        } catch (entriesErr) {
+          this.logger.warn(`Failed to open directory entries for: ${currentPath}`, { error: entriesErr });
+          options?.onError?.(currentPath, entriesErr as Error);
+          return;
+        }
+
+        for (const [name, entryHandle] of entriesArray) {
           if (options?.signal?.aborted) break;
 
           const entryPath = `${currentPath}/${name}`;
 
-          if (entryHandle.kind === 'file') {
-            if (this.isAudioFile(name)) {
-              try {
-                const file = await (entryHandle as FileSystemFileHandle).getFile();
-                const ext = this.getAudioExtension(name) || '';
+          try {
+            if (entryHandle.kind === 'file') {
+              if (this.isAudioFile(name)) {
+                try {
+                  const file = await (entryHandle as FileSystemFileHandle).getFile();
+                  const ext = this.getAudioExtension(name) || '';
 
-                filesDiscovered++;
-                await onFile({
-                  path: entryPath,
-                  name,
-                  extension: ext,
-                  sizeBytes: file.size,
-                  modifiedTimeMs: file.lastModified,
-                  parentPath: currentPath
-                });
-              } catch (fileErr) {
-                this.logger.warn(`Failed to read file metadata for: ${entryPath}`, { error: fileErr });
-                options?.onError?.(entryPath, fileErr as Error);
+                  filesDiscovered++;
+                  await onFile({
+                    path: entryPath,
+                    name,
+                    extension: ext,
+                    sizeBytes: file.size,
+                    modifiedTimeMs: file.lastModified,
+                    parentPath: currentPath
+                  });
+                } catch (fileErr) {
+                  this.logger.warn(`Failed to read file metadata for: ${entryPath}`, { error: fileErr });
+                  options?.onError?.(entryPath, fileErr as Error);
+                }
+              } else {
+                try {
+                  await options?.onUnsupported?.(entryPath, name);
+                } catch (unsupportedErr) {
+                  options?.onError?.(entryPath, unsupportedErr as Error);
+                }
+              }
+            } else if (entryHandle.kind === 'directory') {
+              // Recurse safely into sub-directory
+              try {
+                await traverseHandle(entryHandle as FileSystemDirectoryHandle, entryPath);
+              } catch (subDirErr) {
+                this.logger.warn(`Failed to traverse sub-directory: ${entryPath}`, { error: subDirErr });
+                options?.onError?.(entryPath, subDirErr as Error);
               }
             }
-          } else if (entryHandle.kind === 'directory') {
-            // Recurse safely
-            try {
-              await traverseHandle(entryHandle as FileSystemDirectoryHandle, entryPath);
-            } catch (subDirErr) {
-              this.logger.warn(`Failed to traverse sub-directory: ${entryPath}`, { error: subDirErr });
-              options?.onError?.(entryPath, subDirErr as Error);
-            }
+          } catch (entryErr) {
+            this.logger.warn(`Error processing entry: ${entryPath}`, { error: entryErr });
+            options?.onError?.(entryPath, entryErr as Error);
           }
         }
       } catch (dirErr) {

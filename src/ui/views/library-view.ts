@@ -1,6 +1,10 @@
 import type { IView } from './view-interface';
 import type { RouteParams, LibraryTab } from '../navigation/route-types';
-import type { ILibraryService, IPlaybackManager, IArtworkService } from '../../services/contracts/service-contracts';
+import type { ILibraryService, IPlaybackManager, IArtworkService, IScannerService, IPlaylistService } from '../../services/contracts/service-contracts';
+import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-filesystem-adapter';
+import type { EventBus } from '../../core/events/event-bus';
+import { DomainEvents } from '../../domain/events/domain-events';
+import type { Disposable } from '../../core/types/common';
 import { LibraryToolbar, type LibraryToolbarState } from '../components/library/library-toolbar';
 import { TrackInspectorComponent } from '../components/library/track-inspector-component';
 import { SongsTabView } from './library/songs-tab-view';
@@ -11,10 +15,23 @@ import { FoldersTabView } from './library/folders-tab-view';
 import { FavoritesTabView } from './library/favorites-tab-view';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
+import type { DuplicateDetectorService } from '../../services/duplicate/duplicate-detector-service';
+import type { LibraryHealthService } from '../../services/library/library-health-service';
+import { DuplicateDetectionModal } from '../components/library/duplicate-detection-modal';
+import { LibraryHealthDashboard } from '../components/library/library-health-dashboard';
+import type { AlbumMergeService } from '../../services/library/album-merge-service';
+
 export interface LibraryViewDependencies {
   libraryService: ILibraryService;
+  albumMergeService?: AlbumMergeService | undefined;
   playbackManager?: IPlaybackManager | undefined;
   artworkService?: IArtworkService | undefined;
+  scannerService?: IScannerService | undefined;
+  fsAdapter?: BrowserFilesystemAdapter | undefined;
+  eventBus?: EventBus | undefined;
+  duplicateDetectorService?: DuplicateDetectorService | undefined;
+  healthService?: LibraryHealthService | undefined;
+  playlistService?: IPlaylistService | undefined;
 }
 
 /**
@@ -32,8 +49,16 @@ export class LibraryView implements IView {
   private container: HTMLElement | null = null;
   private currentTab: LibraryTab = 'songs';
   private readonly libraryService: ILibraryService;
+  private readonly albumMergeService?: AlbumMergeService | undefined;
   private readonly playbackManager?: IPlaybackManager | undefined;
   private readonly artworkService?: IArtworkService | undefined;
+  private readonly scannerService?: IScannerService | undefined;
+  private readonly fsAdapter?: BrowserFilesystemAdapter | undefined;
+  private readonly eventBus?: EventBus | undefined;
+  private readonly duplicateDetectorService?: DuplicateDetectorService | undefined;
+  private readonly healthService?: LibraryHealthService | undefined;
+  private readonly playlistService?: IPlaylistService | undefined;
+  private libraryUpdateSub: Disposable | null = null;
 
   private toolbar: LibraryToolbar | null = null;
   private inspector: TrackInspectorComponent | null = null;
@@ -49,8 +74,15 @@ export class LibraryView implements IView {
   constructor(depsOrService?: LibraryViewDependencies | ILibraryService) {
     if (depsOrService && 'libraryService' in depsOrService) {
       this.libraryService = depsOrService.libraryService;
+      this.albumMergeService = depsOrService.albumMergeService;
       this.playbackManager = depsOrService.playbackManager;
       this.artworkService = depsOrService.artworkService;
+      this.scannerService = depsOrService.scannerService;
+      this.fsAdapter = depsOrService.fsAdapter;
+      this.eventBus = depsOrService.eventBus;
+      this.duplicateDetectorService = depsOrService.duplicateDetectorService;
+      this.healthService = depsOrService.healthService;
+      this.playlistService = depsOrService.playlistService;
     } else {
       this.libraryService = depsOrService as ILibraryService;
     }
@@ -61,10 +93,22 @@ export class LibraryView implements IView {
     if (params?.tab) {
       this.currentTab = params.tab;
     }
+
+    if (this.eventBus) {
+      this.libraryUpdateSub = this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, async () => {
+        await this.updateStats();
+        this.mountActiveTab();
+      });
+    }
+
     this.render();
   }
 
   public unmount(): void {
+    if (this.libraryUpdateSub) {
+      this.libraryUpdateSub.dispose();
+      this.libraryUpdateSub = null;
+    }
     if (this.toolbar) {
       this.toolbar.unmount();
       this.toolbar = null;
@@ -335,12 +379,24 @@ export class LibraryView implements IView {
             </p>
           </div>
 
-          <!-- Quick Actions Button (Add Music / Scan) -->
+          <!-- Quick Actions Button (Add Music / Scan + Find Duplicates + Library Health) -->
           <div class="library-header-metrics" style="display: flex; align-items: center; gap: var(--space-3); z-index: 1;">
             <button id="library-scan-quick-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; border: none; background: linear-gradient(135deg, var(--color-accent-purple) 0%, #9333ea 100%); color: #ffffff; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.5); transition: all var(--duration-fast) var(--ease-smooth);">
               <span>${getIconSvg('plus', { size: 16, color: '#ffffff' })}</span>
               <span>Add Music / Scan</span>
             </button>
+            ${this.duplicateDetectorService ? `
+              <button id="library-duplicates-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; border: 1px solid var(--glass-border-interactive); background: rgba(168, 85, 247, 0.12); color: var(--color-text-primary); transition: all var(--duration-fast) var(--ease-smooth);">
+                <span>${getIconSvg('sparkles', { size: 16, color: 'var(--color-accent-purple-glow)' })}</span>
+                <span>Find Duplicates</span>
+              </button>
+            ` : ''}
+            ${this.healthService ? `
+              <button id="library-health-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; border: 1px solid var(--glass-border-interactive); background: rgba(56, 189, 248, 0.12); color: var(--color-text-primary); transition: all var(--duration-fast) var(--ease-smooth);">
+                <span>${getIconSvg('heart', { size: 16, color: 'var(--color-accent-cyan)' })}</span>
+                <span>Library Health</span>
+              </button>
+            ` : ''}
           </div>
         </header>
 
@@ -455,20 +511,132 @@ export class LibraryView implements IView {
 
   private bindHeaderEvents(): void {
     if (!this.container) return;
+    const dupBtn = this.container.querySelector<HTMLButtonElement>('#library-duplicates-btn');
+    dupBtn?.addEventListener('click', () => {
+      if (this.duplicateDetectorService) {
+        const modal = new DuplicateDetectionModal({
+          duplicateDetectorService: this.duplicateDetectorService,
+          onResolved: async () => {
+            await this.updateStats();
+            this.mountActiveTab();
+          }
+        });
+        modal.mount();
+      }
+    });
+
+    const healthBtn = this.container.querySelector<HTMLButtonElement>('#library-health-btn');
+    healthBtn?.addEventListener('click', () => {
+      if (this.healthService) {
+        const dashboard = new LibraryHealthDashboard({
+          healthService: this.healthService,
+          onOpenDuplicates: () => {
+            if (this.duplicateDetectorService) {
+              const modal = new DuplicateDetectionModal({
+                duplicateDetectorService: this.duplicateDetectorService,
+                onResolved: async () => {
+                  await this.updateStats();
+                  this.mountActiveTab();
+                }
+              });
+              modal.mount();
+            }
+          },
+          onNavigateTab: (tab) => {
+            if (tab === 'duplicates') {
+              if (this.duplicateDetectorService) {
+                const modal = new DuplicateDetectionModal({
+                  duplicateDetectorService: this.duplicateDetectorService,
+                  onResolved: async () => {
+                    await this.updateStats();
+                    this.mountActiveTab();
+                  }
+                });
+                modal.mount();
+              }
+            } else {
+              this.currentTab = tab as LibraryTab;
+              this.render();
+            }
+          }
+        });
+        dashboard.mount();
+      }
+    });
+
     const scanBtn = this.container.querySelector<HTMLButtonElement>('#library-scan-quick-btn');
-    scanBtn?.addEventListener('click', () => {
+    scanBtn?.addEventListener('click', async () => {
+      console.log('[FolderPicker] selection started');
+
+      // 1. If showDirectoryPicker is supported in the browser environment, try it first
+      if (typeof (window as any).showDirectoryPicker === 'function') {
+        try {
+          const handle: FileSystemDirectoryHandle = await (window as any).showDirectoryPicker({
+            mode: 'read'
+          });
+
+          if (handle) {
+            console.log(`[FolderPicker] selected directory: ${handle.name}`);
+            const rootPath = `folder://${handle.name}`;
+
+            if (this.fsAdapter) {
+              this.fsAdapter.registerDirectoryHandle(rootPath, handle);
+            }
+
+            if (this.scannerService) {
+              await this.scannerService.scanDirectory(rootPath);
+            }
+
+            await this.updateStats();
+            this.mountActiveTab();
+            return;
+          }
+        } catch (err: any) {
+          if (err?.name === 'AbortError') {
+            console.log('[FolderPicker] user cancelled directory selection');
+            return;
+          }
+          console.warn('[FolderPicker] showDirectoryPicker fallback to webkitdirectory:', err);
+        }
+      }
+
+      // 2. Browser folder upload fallback (<input type="file" webkitdirectory multiple>)
       const fileInput = document.createElement('input');
       fileInput.type = 'file';
       (fileInput as any).webkitdirectory = true;
       fileInput.multiple = true;
       fileInput.style.display = 'none';
       document.body.appendChild(fileInput);
-      fileInput.addEventListener('change', () => {
-        if (fileInput.parentElement) {
-          fileInput.parentElement.removeChild(fileInput);
+
+      fileInput.addEventListener('change', async () => {
+        try {
+          const files = fileInput.files;
+          const rawCount = files ? files.length : 0;
+          console.log(`[FolderPicker] raw files received: ${rawCount}`);
+
+          if (files && rawCount > 0) {
+            const firstFile = files[0];
+            const dirName = (firstFile as any)?.webkitRelativePath
+              ? (firstFile as any).webkitRelativePath.split('/')[0]
+              : 'Selected Folder';
+            console.log(`[FolderPicker] selected directory: ${dirName}`);
+
+            if (this.scannerService?.importFiles) {
+              const res = await this.scannerService.importFiles(files);
+              console.log('[FolderPicker] import result:', res);
+            }
+          }
+        } catch (importErr) {
+          console.error('[FolderPicker] import failed:', importErr);
+        } finally {
+          if (fileInput.parentElement) {
+            fileInput.parentElement.removeChild(fileInput);
+          }
+          await this.updateStats();
+          this.mountActiveTab();
         }
-        this.render();
       });
+
       fileInput.click();
     });
   }
@@ -526,7 +694,8 @@ export class LibraryView implements IView {
         const songsView = new SongsTabView({
           libraryService: this.libraryService,
           playbackManager: this.playbackManager,
-          artworkService: this.artworkService
+          artworkService: this.artworkService,
+          playlistService: this.playlistService
         });
         this.activeSubView = songsView;
         void songsView.mount(contentSlot, this.toolbar ? this.toolbar.getState() : undefined);
@@ -536,6 +705,7 @@ export class LibraryView implements IView {
       case 'albums': {
         const albumsView = new AlbumsTabView({
           libraryService: this.libraryService,
+          albumMergeService: this.albumMergeService,
           playbackManager: this.playbackManager,
           artworkService: this.artworkService,
           onSelectAlbum: _album => {
@@ -591,7 +761,8 @@ export class LibraryView implements IView {
         const favoritesView = new FavoritesTabView({
           libraryService: this.libraryService,
           playbackManager: this.playbackManager,
-          artworkService: this.artworkService
+          artworkService: this.artworkService,
+          playlistService: this.playlistService
         });
         this.activeSubView = favoritesView;
         void favoritesView.mount(contentSlot);

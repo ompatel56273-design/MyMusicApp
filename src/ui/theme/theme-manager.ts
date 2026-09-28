@@ -1,3 +1,43 @@
+import {
+  type AccentThemeId,
+  type AccentThemeDefinition,
+  DEFAULT_ACCENT_THEME,
+  ACCENT_THEMES,
+  getAccentTheme,
+  getAllAccentThemes
+} from './accent-theme';
+import {
+  type AmbientMode,
+  type AmbientModeDefinition,
+  DEFAULT_AMBIENT_MODE,
+  AMBIENT_MODES,
+  getAmbientMode,
+  getAllAmbientModes
+} from './ambient-background';
+
+import {
+  type ExtractedArtworkPalette,
+  extractPaletteFromImage
+} from './dynamic-artwork-colors';
+
+import {
+  type PlayerLayoutId,
+  type PlayerLayoutDefinition,
+  DEFAULT_PLAYER_LAYOUT,
+  PLAYER_LAYOUTS,
+  getPlayerLayout,
+  getAllPlayerLayouts
+} from './player-layout';
+
+import {
+  type LibraryDensityId,
+  type LibraryDensityDefinition,
+  DEFAULT_LIBRARY_DENSITY,
+  LIBRARY_DENSITIES,
+  getLibraryDensity,
+  getAllLibraryDensities
+} from './library-density';
+
 export type ThemePreference = 'dark' | 'light' | 'system';
 export type ResolvedTheme = 'dark' | 'light';
 
@@ -5,7 +45,32 @@ export interface ThemeChangeListener {
   (resolvedTheme: ResolvedTheme, preference: ThemePreference): void;
 }
 
+export interface AccentThemeChangeListener {
+  (accent: AccentThemeId, definition: AccentThemeDefinition): void;
+}
+
+export interface AmbientModeChangeListener {
+  (mode: AmbientMode, definition: AmbientModeDefinition): void;
+}
+
+export interface DynamicArtworkColorsChangeListener {
+  (enabled: boolean, palette: ExtractedArtworkPalette | null): void;
+}
+
+export interface PlayerLayoutChangeListener {
+  (layout: PlayerLayoutId, definition: PlayerLayoutDefinition): void;
+}
+
+export interface LibraryDensityChangeListener {
+  (density: LibraryDensityId, definition: LibraryDensityDefinition): void;
+}
+
 const STORAGE_KEY = 'mymusicapp_theme_preference';
+const ACCENT_STORAGE_KEY = 'mymusicapp_accent_theme';
+const AMBIENT_STORAGE_KEY = 'mymusicapp_ambient_mode';
+const DYNAMIC_ARTWORK_STORAGE_KEY = 'mymusicapp_dynamic_artwork_colors';
+const PLAYER_LAYOUT_STORAGE_KEY = 'mymusicapp_player_layout';
+const LIBRARY_DENSITY_STORAGE_KEY = 'mymusicapp_library_density';
 
 /**
  * Centralized Theme Manager for MyMusicApp.
@@ -13,20 +78,41 @@ const STORAGE_KEY = 'mymusicapp_theme_preference';
  * - 'dark': Dark Atmosphere (Default approved theme)
  * - 'light': Light Mode
  * - 'system': Follows OS prefers-color-scheme dynamically via matchMedia
+ * - Accent Themes: User-selectable color accents (Purple, Cyan, Blue, Emerald, Amber, Pink, Rose)
+ * - Ambient Backgrounds: Optional atmospheric visual backgrounds (Off, Aurora, Gradient Flow, Soft Glow, Static Gradient)
+ * - Dynamic Artwork Colors: Optional extraction of album artwork color palette for artwork-aware visual presentation
+ * - Player Layouts: User-selectable presentation layout modes (Standard, Compact, Expanded)
+ * - Library Density: User-selectable library information density modes (Comfortable, Standard, Compact)
  *
- * Persists preference and updates documentElement data-theme attribute.
+ * Persists preferences and updates documentElement attributes and custom CSS properties.
  */
 export class ThemeManager {
   private static instance: ThemeManager | null = null;
   private preference: ThemePreference = 'dark';
+  private accentTheme: AccentThemeId = DEFAULT_ACCENT_THEME;
+  private ambientMode: AmbientMode = DEFAULT_AMBIENT_MODE;
+  private dynamicArtworkColorsEnabled: boolean = false;
+  private currentArtworkPalette: ExtractedArtworkPalette | null = null;
+  private playerLayout: PlayerLayoutId = DEFAULT_PLAYER_LAYOUT;
+  private libraryDensity: LibraryDensityId = DEFAULT_LIBRARY_DENSITY;
   private mediaQuery: MediaQueryList | null = null;
   private mediaQueryListener: ((e: MediaQueryListEvent) => void) | null = null;
   private listeners: Set<ThemeChangeListener> = new Set();
+  private accentListeners: Set<AccentThemeChangeListener> = new Set();
+  private ambientListeners: Set<AmbientModeChangeListener> = new Set();
+  private dynamicArtworkListeners: Set<DynamicArtworkColorsChangeListener> = new Set();
+  private layoutListeners: Set<PlayerLayoutChangeListener> = new Set();
+  private densityListeners: Set<LibraryDensityChangeListener> = new Set();
 
   private constructor() {
     this.loadPreference();
     this.setupMediaQuery();
     this.applyTheme();
+    this.applyAccentTheme();
+    this.applyAmbientMode();
+    this.applyArtworkTokens();
+    this.applyPlayerLayout();
+    this.applyLibraryDensity();
   }
 
   public static getInstance(): ThemeManager {
@@ -48,11 +134,102 @@ export class ThemeManager {
   }
 
   public setPreference(pref: ThemePreference): void {
-    if (this.preference === pref) return;
     this.preference = pref;
     this.savePreference();
     this.applyTheme();
     this.notifyListeners();
+  }
+
+  public getAccentTheme(): AccentThemeId {
+    return this.accentTheme;
+  }
+
+  public getAccentThemeDefinition(): AccentThemeDefinition {
+    return getAccentTheme(this.accentTheme);
+  }
+
+  public getAvailableAccentThemes(): readonly AccentThemeDefinition[] {
+    return getAllAccentThemes();
+  }
+
+  public setAccentTheme(accent: AccentThemeId | string): void {
+    const validAccent = (accent && accent in ACCENT_THEMES ? accent : DEFAULT_ACCENT_THEME) as AccentThemeId;
+    this.accentTheme = validAccent;
+    this.saveAccentPreference();
+    this.applyAccentTheme();
+    this.notifyAccentListeners();
+  }
+
+  public getAmbientMode(): AmbientMode {
+    return this.ambientMode;
+  }
+
+  public getAmbientModeDefinition(): AmbientModeDefinition {
+    return getAmbientMode(this.ambientMode);
+  }
+
+  public getAvailableAmbientModes(): readonly AmbientModeDefinition[] {
+    return getAllAmbientModes();
+  }
+
+  public setAmbientMode(mode: AmbientMode | string): void {
+    const validMode = (mode && mode in AMBIENT_MODES ? mode : DEFAULT_AMBIENT_MODE) as AmbientMode;
+    this.ambientMode = validMode;
+    this.saveAmbientPreference();
+    this.applyAmbientMode();
+    this.notifyAmbientListeners();
+  }
+
+  public isDynamicArtworkColorsEnabled(): boolean {
+    return this.dynamicArtworkColorsEnabled;
+  }
+
+  public setDynamicArtworkColorsEnabled(enabled: boolean): void {
+    if (this.dynamicArtworkColorsEnabled === enabled) return;
+    this.dynamicArtworkColorsEnabled = enabled;
+    this.saveDynamicArtworkPreference();
+    this.applyArtworkTokens();
+    this.notifyDynamicArtworkListeners();
+  }
+
+  public getArtworkPalette(): ExtractedArtworkPalette | null {
+    return this.currentArtworkPalette;
+  }
+
+  public setArtworkPalette(palette: ExtractedArtworkPalette | null): void {
+    this.currentArtworkPalette = palette;
+    this.applyArtworkTokens();
+    this.notifyDynamicArtworkListeners();
+  }
+
+  public async updateArtworkColors(imageSrc: string | null | undefined, cacheKey?: string): Promise<void> {
+    if (!this.dynamicArtworkColorsEnabled) {
+      this.applyArtworkTokens();
+      return;
+    }
+    if (!imageSrc) {
+      this.setArtworkPalette(null);
+      return;
+    }
+    const palette = await extractPaletteFromImage(imageSrc, cacheKey);
+    this.setArtworkPalette(palette);
+  }
+
+  public bindEventBus(eventBus: any, artworkService?: any): () => void {
+    return eventBus.subscribe('playback:track-changed', async (e: any) => {
+      if (!this.dynamicArtworkColorsEnabled) return;
+      const track = e?.currentTrack;
+      if (!track || !track.artworkId || !artworkService) {
+        this.setArtworkPalette(null);
+        return;
+      }
+      try {
+        const url = await artworkService.getArtworkUrl(track.artworkId, 'medium');
+        await this.updateArtworkColors(url, track.artworkId);
+      } catch (_err) {
+        this.setArtworkPalette(null);
+      }
+    });
   }
 
   public subscribe(listener: ThemeChangeListener): () => void {
@@ -64,25 +241,234 @@ export class ThemeManager {
     };
   }
 
+  public subscribeAccent(listener: AccentThemeChangeListener): () => void {
+    this.accentListeners.add(listener);
+    // Immediately notify current state
+    listener(this.accentTheme, this.getAccentThemeDefinition());
+    return () => {
+      this.accentListeners.delete(listener);
+    };
+  }
+
+  public subscribeAmbient(listener: AmbientModeChangeListener): () => void {
+    this.ambientListeners.add(listener);
+    // Immediately notify current state
+    listener(this.ambientMode, this.getAmbientModeDefinition());
+    return () => {
+      this.ambientListeners.delete(listener);
+    };
+  }
+
+  public subscribeDynamicArtworkColors(listener: DynamicArtworkColorsChangeListener): () => void {
+    this.dynamicArtworkListeners.add(listener);
+    // Immediately notify current state
+    listener(this.dynamicArtworkColorsEnabled, this.currentArtworkPalette);
+    return () => {
+      this.dynamicArtworkListeners.delete(listener);
+    };
+  }
+
+  public getPlayerLayout(): PlayerLayoutId {
+    return this.playerLayout;
+  }
+
+  public getPlayerLayoutDefinition(): PlayerLayoutDefinition {
+    return getPlayerLayout(this.playerLayout);
+  }
+
+  public getAvailablePlayerLayouts(): readonly PlayerLayoutDefinition[] {
+    return getAllPlayerLayouts();
+  }
+
+  public setPlayerLayout(layout: PlayerLayoutId | string): void {
+    const validLayout = (layout && layout in PLAYER_LAYOUTS ? layout : DEFAULT_PLAYER_LAYOUT) as PlayerLayoutId;
+    this.playerLayout = validLayout;
+    this.savePlayerLayoutPreference();
+    this.applyPlayerLayout();
+    this.notifyLayoutListeners();
+  }
+
+  public subscribePlayerLayout(listener: PlayerLayoutChangeListener): () => void {
+    this.layoutListeners.add(listener);
+    // Immediately notify current state
+    listener(this.playerLayout, this.getPlayerLayoutDefinition());
+    return () => {
+      this.layoutListeners.delete(listener);
+    };
+  }
+
+  public applyPlayerLayout(): void {
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.setAttribute('data-player-layout', this.playerLayout);
+      const def = this.getPlayerLayoutDefinition();
+      const rootStyle = document.documentElement.style;
+      if (rootStyle) {
+        if (typeof rootStyle.setProperty === 'function') {
+          rootStyle.setProperty('--player-artwork-max-width', def.artworkMaxWidth);
+          rootStyle.setProperty('--player-grid-columns', def.gridColumns);
+          rootStyle.setProperty('--player-grid-gap', def.gridGap);
+          rootStyle.setProperty('--player-layout-padding', def.layoutPadding);
+          rootStyle.setProperty('--player-controls-max-width', def.controlsMaxWidth);
+        } else {
+          (rootStyle as any)['--player-artwork-max-width'] = def.artworkMaxWidth;
+          (rootStyle as any)['--player-grid-columns'] = def.gridColumns;
+          (rootStyle as any)['--player-grid-gap'] = def.gridGap;
+          (rootStyle as any)['--player-layout-padding'] = def.layoutPadding;
+          (rootStyle as any)['--player-controls-max-width'] = def.controlsMaxWidth;
+        }
+      }
+    }
+  }
+
+  public getLibraryDensity(): LibraryDensityId {
+    return this.libraryDensity;
+  }
+
+  public getLibraryDensityDefinition(): LibraryDensityDefinition {
+    return getLibraryDensity(this.libraryDensity);
+  }
+
+  public getAvailableLibraryDensities(): readonly LibraryDensityDefinition[] {
+    return getAllLibraryDensities();
+  }
+
+  public setLibraryDensity(density: LibraryDensityId | string): void {
+    const validDensity = (density && density in LIBRARY_DENSITIES ? density : DEFAULT_LIBRARY_DENSITY) as LibraryDensityId;
+    this.libraryDensity = validDensity;
+    this.saveLibraryDensityPreference();
+    this.applyLibraryDensity();
+    this.notifyDensityListeners();
+  }
+
+  public subscribeLibraryDensity(listener: LibraryDensityChangeListener): () => void {
+    this.densityListeners.add(listener);
+    // Immediately notify current state
+    listener(this.libraryDensity, this.getLibraryDensityDefinition());
+    return () => {
+      this.densityListeners.delete(listener);
+    };
+  }
+
+  public applyLibraryDensity(): void {
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.setAttribute('data-library-density', this.libraryDensity);
+      const def = this.getLibraryDensityDefinition();
+      const rootStyle = document.documentElement.style;
+      if (rootStyle) {
+        if (typeof rootStyle.setProperty === 'function') {
+          rootStyle.setProperty('--library-row-height', def.rowHeightCss);
+          rootStyle.setProperty('--library-item-padding', def.itemPadding);
+          rootStyle.setProperty('--library-grid-gap', def.gridGap);
+          rootStyle.setProperty('--library-section-gap', def.sectionGap);
+          rootStyle.setProperty('--library-artwork-size', def.artworkSize);
+          rootStyle.setProperty('--library-card-padding', def.cardPadding);
+        } else {
+          (rootStyle as any)['--library-row-height'] = def.rowHeightCss;
+          (rootStyle as any)['--library-item-padding'] = def.itemPadding;
+          (rootStyle as any)['--library-grid-gap'] = def.gridGap;
+          (rootStyle as any)['--library-section-gap'] = def.sectionGap;
+          (rootStyle as any)['--library-artwork-size'] = def.artworkSize;
+          (rootStyle as any)['--library-card-padding'] = def.cardPadding;
+        }
+      }
+    }
+  }
+
   private loadPreference(): void {
     try {
       if (typeof localStorage !== 'undefined') {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored === 'dark' || stored === 'light' || stored === 'system') {
           this.preference = stored;
-          return;
+        }
+        const storedAccent = localStorage.getItem(ACCENT_STORAGE_KEY) as AccentThemeId | null;
+        if (storedAccent && storedAccent in ACCENT_THEMES) {
+          this.accentTheme = storedAccent;
+        }
+        const storedAmbient = localStorage.getItem(AMBIENT_STORAGE_KEY) as AmbientMode | null;
+        if (storedAmbient && storedAmbient in AMBIENT_MODES) {
+          this.ambientMode = storedAmbient;
+        }
+        const storedDynamicArtwork = localStorage.getItem(DYNAMIC_ARTWORK_STORAGE_KEY);
+        if (storedDynamicArtwork !== null) {
+          this.dynamicArtworkColorsEnabled = storedDynamicArtwork === 'true';
+        }
+        const storedLayout = localStorage.getItem(PLAYER_LAYOUT_STORAGE_KEY) as PlayerLayoutId | null;
+        if (storedLayout !== null) {
+          if (storedLayout in PLAYER_LAYOUTS) {
+            this.playerLayout = storedLayout;
+          } else {
+            this.playerLayout = DEFAULT_PLAYER_LAYOUT;
+          }
+        }
+        const storedDensity = localStorage.getItem(LIBRARY_DENSITY_STORAGE_KEY) as LibraryDensityId | null;
+        if (storedDensity !== null) {
+          if (storedDensity in LIBRARY_DENSITIES) {
+            this.libraryDensity = storedDensity;
+          } else {
+            this.libraryDensity = DEFAULT_LIBRARY_DENSITY;
+          }
         }
       }
     } catch (_e) {
       // Fallback to default
     }
-    this.preference = 'dark';
   }
 
   private savePreference(): void {
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, this.preference);
+      }
+    } catch (_e) {
+      // Ignore storage errors in restricted contexts
+    }
+  }
+
+  private saveAccentPreference(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(ACCENT_STORAGE_KEY, this.accentTheme);
+      }
+    } catch (_e) {
+      // Ignore storage errors in restricted contexts
+    }
+  }
+
+  private saveAmbientPreference(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(AMBIENT_STORAGE_KEY, this.ambientMode);
+      }
+    } catch (_e) {
+      // Ignore storage errors in restricted contexts
+    }
+  }
+
+  private saveDynamicArtworkPreference(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(DYNAMIC_ARTWORK_STORAGE_KEY, String(this.dynamicArtworkColorsEnabled));
+      }
+    } catch (_e) {
+      // Ignore storage errors in restricted contexts
+    }
+  }
+
+  private savePlayerLayoutPreference(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(PLAYER_LAYOUT_STORAGE_KEY, this.playerLayout);
+      }
+    } catch (_e) {
+      // Ignore storage errors in restricted contexts
+    }
+  }
+
+  private saveLibraryDensityPreference(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(LIBRARY_DENSITY_STORAGE_KEY, this.libraryDensity);
       }
     } catch (_e) {
       // Ignore storage errors in restricted contexts
@@ -123,6 +509,131 @@ export class ThemeManager {
     }
   }
 
+  public applyAccentTheme(): void {
+    const def = this.getAccentThemeDefinition();
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.setAttribute('data-accent', this.accentTheme);
+      document.documentElement.setAttribute('data-accent-theme', this.accentTheme);
+      const rootStyle = document.documentElement.style;
+      if (rootStyle) {
+        if (typeof rootStyle.setProperty === 'function') {
+          rootStyle.setProperty('--color-accent', def.primaryColor);
+          rootStyle.setProperty('--color-accent-primary', def.primaryColor);
+          rootStyle.setProperty('--color-accent-hover', def.hoverColor);
+          rootStyle.setProperty('--color-accent-active', def.activeColor);
+          rootStyle.setProperty('--color-accent-muted', def.mutedBackground);
+          rootStyle.setProperty('--color-accent-subtle', def.subtleBackground);
+          rootStyle.setProperty('--color-accent-contrast', def.contrastText);
+          rootStyle.setProperty('--color-accent-purple', def.primaryColor);
+          rootStyle.setProperty('--color-accent-purple-glow', def.glowColor);
+          rootStyle.setProperty('--color-accent-purple-deep', def.deepColor);
+          rootStyle.setProperty('--color-accent-purple-soft', def.softColor);
+          rootStyle.setProperty('--color-accent-gradient', def.gradient);
+          rootStyle.setProperty('--color-text-accent', def.glowColor);
+          rootStyle.setProperty('--shadow-glow', def.glowShadow);
+          rootStyle.setProperty('--shadow-glow-purple', def.glowShadow);
+          rootStyle.setProperty('--shadow-glow-pill', def.pillShadow);
+          rootStyle.setProperty('--glass-border-highlight', def.borderHighlight);
+          rootStyle.setProperty('--glass-border-interactive', def.borderInteractive);
+        } else {
+          (rootStyle as any)['--color-accent'] = def.primaryColor;
+          (rootStyle as any)['--color-accent-primary'] = def.primaryColor;
+          (rootStyle as any)['--color-accent-hover'] = def.hoverColor;
+          (rootStyle as any)['--color-accent-active'] = def.activeColor;
+          (rootStyle as any)['--color-accent-muted'] = def.mutedBackground;
+          (rootStyle as any)['--color-accent-subtle'] = def.subtleBackground;
+          (rootStyle as any)['--color-accent-contrast'] = def.contrastText;
+          (rootStyle as any)['--color-accent-purple'] = def.primaryColor;
+          (rootStyle as any)['--color-accent-purple-glow'] = def.glowColor;
+          (rootStyle as any)['--color-accent-purple-deep'] = def.deepColor;
+          (rootStyle as any)['--color-accent-purple-soft'] = def.softColor;
+          (rootStyle as any)['--color-accent-gradient'] = def.gradient;
+          (rootStyle as any)['--color-text-accent'] = def.glowColor;
+          (rootStyle as any)['--shadow-glow'] = def.glowShadow;
+          (rootStyle as any)['--shadow-glow-purple'] = def.glowShadow;
+          (rootStyle as any)['--shadow-glow-pill'] = def.pillShadow;
+          (rootStyle as any)['--glass-border-highlight'] = def.borderHighlight;
+          (rootStyle as any)['--glass-border-interactive'] = def.borderInteractive;
+        }
+      }
+    }
+    this.applyArtworkTokens();
+  }
+
+  public applyAmbientMode(): void {
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.setAttribute('data-ambient', this.ambientMode);
+
+      let bgContainer = document.getElementById('app-ambient-bg');
+      if (!bgContainer && document.body) {
+        bgContainer = document.createElement('div');
+        bgContainer.id = 'app-ambient-bg';
+        bgContainer.setAttribute('aria-hidden', 'true');
+        bgContainer.innerHTML = `
+          <div class="ambient-blob ambient-blob-1"></div>
+          <div class="ambient-blob ambient-blob-2"></div>
+          <div class="ambient-blob ambient-blob-3"></div>
+        `;
+        if (typeof document.body.prepend === 'function') {
+          document.body.prepend(bgContainer);
+        } else if (document.body.firstChild) {
+          document.body.insertBefore(bgContainer, document.body.firstChild);
+        } else {
+          document.body.appendChild(bgContainer);
+        }
+      }
+
+      if (bgContainer) {
+        bgContainer.className = `ambient-bg-root ambient-mode-${this.ambientMode}`;
+      }
+    }
+  }
+
+  public applyArtworkTokens(): void {
+    if (typeof document !== 'undefined' && document.documentElement) {
+      const rootStyle = document.documentElement.style;
+      const accentDef = this.getAccentThemeDefinition();
+
+      if (rootStyle) {
+        if (this.dynamicArtworkColorsEnabled && this.currentArtworkPalette) {
+          const p = this.currentArtworkPalette;
+          if (typeof rootStyle.setProperty === 'function') {
+            rootStyle.setProperty('--color-artwork-primary', p.primary);
+            rootStyle.setProperty('--color-artwork-secondary', p.secondary);
+            rootStyle.setProperty('--color-artwork-muted', p.muted);
+            rootStyle.setProperty('--color-artwork-contrast', p.contrast);
+            rootStyle.setProperty('--color-artwork-glow', p.glow);
+            rootStyle.setProperty('--color-artwork-gradient', p.gradient);
+          } else {
+            (rootStyle as any)['--color-artwork-primary'] = p.primary;
+            (rootStyle as any)['--color-artwork-secondary'] = p.secondary;
+            (rootStyle as any)['--color-artwork-muted'] = p.muted;
+            (rootStyle as any)['--color-artwork-contrast'] = p.contrast;
+            (rootStyle as any)['--color-artwork-glow'] = p.glow;
+            (rootStyle as any)['--color-artwork-gradient'] = p.gradient;
+          }
+        } else {
+          // Fallback to active Accent Theme tokens
+          if (typeof rootStyle.setProperty === 'function') {
+            rootStyle.setProperty('--color-artwork-primary', accentDef.primaryColor);
+            rootStyle.setProperty('--color-artwork-secondary', accentDef.hoverColor);
+            rootStyle.setProperty('--color-artwork-muted', accentDef.mutedBackground);
+            rootStyle.setProperty('--color-artwork-contrast', accentDef.contrastText);
+            rootStyle.setProperty('--color-artwork-glow', accentDef.glowColor);
+            rootStyle.setProperty('--color-artwork-gradient', accentDef.gradient);
+          } else {
+            (rootStyle as any)['--color-artwork-primary'] = accentDef.primaryColor;
+            (rootStyle as any)['--color-artwork-secondary'] = accentDef.hoverColor;
+            (rootStyle as any)['--color-artwork-muted'] = accentDef.mutedBackground;
+            (rootStyle as any)['--color-artwork-contrast'] = accentDef.contrastText;
+            (rootStyle as any)['--color-artwork-glow'] = accentDef.glowColor;
+            (rootStyle as any)['--color-artwork-gradient'] = accentDef.gradient;
+          }
+        }
+      }
+    }
+  }
+
   private notifyListeners(): void {
     const resolved = this.getResolvedTheme();
     for (const listener of this.listeners) {
@@ -130,6 +641,60 @@ export class ThemeManager {
         listener(resolved, this.preference);
       } catch (err) {
         console.error('Error in ThemeManager listener:', err);
+      }
+    }
+  }
+
+  private notifyAccentListeners(): void {
+    const def = this.getAccentThemeDefinition();
+    for (const listener of this.accentListeners) {
+      try {
+        listener(this.accentTheme, def);
+      } catch (err) {
+        console.error('Error in ThemeManager accent listener:', err);
+      }
+    }
+  }
+
+  private notifyAmbientListeners(): void {
+    const def = this.getAmbientModeDefinition();
+    for (const listener of this.ambientListeners) {
+      try {
+        listener(this.ambientMode, def);
+      } catch (err) {
+        console.error('Error in ThemeManager ambient listener:', err);
+      }
+    }
+  }
+
+  private notifyDynamicArtworkListeners(): void {
+    for (const listener of this.dynamicArtworkListeners) {
+      try {
+        listener(this.dynamicArtworkColorsEnabled, this.currentArtworkPalette);
+      } catch (err) {
+        console.error('Error in ThemeManager dynamic artwork listener:', err);
+      }
+    }
+  }
+
+  private notifyLayoutListeners(): void {
+    const def = this.getPlayerLayoutDefinition();
+    for (const listener of this.layoutListeners) {
+      try {
+        listener(this.playerLayout, def);
+      } catch (err) {
+        console.error('Error in ThemeManager layout listener:', err);
+      }
+    }
+  }
+
+  private notifyDensityListeners(): void {
+    const def = this.getLibraryDensityDefinition();
+    for (const listener of this.densityListeners) {
+      try {
+        listener(this.libraryDensity, def);
+      } catch (err) {
+        console.error('Error in ThemeManager density listener:', err);
       }
     }
   }

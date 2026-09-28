@@ -27,7 +27,8 @@ import { PlaylistRepository } from '../data/repositories/playlist-repository';
 import { HistoryRepository } from '../data/repositories/history-repository';
 import { QueueRepository } from '../data/repositories/queue-repository';
 import { LyricsRepository } from '../data/repositories/lyrics-repository';
-
+import { LibraryAnalyticsService } from '../services/analytics/library-analytics-service';
+import { AlbumMergeService } from '../services/library/album-merge-service';
 import { BrowserFilesystemAdapter } from '../services/scanner/browser-filesystem-adapter';
 import { AudioEngine } from '../services/audio/audio-engine';
 import { ArtworkService } from '../services/artwork/artwork-service';
@@ -42,8 +43,11 @@ import { LyricsService } from '../services/lyrics/lyrics-service';
 import { AudioSettingsService } from '../services/audio/audio-settings-service';
 import { VisualizerService } from '../services/visualizer/visualizer-service';
 import { GalaxyService } from '../services/galaxy/galaxy-service';
+import { DashboardService } from '../services/dashboard/dashboard-service';
 import { StatsService } from '../services/stats/stats-service';
 import { SleepTimerService } from '../services/playback/sleep-timer-service';
+import { DuplicateDetectorService } from '../services/duplicate/duplicate-detector-service';
+import { LibraryHealthService } from '../services/library/library-health-service';
 import { FileAccessCapabilityService } from '../services/scanner/file-access-capability';
 import { LocalMusicOnboardingModal } from '../ui/components/onboarding/local-music-onboarding-modal';
 
@@ -197,6 +201,7 @@ export class AppBootstrap {
     });
     const audioSettingsService = new AudioSettingsService(adapter);
     const visualizerService = new VisualizerService(adapter);
+    const dashboardService = new DashboardService(adapter, this.eventBus);
     const statsService = new StatsService({
       trackRepo,
       artistRepo,
@@ -216,6 +221,46 @@ export class AppBootstrap {
       eventBus: this.eventBus,
       logger: this.logger
     });
+    const duplicateDetectorService = new DuplicateDetectorService(
+      trackRepo,
+      audioFileRepo,
+      this.eventBus
+    );
+    const healthService = new LibraryHealthService({
+      libraryService,
+      trackRepo,
+      audioFileRepo,
+      playlistRepo,
+      duplicateDetectorService,
+      eventBus: this.eventBus
+    });
+    const libraryAnalyticsService = new LibraryAnalyticsService({
+      trackRepo,
+      audioFileRepo,
+      artistRepo,
+      albumRepo,
+      genreRepo,
+      playlistRepo,
+      historyRepo,
+      statsService,
+      libraryHealthService: healthService,
+      duplicateDetectorService,
+      eventBus: this.eventBus
+    });
+    const albumMergeService = new AlbumMergeService({
+      albumRepo,
+      trackRepo,
+      eventBus: this.eventBus
+    });
+
+    // 4.1 Apply Audio Settings to Engine & PlaybackManager
+    try {
+      const audioSettings = await audioSettingsService.getSettings();
+      await audioSettingsService.applyToAudioEngine(audioEngine);
+      playbackManager.setCrossfade?.(audioSettings.crossfadeEnabled, audioSettings.crossfadeDurationSec);
+    } catch (settingsErr) {
+      this.logger.warn('Could not restore audio settings:', { error: String(settingsErr) });
+    }
 
     // 5. Check Persistent Directory Handle
     const capabilityService = FileAccessCapabilityService.getInstance();
@@ -237,7 +282,14 @@ export class AppBootstrap {
       this.logger.warn('Could not restore saved music directory handle:', { error: String(handleErr) });
     }
 
-    // 6. Mount AppShell
+    // 6. Restore Persistent Playback Queue from IndexedDB
+    try {
+      await playbackManager.restoreQueue();
+    } catch (restoreErr) {
+      this.logger.warn('Could not restore persistent playback queue:', { error: String(restoreErr) });
+    }
+
+    // 7. Mount AppShell
     this.appShell = new AppShell({
       playbackManager,
       libraryService,
@@ -249,9 +301,14 @@ export class AppBootstrap {
       audioSettingsService,
       visualizerService,
       galaxyService,
+      dashboardService,
       scannerService,
       statsService,
+      libraryAnalyticsService,
+      albumMergeService,
       sleepTimerService,
+      duplicateDetectorService,
+      healthService,
       fsAdapter,
       dbAdapter: adapter,
       eventBus: this.eventBus

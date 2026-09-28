@@ -59,3 +59,11 @@ export interface ReplayGainData {
   readonly albumGainDb?: number | undefined;
   readonly albumPeak?: number | undefined;
 }
+
+export interface AbLoopState {
+  readonly enabled: boolean;
+  readonly pointA: number | null;
+  readonly pointB: number | null;
+  readonly trackId: EntityId | null;
+  readonly isActive: boolean;
+}

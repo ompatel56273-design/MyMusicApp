@@ -15,6 +15,7 @@ import { HeaderComponent } from './header-component';
 import { SidebarComponent } from './sidebar-component';
 import { MiniPlayerComponent } from './mini-player-component';
 import { KeyboardManager } from '../keyboard/keyboard-manager';
+import { MediaSessionService } from '../../services/playback/media-session-service';
 import type {
   IPlaybackManager,
   ILibraryService,
@@ -26,6 +27,7 @@ import type {
   IAudioSettingsService,
   IVisualizerService,
   IGalaxyService,
+  IDashboardService,
   IScannerService
 } from '../../services/contracts/service-contracts';
 import { EventBus } from '../../core/events/event-bus';
@@ -34,6 +36,11 @@ import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-fi
 import type { IDatabaseAdapter } from '../../data/db/database-adapter';
 import { ThemeManager } from '../theme/theme-manager';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
+
+import type { LibraryAnalyticsService } from '../../services/analytics/library-analytics-service';
+import type { AlbumMergeService } from '../../services/library/album-merge-service';
+import type { DuplicateDetectorService } from '../../services/duplicate/duplicate-detector-service';
+import type { LibraryHealthService } from '../../services/library/library-health-service';
 
 export interface AppShellDependencies {
   playbackManager: IPlaybackManager;
@@ -46,8 +53,13 @@ export interface AppShellDependencies {
   audioSettingsService?: IAudioSettingsService | undefined;
   visualizerService?: IVisualizerService | undefined;
   galaxyService?: IGalaxyService | undefined;
+  dashboardService?: IDashboardService | undefined;
   scannerService?: IScannerService | undefined;
   statsService?: StatsService | undefined;
+  libraryAnalyticsService?: LibraryAnalyticsService | undefined;
+  albumMergeService?: AlbumMergeService | undefined;
+  duplicateDetectorService?: DuplicateDetectorService | undefined;
+  healthService?: LibraryHealthService | undefined;
   sleepTimerService?: SleepTimerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   dbAdapter?: IDatabaseAdapter | undefined;
@@ -66,6 +78,7 @@ export class AppShell {
   private readonly sidebar: SidebarComponent;
   private readonly miniPlayer: MiniPlayerComponent;
   private readonly keyboardManager: KeyboardManager;
+  private readonly mediaSessionService: MediaSessionService;
 
   private views: Map<AppRoute, IView>;
   private activeView: IView | null = null;
@@ -98,6 +111,11 @@ export class AppShell {
     this.keyboardManager = new KeyboardManager({
       playbackManager: deps.playbackManager,
       router: this.router
+    });
+    this.mediaSessionService = new MediaSessionService({
+      playbackManager: deps.playbackManager,
+      eventBus: deps.eventBus,
+      artworkService: deps.artworkService
     });
 
     const playlistsView = deps.playlistService
@@ -132,6 +150,7 @@ export class AppShell {
           router: this.router,
           artworkService: deps.artworkService,
           playlistService: deps.playlistService,
+          dashboardService: deps.dashboardService,
           eventBus: deps.eventBus
         })
       ],
@@ -139,8 +158,13 @@ export class AppShell {
         'library',
         new LibraryView({
           libraryService: deps.libraryService,
+          albumMergeService: deps.albumMergeService,
           playbackManager: deps.playbackManager,
-          artworkService: deps.artworkService
+          artworkService: deps.artworkService,
+          scannerService: deps.scannerService,
+          fsAdapter: deps.fsAdapter,
+          eventBus: deps.eventBus,
+          playlistService: deps.playlistService
         })
       ],
       [
@@ -162,6 +186,7 @@ export class AppShell {
           audioSettingsService: deps.audioSettingsService,
           visualizerService: deps.visualizerService,
           galaxyService: deps.galaxyService,
+          dashboardService: deps.dashboardService,
           scannerService: deps.scannerService,
           libraryService: deps.libraryService,
           fsAdapter: deps.fsAdapter,
@@ -203,6 +228,7 @@ export class AppShell {
             },
             dbAdapter: deps.dbAdapter
           }),
+          analyticsService: deps.libraryAnalyticsService,
           playbackManager: deps.playbackManager,
           artworkService: deps.artworkService,
           router: this.router,
@@ -229,6 +255,7 @@ export class AppShell {
 
     this.bindMobileNav();
     this.keyboardManager.init();
+    this.mediaSessionService.init();
 
     // Subscribe to route changes
     this.routerSub = this.router.subscribe(state => {
@@ -278,6 +305,7 @@ export class AppShell {
     this.sidebar.unmount();
     this.miniPlayer.unmount();
     this.keyboardManager.dispose();
+    this.mediaSessionService.dispose();
 
     if (this.container) {
       this.container.innerHTML = '';

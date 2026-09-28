@@ -2,9 +2,10 @@ import type { RouterService } from '../navigation/router-service';
 import type { AppRoute, RouteState } from '../navigation/route-types';
 import type { Disposable } from '../../core/types/common';
 import type { ILibraryService } from '../../services/contracts/service-contracts';
-import type { EventBus } from '../../core/events/event-bus';
-import { DomainEvents } from '../../domain/events/domain-events';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
+
+import { EventBus } from '../../core/events/event-bus';
+import { DomainEvents } from '../../domain/events/domain-events';
 
 export interface NavItem {
   id: AppRoute;
@@ -18,7 +19,7 @@ export class SidebarComponent {
   private readonly libraryService?: ILibraryService | undefined;
   private readonly eventBus?: EventBus | undefined;
   private routerSub: Disposable | null = null;
-  private librarySub: Disposable | null = null;
+  private eventBusSub: Disposable | null = null;
   private statsInterval: number | null = null;
 
   private primaryNavItems: NavItem[] = [
@@ -54,12 +55,12 @@ export class SidebarComponent {
     });
 
     if (this.eventBus) {
-      this.librarySub = this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, () => {
-        void this.fetchLibraryStats();
+      this.eventBusSub = this.eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, () => {
+        this.fetchLibraryStats();
       });
     }
 
-    void this.fetchLibraryStats();
+    this.fetchLibraryStats();
   }
 
   public unmount(): void {
@@ -67,9 +68,9 @@ export class SidebarComponent {
       this.routerSub.dispose();
       this.routerSub = null;
     }
-    if (this.librarySub) {
-      this.librarySub.dispose();
-      this.librarySub = null;
+    if (this.eventBusSub) {
+      this.eventBusSub.dispose();
+      this.eventBusSub = null;
     }
     if (this.statsInterval) {
       window.clearInterval(this.statsInterval);

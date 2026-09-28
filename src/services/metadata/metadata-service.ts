@@ -51,7 +51,8 @@ export class MetadataService {
   public async enrichTrackMetadata(
     trackId: EntityId,
     fileBuffer: Uint8Array,
-    containerHint?: AudioContainer
+    containerHint?: AudioContainer,
+    suppressEvent?: boolean
   ): Promise<Track | null> {
     const track = await this.trackRepo.getById(trackId);
     if (!track) {
@@ -77,7 +78,7 @@ export class MetadataService {
 
       // 2. Resolve / Create Artist
       let artistId = track.artistId;
-      if (normalized.primaryArtist && normalized.primaryArtist !== 'Unknown Artist') {
+      if (normalized.primaryArtist && normalized.primaryArtist.toLowerCase() !== 'unknown artist') {
         let artist = await this.artistRepo.getByName(normalized.primaryArtist);
         if (!artist) {
           artistId = `artist_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -85,17 +86,21 @@ export class MetadataService {
             id: artistId,
             name: normalized.primaryArtist,
             trackCount: 1,
-            albumCount: normalized.albumTitle ? 1 : 0
+            albumCount: (normalized.albumTitle && normalized.albumTitle.toLowerCase() !== 'unknown album') ? 1 : 0
           };
           await this.artistRepo.save(newArtist);
         } else {
           artistId = artist.id;
+          await this.artistRepo.save({
+            ...artist,
+            trackCount: artist.trackCount + 1
+          });
         }
       }
 
       // 3. Resolve / Create Album
       let albumId = track.albumId;
-      if (normalized.albumTitle) {
+      if (normalized.albumTitle && normalized.albumTitle.toLowerCase() !== 'unknown album') {
         let album: Album | null = null;
         if (artistId) {
           const albums = await this.albumRepo.list(undefined, artistId);
@@ -118,12 +123,18 @@ export class MetadataService {
           await this.albumRepo.save(newAlbum);
         } else {
           albumId = album.id;
+          await this.albumRepo.save({
+            ...album,
+            trackCount: album.trackCount + 1,
+            durationMs: album.durationMs + normalized.durationMs,
+            artworkId: album.artworkId || artworkId
+          });
         }
       }
 
       // 4. Resolve / Create Genre
       let genreId = track.genreId;
-      if (normalized.genreName) {
+      if (normalized.genreName && normalized.genreName.toLowerCase() !== 'unknown genre') {
         let genre = await this.genreRepo.getByName(normalized.genreName);
         if (!genre) {
           genreId = `genre_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -135,6 +146,10 @@ export class MetadataService {
           await this.genreRepo.save(newGenre);
         } else {
           genreId = genre.id;
+          await this.genreRepo.save({
+            ...genre,
+            trackCount: genre.trackCount + 1
+          });
         }
       }
 
@@ -160,6 +175,7 @@ export class MetadataService {
           sampleRate: rawMetadata.sampleRate ?? track.format.sampleRate,
           bitDepth: rawMetadata.bitDepth ?? track.format.bitDepth,
           channels: rawMetadata.channels ?? track.format.channels,
+          bitrate: rawMetadata.bitrate ?? track.format.bitrate,
           isLossless: rawMetadata.isLossless
         },
         replayGain: rawMetadata.replayGain ?? track.replayGain,
@@ -168,12 +184,14 @@ export class MetadataService {
 
       await this.trackRepo.save(updatedTrack);
 
-      this.eventBus.publish(DomainEvents.LIBRARY_UPDATED, {
-        tracksAdded: 0,
-        tracksUpdated: 1,
-        tracksRemoved: 0,
-        timestamp: Date.now()
-      });
+      if (!suppressEvent) {
+        this.eventBus.publish(DomainEvents.LIBRARY_UPDATED, {
+          tracksAdded: 0,
+          tracksUpdated: 1,
+          tracksRemoved: 0,
+          timestamp: Date.now()
+        });
+      }
 
       return updatedTrack;
     } catch (err) {
@@ -190,8 +208,16 @@ export class MetadataService {
   ): Promise<number> {
     let enrichedCount = 0;
     for (const item of items) {
-      const res = await this.enrichTrackMetadata(item.trackId, item.buffer, item.container);
+      const res = await this.enrichTrackMetadata(item.trackId, item.buffer, item.container, true);
       if (res) enrichedCount++;
+    }
+    if (enrichedCount > 0) {
+      this.eventBus.publish(DomainEvents.LIBRARY_UPDATED, {
+        tracksAdded: 0,
+        tracksUpdated: enrichedCount,
+        tracksRemoved: 0,
+        timestamp: Date.now()
+      });
     }
     return enrichedCount;
   }

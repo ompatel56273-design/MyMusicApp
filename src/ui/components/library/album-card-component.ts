@@ -22,7 +22,7 @@ export class AlbumCardComponent {
 
     card.style.display = 'flex';
     card.style.flexDirection = 'column';
-    card.style.padding = '14px';
+    card.style.padding = 'var(--library-card-padding, 14px)';
     card.style.borderRadius = 'var(--radius-lg)';
     card.style.cursor = 'pointer';
     card.style.position = 'relative';

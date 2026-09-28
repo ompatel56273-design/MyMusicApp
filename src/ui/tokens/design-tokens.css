@@ -28,8 +28,15 @@
   --glass-blur: 24px;
   --glass-blur-sm: 12px;
 
-  /* --- Accent Colors --- */
+  /* --- Accent Colors & Semantic Tokens --- */
+  --color-accent: #8b5cf6;               /* Semantic Accent Base */
+  --color-accent-hover: #9d72f8;         /* Semantic Accent Hover */
+  --color-accent-active: #7c3aed;        /* Semantic Accent Active */
+  --color-accent-muted: rgba(139, 92, 246, 0.2);   /* Semantic Accent Muted Surface */
+  --color-accent-subtle: rgba(139, 92, 246, 0.12); /* Semantic Accent Subtle Highlight */
+  --color-accent-contrast: #ffffff;      /* High-contrast text on accent */
   --color-accent-primary: #8b5cf6;       /* Neon Purple */
+  --color-accent-purple: #8b5cf6;        /* Accent Purple Alias */
   --color-accent-purple-glow: #a855f7;  /* Bright Purple Glow */
   --color-accent-purple-deep: #7c3aed;  /* Deep Vibrant Purple */
   --color-accent-purple-soft: #c084fc;  /* Soft Purple */
@@ -42,6 +49,14 @@
   --color-accent-rose: #f43f5e;          /* Rose Red Accent */
   --color-accent-amber: #f59e0b;         /* Amber / Gold */
   --color-accent-emerald: #10b981;       /* Emerald Green */
+
+  /* --- Dynamic Artwork Color Tokens --- */
+  --color-artwork-primary: #8b5cf6;
+  --color-artwork-secondary: #38bdf8;
+  --color-artwork-muted: rgba(139, 92, 246, 0.2);
+  --color-artwork-contrast: #ffffff;
+  --color-artwork-glow: #a855f7;
+  --color-artwork-gradient: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
 
   /* --- Gradients --- */
   --gradient-primary: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
@@ -103,12 +118,27 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* --- Layout Sizing --- */
+  /* --- Layout Sizing & Player Layout Tokens --- */
   --sidebar-width: 250px;
   --sidebar-collapsed-width: 72px;
   --mini-player-height: 88px;
   --header-height: 68px;
   --bottom-nav-height: 64px;
+
+  /* --- Player Layout Custom Properties --- */
+  --player-artwork-max-width: 440px;
+  --player-grid-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  --player-grid-gap: var(--space-8);
+  --player-layout-padding: var(--space-6) var(--space-8);
+  --player-controls-max-width: 480px;
+
+  /* --- Library Density Custom Properties (Default: Standard) --- */
+  --library-row-height: 56px;
+  --library-item-padding: 8px 14px;
+  --library-grid-gap: var(--space-4);
+  --library-section-gap: var(--space-6);
+  --library-artwork-size: 38px;
+  --library-card-padding: 14px;
 
   /* --- Animation & Transitions --- */
   --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -195,6 +225,156 @@
   --color-text-secondary: #94a3b8;
   --color-text-muted: #64748b;
   --color-text-dim: #475569;
+}
+
+/* ==========================================================================
+   ACCENT THEME TOKENS
+   ========================================================================== */
+[data-accent="purple"] {
+  --color-accent: #8b5cf6;
+  --color-accent-primary: #8b5cf6;
+  --color-accent-hover: #9d72f8;
+  --color-accent-active: #6d28d9;
+  --color-accent-muted: rgba(139, 92, 246, 0.2);
+  --color-accent-subtle: rgba(139, 92, 246, 0.12);
+  --color-accent-contrast: #ffffff;
+  --color-accent-purple: #8b5cf6;
+  --color-accent-purple-glow: #a855f7;
+  --color-accent-purple-deep: #7c3aed;
+  --color-accent-purple-soft: #c084fc;
+  --color-accent-gradient: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
+  --color-text-accent: #a855f7;
+  --shadow-glow: 0 0 20px rgba(168, 85, 247, 0.35);
+  --shadow-glow-purple: 0 0 24px rgba(168, 85, 247, 0.4);
+  --shadow-glow-pill: 0 4px 20px rgba(139, 92, 246, 0.45);
+  --glass-border-highlight: rgba(168, 85, 247, 0.4);
+  --glass-border-interactive: rgba(168, 85, 247, 0.45);
+}
+
+[data-accent="cyan"] {
+  --color-accent: #06b6d4;
+  --color-accent-primary: #06b6d4;
+  --color-accent-hover: #22d3ee;
+  --color-accent-active: #0e7490;
+  --color-accent-muted: rgba(6, 182, 212, 0.2);
+  --color-accent-subtle: rgba(6, 182, 212, 0.12);
+  --color-accent-contrast: #ffffff;
+  --color-accent-purple: #06b6d4;
+  --color-accent-purple-glow: #38bdf8;
+  --color-accent-purple-deep: #0891b2;
+  --color-accent-purple-soft: #67e8f9;
+  --color-accent-gradient: linear-gradient(135deg, #38bdf8 0%, #06b6d4 100%);
+  --color-text-accent: #38bdf8;
+  --shadow-glow: 0 0 20px rgba(56, 189, 248, 0.35);
+  --shadow-glow-purple: 0 0 24px rgba(56, 189, 248, 0.4);
+  --shadow-glow-pill: 0 4px 20px rgba(6, 182, 212, 0.45);
+  --glass-border-highlight: rgba(56, 189, 248, 0.4);
+  --glass-border-interactive: rgba(6, 182, 212, 0.45);
+}
+
+[data-accent="blue"] {
+  --color-accent: #3b82f6;
+  --color-accent-primary: #3b82f6;
+  --color-accent-hover: #4f93f7;
+  --color-accent-active: #1d4ed8;
+  --color-accent-muted: rgba(59, 130, 246, 0.2);
+  --color-accent-subtle: rgba(59, 130, 246, 0.12);
+  --color-accent-contrast: #ffffff;
+  --color-accent-purple: #3b82f6;
+  --color-accent-purple-glow: #60a5fa;
+  --color-accent-purple-deep: #2563eb;
+  --color-accent-purple-soft: #93c5fd;
+  --color-accent-gradient: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
+  --color-text-accent: #60a5fa;
+  --shadow-glow: 0 0 20px rgba(96, 165, 250, 0.35);
+  --shadow-glow-purple: 0 0 24px rgba(96, 165, 250, 0.4);
+  --shadow-glow-pill: 0 4px 20px rgba(59, 130, 246, 0.45);
+  --glass-border-highlight: rgba(96, 165, 250, 0.4);
+  --glass-border-interactive: rgba(59, 130, 246, 0.45);
+}
+
+[data-accent="emerald"] {
+  --color-accent: #10b981;
+  --color-accent-primary: #10b981;
+  --color-accent-hover: #28caa5;
+  --color-accent-active: #047857;
+  --color-accent-muted: rgba(16, 185, 129, 0.2);
+  --color-accent-subtle: rgba(16, 185, 129, 0.12);
+  --color-accent-contrast: #ffffff;
+  --color-accent-purple: #10b981;
+  --color-accent-purple-glow: #34d399;
+  --color-accent-purple-deep: #059669;
+  --color-accent-purple-soft: #6ee7b7;
+  --color-accent-gradient: linear-gradient(135deg, #34d399 0%, #059669 100%);
+  --color-text-accent: #34d399;
+  --shadow-glow: 0 0 20px rgba(52, 211, 153, 0.35);
+  --shadow-glow-purple: 0 0 24px rgba(52, 211, 153, 0.4);
+  --shadow-glow-pill: 0 4px 20px rgba(16, 185, 129, 0.45);
+  --glass-border-highlight: rgba(52, 211, 153, 0.4);
+  --glass-border-interactive: rgba(16, 185, 129, 0.45);
+}
+
+[data-accent="amber"] {
+  --color-accent: #f59e0b;
+  --color-accent-primary: #f59e0b;
+  --color-accent-hover: #fab728;
+  --color-accent-active: #b45309;
+  --color-accent-muted: rgba(245, 158, 11, 0.2);
+  --color-accent-subtle: rgba(245, 158, 11, 0.12);
+  --color-accent-contrast: #ffffff;
+  --color-accent-purple: #f59e0b;
+  --color-accent-purple-glow: #fbbf24;
+  --color-accent-purple-deep: #d97706;
+  --color-accent-purple-soft: #fcd34d;
+  --color-accent-gradient: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+  --color-text-accent: #fbbf24;
+  --shadow-glow: 0 0 20px rgba(251, 191, 36, 0.35);
+  --shadow-glow-purple: 0 0 24px rgba(251, 191, 36, 0.4);
+  --shadow-glow-pill: 0 4px 20px rgba(245, 158, 11, 0.45);
+  --glass-border-highlight: rgba(251, 191, 36, 0.4);
+  --glass-border-interactive: rgba(245, 158, 11, 0.45);
+}
+
+[data-accent="pink"] {
+  --color-accent: #ec4899;
+  --color-accent-primary: #ec4899;
+  --color-accent-hover: #f16cae;
+  --color-accent-active: #be185d;
+  --color-accent-muted: rgba(236, 72, 153, 0.2);
+  --color-accent-subtle: rgba(236, 72, 153, 0.12);
+  --color-accent-contrast: #ffffff;
+  --color-accent-purple: #ec4899;
+  --color-accent-purple-glow: #f472b6;
+  --color-accent-purple-deep: #db2777;
+  --color-accent-purple-soft: #f9a8d4;
+  --color-accent-gradient: linear-gradient(135deg, #f472b6 0%, #db2777 100%);
+  --color-text-accent: #f472b6;
+  --shadow-glow: 0 0 20px rgba(244, 114, 182, 0.35);
+  --shadow-glow-purple: 0 0 24px rgba(244, 114, 182, 0.4);
+  --shadow-glow-pill: 0 4px 20px rgba(236, 72, 153, 0.45);
+  --glass-border-highlight: rgba(244, 114, 182, 0.4);
+  --glass-border-interactive: rgba(236, 72, 153, 0.45);
+}
+
+[data-accent="rose"] {
+  --color-accent: #f43f5e;
+  --color-accent-primary: #f43f5e;
+  --color-accent-hover: #f65874;
+  --color-accent-active: #be123c;
+  --color-accent-muted: rgba(244, 63, 94, 0.2);
+  --color-accent-subtle: rgba(244, 63, 94, 0.12);
+  --color-accent-contrast: #ffffff;
+  --color-accent-purple: #f43f5e;
+  --color-accent-purple-glow: #fb7185;
+  --color-accent-purple-deep: #e11d48;
+  --color-accent-purple-soft: #fda4af;
+  --color-accent-gradient: linear-gradient(135deg, #fb7185 0%, #e11d48 100%);
+  --color-text-accent: #fb7185;
+  --shadow-glow: 0 0 20px rgba(251, 113, 133, 0.35);
+  --shadow-glow-purple: 0 0 24px rgba(251, 113, 133, 0.4);
+  --shadow-glow-pill: 0 4px 20px rgba(244, 63, 94, 0.45);
+  --glass-border-highlight: rgba(251, 113, 133, 0.4);
+  --glass-border-interactive: rgba(244, 63, 94, 0.45);
 }
 
 /* ==========================================================================
@@ -1355,3 +1535,211 @@ html, body {
   box-sizing: border-box;
 }
 
+/* ==========================================================================
+   AMBIENT BACKGROUND ENGINE & STYLES (F2.2)
+   ========================================================================== */
+
+#app-ambient-bg,
+.ambient-bg-root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: -1;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.6s var(--ease-smooth);
+}
+
+.ambient-blob {
+  position: absolute;
+  border-radius: var(--radius-full);
+  filter: blur(80px);
+  will-change: transform, opacity;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* 1. Mode: Off */
+[data-ambient="off"] #app-ambient-bg,
+.ambient-mode-off {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+/* 2. Mode: Aurora Borealis */
+[data-ambient="aurora"] #app-ambient-bg,
+.ambient-mode-aurora {
+  opacity: 1;
+}
+
+.ambient-mode-aurora .ambient-blob-1 {
+  top: -10%;
+  left: 15%;
+  width: 55vw;
+  height: 55vw;
+  background: radial-gradient(circle, var(--color-artwork-glow, var(--color-accent-purple-glow, #a855f7)) 0%, rgba(139, 92, 246, 0) 70%);
+  animation: ambient-aurora-drift-1 18s ease-in-out infinite alternate;
+}
+
+.ambient-mode-aurora .ambient-blob-2 {
+  bottom: -15%;
+  right: 10%;
+  width: 50vw;
+  height: 50vw;
+  background: radial-gradient(circle, var(--color-artwork-secondary, var(--color-accent-secondary, #38bdf8)) 0%, rgba(6, 182, 212, 0) 70%);
+  animation: ambient-aurora-drift-2 22s ease-in-out infinite alternate;
+}
+
+.ambient-mode-aurora .ambient-blob-3 {
+  top: 35%;
+  left: 30%;
+  width: 45vw;
+  height: 45vw;
+  background: radial-gradient(circle, var(--color-artwork-primary, var(--color-accent-purple-soft, #c084fc)) 0%, rgba(236, 72, 153, 0) 70%);
+  animation: ambient-aurora-drift-3 15s ease-in-out infinite alternate;
+}
+
+@keyframes ambient-aurora-drift-1 {
+  0% { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
+  50% { transform: translate3d(8%, 12%, 0) scale(1.15) rotate(15deg); }
+  100% { transform: translate3d(-6%, 5%, 0) scale(0.95) rotate(-10deg); }
+}
+
+@keyframes ambient-aurora-drift-2 {
+  0% { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
+  50% { transform: translate3d(-10%, -8%, 0) scale(1.2) rotate(-20deg); }
+  100% { transform: translate3d(5%, -15%, 0) scale(0.9) rotate(10deg); }
+}
+
+@keyframes ambient-aurora-drift-3 {
+  0% { transform: translate3d(0, 0, 0) scale(0.9) opacity: 0.25; }
+  50% { transform: translate3d(-12%, 10%, 0) scale(1.1) opacity: 0.45; }
+  100% { transform: translate3d(10%, -8%, 0) scale(1) opacity: 0.3; }
+}
+
+/* 3. Mode: Gradient Flow */
+[data-ambient="gradient-flow"] #app-ambient-bg,
+.ambient-mode-gradient-flow {
+  opacity: 1;
+  background: linear-gradient(-45deg, var(--color-bg-base), var(--color-artwork-muted, var(--color-accent-muted)), var(--color-bg-surface), var(--color-accent-subtle));
+  background-size: 400% 400%;
+  animation: ambient-gradient-flow-anim 16s ease infinite;
+}
+
+.ambient-mode-gradient-flow .ambient-blob {
+  display: none;
+}
+
+@keyframes ambient-gradient-flow-anim {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* 4. Mode: Soft Glow */
+[data-ambient="soft-glow"] #app-ambient-bg,
+.ambient-mode-soft-glow {
+  opacity: 1;
+}
+
+.ambient-mode-soft-glow .ambient-blob-1 {
+  top: 20%;
+  left: 25%;
+  width: 50vw;
+  height: 50vw;
+  background: radial-gradient(circle, var(--color-artwork-muted, var(--color-accent-muted, rgba(139, 92, 246, 0.25))) 0%, rgba(7, 9, 14, 0) 70%);
+  animation: ambient-soft-pulse 8s ease-in-out infinite alternate;
+}
+
+.ambient-mode-soft-glow .ambient-blob-2,
+.ambient-mode-soft-glow .ambient-blob-3 {
+  display: none;
+}
+
+@keyframes ambient-soft-pulse {
+  0% { transform: scale(0.95); opacity: 0.25; }
+  100% { transform: scale(1.15); opacity: 0.45; }
+}
+
+/* 5. Mode: Static Gradient */
+[data-ambient="static-gradient"] #app-ambient-bg,
+.ambient-mode-static-gradient {
+  opacity: 1;
+  background: radial-gradient(circle at 50% 30%, var(--color-artwork-muted, var(--color-accent-muted, rgba(139, 92, 246, 0.2))) 0%, var(--color-bg-base) 70%);
+}
+
+.ambient-mode-static-gradient .ambient-blob {
+  display: none;
+}
+
+/* --- Reduced Motion Accessibility Support --- */
+@media (prefers-reduced-motion: reduce) {
+  #app-ambient-bg,
+  .ambient-bg-root,
+  .ambient-blob {
+    animation: none !important;
+    transition: opacity 0.3s ease !important;
+  }
+}
+
+/* ==========================================================================
+   PLAYER LAYOUT VARIANTS (Standard, Compact, Expanded)
+   ========================================================================== */
+[data-player-layout="standard"] {
+  --player-artwork-max-width: 440px;
+  --player-grid-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  --player-grid-gap: var(--space-8);
+  --player-layout-padding: var(--space-6) var(--space-8);
+  --player-controls-max-width: 480px;
+}
+
+[data-player-layout="compact"] {
+  --player-artwork-max-width: 260px;
+  --player-grid-columns: minmax(0, 0.85fr) minmax(320px, 1.15fr);
+  --player-grid-gap: var(--space-4);
+  --player-layout-padding: var(--space-4) var(--space-6);
+  --player-controls-max-width: 400px;
+}
+
+[data-player-layout="expanded"] {
+  --player-artwork-max-width: 540px;
+  --player-grid-columns: minmax(0, 1.25fr) minmax(380px, 0.75fr);
+  --player-grid-gap: var(--space-10);
+  --player-layout-padding: var(--space-8) var(--space-10);
+  --player-controls-max-width: 560px;
+}
+
+/* ==========================================================================
+   LIBRARY DENSITY VARIANTS (Comfortable, Standard, Compact)
+   ========================================================================== */
+[data-library-density="comfortable"] {
+  --library-row-height: 64px;
+  --library-item-padding: 10px 18px;
+  --library-grid-gap: var(--space-5);
+  --library-section-gap: var(--space-8);
+  --library-artwork-size: 44px;
+  --library-card-padding: 18px;
+}
+
+[data-library-density="standard"] {
+  --library-row-height: 56px;
+  --library-item-padding: 8px 14px;
+  --library-grid-gap: var(--space-4);
+  --library-section-gap: var(--space-6);
+  --library-artwork-size: 38px;
+  --library-card-padding: 14px;
+}
+
+[data-library-density="compact"] {
+  --library-row-height: 46px;
+  --library-item-padding: 4px 10px;
+  --library-grid-gap: var(--space-3);
+  --library-section-gap: var(--space-4);
+  --library-artwork-size: 32px;
+  --library-card-padding: 10px;
+}

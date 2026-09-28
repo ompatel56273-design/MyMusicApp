@@ -1,4 +1,4 @@
-import type { EntityId } from '../value-objects/audio-types';
+import type { EntityId, RepeatMode, ShuffleMode } from '../value-objects/audio-types';
 import type {
   Track,
   AudioFile,
@@ -109,10 +109,20 @@ export interface IHistoryRepository {
   clearResumePosition(trackId: EntityId): Promise<void>;
 }
 
+export interface QueueMetadata {
+  readonly activeIndex: number;
+  readonly activeTrackId?: EntityId | undefined;
+  readonly repeatMode?: RepeatMode | undefined;
+  readonly shuffleMode?: ShuffleMode | undefined;
+  readonly updatedAt: number;
+}
+
 export interface IQueueRepository {
   getQueue(): Promise<readonly QueueItem[]>;
   saveQueue(items: readonly QueueItem[]): Promise<void>;
   clearQueue(): Promise<void>;
+  getQueueMetadata?(): Promise<QueueMetadata | null>;
+  saveQueueMetadata?(metadata: QueueMetadata): Promise<void>;
 }
 
 export interface ILyricsRepository {

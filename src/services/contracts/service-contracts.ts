@@ -3,7 +3,8 @@ import type {
   PlaybackState,
   RepeatMode,
   ShuffleMode,
-  ReplayGainData
+  ReplayGainData,
+  AbLoopState
 } from '../../domain/value-objects/audio-types';
 import type {
   Track,
@@ -38,7 +39,9 @@ export interface IPlaybackManager {
   readonly shuffleMode: ShuffleMode;
   readonly queue: readonly QueueItem[];
   readonly currentQueueIndex: number;
-
+  getTracks?(): readonly Track[];
+  getQueueTracks?(): readonly Track[];
+  restoreQueue?(): Promise<void>;
   playTrack(track: Track, queueContext?: readonly Track[]): Promise<void>;
   pause(): Promise<void>;
   resume(): Promise<void>;
@@ -51,11 +54,26 @@ export interface IPlaybackManager {
   setPlaybackRate(rate: number): void;
   setRepeatMode(mode: RepeatMode): void;
   setShuffleMode(mode: ShuffleMode): void;
-  addToQueue(tracks: readonly Track[], playNext?: boolean): Promise<void>;
+  addToQueue(tracks: readonly Track[] | Track, playNext?: boolean): Promise<void>;
+  playNext?(tracks: readonly Track[] | Track): Promise<void>;
   playQueueIndex(index: number): Promise<void>;
   removeFromQueue(index: number): Promise<void>;
   reorderQueue(fromIndex: number, toIndex: number): Promise<void>;
-  clearQueue(): Promise<void>;
+  moveQueueItemUp?(index: number): Promise<void>;
+  moveQueueItemDown?(index: number): Promise<void>;
+  moveQueueItemToTop?(index: number): Promise<void>;
+  moveQueueItemToBottom?(index: number): Promise<void>;
+  clearQueue(preserveCurrent?: boolean): Promise<void>;
+  getQueue?(): readonly QueueItem[];
+  getUpcomingTracks?(): readonly Track[];
+  setCrossfade?(enabled: boolean, durationSec?: number): void;
+  readonly crossfadeEnabled?: boolean;
+  readonly crossfadeDurationSec?: number;
+  readonly abLoop?: AbLoopState;
+  setLoopA?(positionMs?: number): void;
+  setLoopB?(positionMs?: number): void;
+  toggleAbLoop?(enabled?: boolean): void;
+  clearAbLoop?(): void;
 }
 
 /**
@@ -104,6 +122,13 @@ export interface ISearchService {
   searchPlaylists(query: string, options?: PaginationOptions): Promise<PaginatedResult<Playlist>>;
 }
 
+import type {
+  SmartRule,
+  SmartMatchMode,
+  SmartPlaylistSort,
+  SmartPlaylistDefinition
+} from '../../domain/value-objects/smart-playlist-types';
+
 export interface PlaylistTrackItem {
   readonly item: PlaylistItem;
   readonly track: Track;
@@ -127,6 +152,22 @@ export interface IPlaylistService {
   addTracksToPlaylist(playlistId: EntityId, trackIds: readonly EntityId[]): Promise<void>;
   removeTrackFromPlaylist(playlistId: EntityId, playlistItemId: EntityId): Promise<void>;
   reorderPlaylistItems(playlistId: EntityId, fromPosition: number, toPosition: number): Promise<void>;
+  createSmartPlaylist?(
+    name: string,
+    description: string | undefined,
+    rules: readonly SmartRule[],
+    matchMode?: SmartMatchMode,
+    sort?: SmartPlaylistSort,
+    limit?: number | null
+  ): Promise<Playlist>;
+  updateSmartPlaylist?(
+    id: EntityId,
+    updates: Partial<Omit<SmartPlaylistDefinition, 'id' | 'createdAt' | 'updatedAt'>>
+  ): Promise<Playlist>;
+  evaluateSmartPlaylist?(id: EntityId): Promise<readonly Track[]>;
+  duplicateSmartPlaylist?(id: EntityId): Promise<Playlist>;
+  getSmartPlaylistDefinition?(id: EntityId): Promise<SmartPlaylistDefinition | null>;
+  ensureBuiltInSmartPlaylists?(): Promise<void>;
 }
 
 /**
@@ -151,6 +192,7 @@ import type { DspPipelineOptions, ReplayGainMode } from '../audio/audio-types';
 import type { AudioSettings, EqualizerPreset } from '../../domain/entities/audio-settings';
 import type { VisualizerSettings, VisualizerMode } from '../../domain/entities/visualizer-settings';
 import type { GalaxyGraph, GalaxyFilterOptions, GalaxySettings } from '../../domain/entities/galaxy-types';
+import type { DashboardSettings, DashboardSectionConfig } from '../../domain/entities/dashboard-settings';
 import type { AudioAnalysisMetrics } from '../audio/audio-types';
 
 /**
@@ -161,6 +203,23 @@ export interface IGalaxyService {
   invalidateCache(): void;
   getSettings(): Promise<GalaxySettings>;
   saveSettings(settings: Partial<GalaxySettings>): Promise<GalaxySettings>;
+}
+
+/**
+ * Dashboard Service Contract.
+ */
+export interface IDashboardService {
+  getSettings(): Promise<DashboardSettings>;
+  saveSettings(settings: Partial<DashboardSettings>): Promise<DashboardSettings>;
+  toggleSectionVisibility(sectionId: string, visible?: boolean): Promise<DashboardSettings>;
+  setSectionVisibility(sectionId: string, visible: boolean): Promise<DashboardSettings>;
+  reorderSections(sectionId: string, direction: 'up' | 'down'): Promise<DashboardSettings>;
+  moveSectionUp(sectionId: string): Promise<DashboardSettings>;
+  moveSectionDown(sectionId: string): Promise<DashboardSettings>;
+  moveSection(fromIndex: number, toIndex: number): Promise<DashboardSettings>;
+  setSectionOrder(order: readonly string[]): Promise<DashboardSettings>;
+  resetToDefaults(): Promise<DashboardSettings>;
+  getResolvedSections(): readonly DashboardSectionConfig[];
 }
 
 /**
@@ -209,7 +268,18 @@ export interface IAudioEngine {
   setEqualizerBandGain(bandIndex: number, gainDb: number): void;
   setPreampGain(gainDb: number): void;
   setReplayGainMode(mode: ReplayGainMode): void;
+  setPreventClipping?(enabled: boolean): void;
   setBalance(balance: number): void;
   setLimiterEnabled(enabled: boolean): void;
   getDspOptions(): DspPipelineOptions;
+
+  // Gapless & Crossfade Playback
+  prepareNext?(urlOrBlob: string | Blob, options?: { replayGain?: ReplayGainData | undefined }): Promise<void>;
+  hasPreparedNext?(): boolean;
+  transitionToNext?(): Promise<void>;
+  cancelPreload?(): void;
+  startCrossfadeToNext?(durationSec: number): Promise<void>;
+  cancelCrossfade?(): void;
+  setCrossfade?(enabled: boolean, durationSec?: number): void;
+  readonly isCrossfading?: boolean;
 }

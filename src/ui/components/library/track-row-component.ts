@@ -32,7 +32,8 @@ export class TrackRowComponent {
     const formatBadge = TrackRowComponent.formatBadge(track);
 
     row.style.alignItems = 'center';
-    row.style.height = '56px';
+    row.style.height = 'var(--library-row-height, 56px)';
+    row.style.padding = 'var(--library-item-padding, 8px 14px)';
     row.style.boxSizing = 'border-box';
     row.style.borderBottom = '1px solid rgba(255, 255, 255, 0.04)';
     row.style.borderRadius = 'var(--radius-md)';
@@ -47,7 +48,7 @@ export class TrackRowComponent {
         ${isPlaying ? `<span style="color: var(--color-accent-cyan); display: flex; justify-content: center;">${getIconSvg('audio-bars', { size: 14 })}</span>` : (track.trackNumber ?? index + 1)}
       </div>
 
-      <div class="track-row-art" style="width: 38px; height: 38px; border-radius: var(--radius-sm); background: linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; border: 1px solid var(--glass-border);">
+      <div class="track-row-art" style="width: var(--library-artwork-size, 38px); height: var(--library-artwork-size, 38px); border-radius: var(--radius-sm); background: linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; border: 1px solid var(--glass-border);">
         <span style="color: var(--color-accent-purple-glow);">${getIconSvg('music', { size: 18 })}</span>
       </div>
 

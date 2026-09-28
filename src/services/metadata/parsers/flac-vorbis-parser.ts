@@ -239,11 +239,21 @@ export class FlacVorbisParser {
     const albumPeak = getFirst('REPLAYGAIN_ALBUM_PEAK');
 
     if (trackGain || albumGain) {
+      const parseGain = (val?: string) => {
+        if (!val) return undefined;
+        const num = parseFloat(val.replace(/dB/i, '').trim());
+        return Number.isFinite(num) ? num : undefined;
+      };
+      const parsePeak = (val?: string) => {
+        if (!val) return undefined;
+        const num = parseFloat(val.trim());
+        return Number.isFinite(num) ? num : undefined;
+      };
       replayGain = {
-        trackGainDb: trackGain ? parseFloat(trackGain.replace(/dB/i, '').trim()) : undefined,
-        trackPeak: trackPeak ? parseFloat(trackPeak.trim()) : undefined,
-        albumGainDb: albumGain ? parseFloat(albumGain.replace(/dB/i, '').trim()) : undefined,
-        albumPeak: albumPeak ? parseFloat(albumPeak.trim()) : undefined
+        trackGainDb: parseGain(trackGain),
+        trackPeak: parsePeak(trackPeak),
+        albumGainDb: parseGain(albumGain),
+        albumPeak: parsePeak(albumPeak)
       };
     }
 

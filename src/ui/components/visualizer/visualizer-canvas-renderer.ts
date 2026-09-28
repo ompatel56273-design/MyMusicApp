@@ -144,13 +144,18 @@ export class VisualizerCanvasRenderer {
     }
 
     switch (this.config.mode) {
+      case 'off':
+        // Off mode: clear canvas and perform zero rendering
+        return;
       case 'bars':
+      case 'spectrum-bars':
         this.renderBars(ctx, width, height);
         break;
       case 'waveform':
         this.renderWaveform(ctx, width, height);
         break;
       case 'circular':
+      case 'circular-spectrum':
         this.renderCircular(ctx, width, height);
         break;
       case 'spectrum':

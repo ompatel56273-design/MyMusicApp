@@ -18,6 +18,25 @@ export class Mp4AtomParser {
     const tags: Record<string, any> = {};
     let artwork: ExtractedArtwork | undefined;
 
+    // Traverse root atoms searching for 'moov' -> 'mvhd' for duration
+    let durationMs: number | undefined;
+    const mvhdAtom = this.findAtomPath(buffer, view, 0, buffer.length, ['moov', 'mvhd']);
+    if (mvhdAtom) {
+      const version = buffer[mvhdAtom.offset + 8];
+      let timescale = 0;
+      let duration = 0;
+      if (version === 0 && mvhdAtom.size >= 28) {
+        timescale = view.getUint32(mvhdAtom.offset + 20);
+        duration = view.getUint32(mvhdAtom.offset + 24);
+      } else if (version === 1 && mvhdAtom.size >= 40) {
+        timescale = view.getUint32(mvhdAtom.offset + 28);
+        duration = Number(view.getBigUint64(mvhdAtom.offset + 32));
+      }
+      if (timescale > 0 && duration > 0) {
+        durationMs = Math.round((duration / timescale) * 1000);
+      }
+    }
+
     // Traverse root atoms searching for 'moov'
     const ilstAtom = this.findAtomPath(buffer, view, 0, buffer.length, ['moov', 'udta', 'meta', 'ilst']);
 
@@ -100,6 +119,7 @@ export class Mp4AtomParser {
       album,
       genre,
       year,
+      durationMs,
       trackNumber: tags['trkn']?.trackNum || undefined,
       totalTracks: tags['trkn']?.totalTracks || undefined,
       discNumber: tags['disk']?.discNum || undefined,

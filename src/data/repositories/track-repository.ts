@@ -64,7 +64,7 @@ export class TrackRepository implements ITrackRepository {
 
     const total = tracks.length;
     const offset = options?.offset ?? 0;
-    const limit = options?.limit ?? 50;
+    const limit = options?.limit ?? 100000;
     const paginated = tracks.slice(offset, offset + limit);
 
     return {

@@ -1,7 +1,10 @@
 export type VisualizerMode =
+  | 'off'
   | 'bars'
+  | 'spectrum-bars'
   | 'waveform'
   | 'circular'
+  | 'circular-spectrum'
   | 'spectrum'
   | 'particles'
   | 'pulse'
@@ -18,8 +21,8 @@ export interface VisualizerSettings {
 }
 
 export const DEFAULT_VISUALIZER_SETTINGS: VisualizerSettings = {
-  enabled: true,
-  mode: 'bars',
+  enabled: false,
+  mode: 'off',
   fpsLimit: 60,
   colorTheme: 'accent'
 };

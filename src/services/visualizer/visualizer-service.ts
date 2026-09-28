@@ -60,11 +60,17 @@ export class VisualizerService implements IVisualizerService {
   }
 
   public async setMode(mode: VisualizerMode): Promise<VisualizerSettings> {
-    return this.saveSettings({ mode });
+    const isOff = mode === 'off';
+    return this.saveSettings({
+      mode,
+      enabled: !isOff
+    });
   }
 
   public async setEnabled(enabled: boolean): Promise<VisualizerSettings> {
-    return this.saveSettings({ enabled });
+    const currentMode = (await this.getSettings()).mode;
+    const mode = !enabled ? 'off' : (currentMode === 'off' ? 'bars' : currentMode);
+    return this.saveSettings({ enabled, mode });
   }
 
   public async resetToDefaults(): Promise<VisualizerSettings> {
@@ -76,8 +82,8 @@ export class VisualizerService implements IVisualizerService {
       return { ...DEFAULT_VISUALIZER_SETTINGS };
     }
 
-    const enabled = typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULT_VISUALIZER_SETTINGS.enabled;
     const mode = this.sanitizeMode(raw.mode);
+    const enabled = mode === 'off' ? false : (typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULT_VISUALIZER_SETTINGS.enabled);
     const fpsLimit = this.sanitizeFps(raw.fpsLimit);
     const colorTheme = this.sanitizeTheme(raw.colorTheme);
 
@@ -91,9 +97,12 @@ export class VisualizerService implements IVisualizerService {
 
   private sanitizeMode(mode: any): VisualizerMode {
     const validModes: VisualizerMode[] = [
+      'off',
       'bars',
+      'spectrum-bars',
       'waveform',
       'circular',
+      'circular-spectrum',
       'spectrum',
       'particles',
       'pulse',

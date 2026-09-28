@@ -119,8 +119,14 @@ export class AudioSettingsService implements IAudioSettingsService {
       engine.setEqualizerBands(settings.equalizerBands);
       engine.setPreampGain(settings.preampGainDb);
       engine.setReplayGainMode(settings.replayGainMode);
+      if (engine.setPreventClipping) {
+        engine.setPreventClipping(settings.preventClipping);
+      }
       engine.setBalance(settings.balance);
       engine.setLimiterEnabled(settings.limiterEnabled);
+      if (engine.setCrossfade) {
+        engine.setCrossfade(settings.crossfadeEnabled, settings.crossfadeDurationSec);
+      }
     } catch (err) {
       this.logger.error('Failed to apply DSP settings to audio engine:', { error: String(err) });
     }
@@ -135,9 +141,12 @@ export class AudioSettingsService implements IAudioSettingsService {
     const equalizerBands = this.sanitizeBands(raw.equalizerBands);
     const preampGainDb = this.clampDb(raw.preampGainDb);
     const replayGainMode = this.sanitizeReplayGainMode(raw.replayGainMode);
+    const preventClipping = typeof raw.preventClipping === 'boolean' ? raw.preventClipping : true;
     const selectedPreset = typeof raw.selectedPreset === 'string' && raw.selectedPreset.trim() ? raw.selectedPreset.trim() : 'flat';
     const balance = this.clampBalance(raw.balance);
     const limiterEnabled = typeof raw.limiterEnabled === 'boolean' ? raw.limiterEnabled : true;
+    const crossfadeEnabled = typeof raw.crossfadeEnabled === 'boolean' ? raw.crossfadeEnabled : false;
+    const crossfadeDurationSec = this.clampCrossfadeDuration(raw.crossfadeDurationSec);
 
     const customPresets: EqualizerPreset[] = [];
     if (Array.isArray(raw.customPresets)) {
@@ -159,10 +168,13 @@ export class AudioSettingsService implements IAudioSettingsService {
       equalizerBands,
       preampGainDb,
       replayGainMode,
+      preventClipping,
       selectedPreset,
       customPresets,
       balance,
-      limiterEnabled
+      limiterEnabled,
+      crossfadeEnabled,
+      crossfadeDurationSec
     };
   }
 
@@ -184,6 +196,12 @@ export class AudioSettingsService implements IAudioSettingsService {
     const num = Number(val);
     if (isNaN(num) || !isFinite(num)) return 0;
     return Math.max(-1.0, Math.min(1.0, num));
+  }
+
+  private clampCrossfadeDuration(val: any): number {
+    const num = Number(val);
+    if (isNaN(num) || !isFinite(num)) return DEFAULT_AUDIO_SETTINGS.crossfadeDurationSec;
+    return Math.max(1.0, Math.min(12.0, Math.round(num * 10) / 10));
   }
 
   private sanitizeReplayGainMode(mode: any): ReplayGainMode {

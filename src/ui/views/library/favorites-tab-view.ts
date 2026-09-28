@@ -1,12 +1,15 @@
 import type { Track } from '../../../domain/entities/models';
-import type { ILibraryService, IPlaybackManager, IArtworkService } from '../../../services/contracts/service-contracts';
+import type { ILibraryService, IPlaybackManager, IArtworkService, IPlaylistService } from '../../../services/contracts/service-contracts';
 import { VirtualScroller } from '../../components/virtual-scroller/virtual-scroller';
 import { TrackRowComponent } from '../../components/library/track-row-component';
+import { AddToPlaylistModalComponent } from '../../components/playlist/add-to-playlist-modal-component';
+import { ThemeManager } from '../../theme/theme-manager';
 
 export interface FavoritesTabViewDependencies {
   libraryService: ILibraryService;
   playbackManager?: IPlaybackManager | undefined;
   artworkService?: IArtworkService | undefined;
+  playlistService?: IPlaylistService | undefined;
 }
 
 export class FavoritesTabView {
@@ -14,14 +17,17 @@ export class FavoritesTabView {
   private readonly libraryService: ILibraryService;
   private readonly playbackManager?: IPlaybackManager | undefined;
   private readonly artworkService?: IArtworkService | undefined;
+  private readonly playlistService?: IPlaylistService | undefined;
 
   private favoriteTracks: Track[] = [];
   private scroller: VirtualScroller<Track> | null = null;
+  private densityUnsub: (() => void) | null = null;
 
   constructor(deps: FavoritesTabViewDependencies) {
     this.libraryService = deps.libraryService;
     this.playbackManager = deps.playbackManager;
     this.artworkService = deps.artworkService;
+    this.playlistService = deps.playlistService;
   }
 
   public async mount(container: HTMLElement): Promise<void> {
@@ -62,10 +68,20 @@ export class FavoritesTabView {
       </div>
     `;
 
+    this.densityUnsub = ThemeManager.getInstance().subscribeLibraryDensity((_densityId, densityDef) => {
+      if (this.scroller) {
+        this.scroller.setItemHeight(densityDef.rowHeight);
+      }
+    });
+
     await this.loadFavorites();
   }
 
   public unmount(): void {
+    if (this.densityUnsub) {
+      this.densityUnsub();
+      this.densityUnsub = null;
+    }
     if (this.scroller) {
       this.scroller.dispose();
       this.scroller = null;
@@ -109,10 +125,12 @@ export class FavoritesTabView {
       return;
     }
 
+    const densityDef = ThemeManager.getInstance().getLibraryDensityDefinition();
+
     this.scroller = new VirtualScroller<Track>({
       container: viewport,
       items: this.favoriteTracks,
-      itemHeight: 56,
+      itemHeight: densityDef.rowHeight,
       overscan: 5,
       renderItem: (track, index) => {
         return TrackRowComponent.create(
@@ -124,7 +142,15 @@ export class FavoritesTabView {
                 void this.playbackManager.playTrack(t, this.favoriteTracks);
               }
             },
-            onToggleFavorite: t => void this.handleToggleFavorite(t)
+            onToggleFavorite: t => void this.handleToggleFavorite(t),
+            onAddToPlaylist: this.playlistService
+              ? t => {
+                  void AddToPlaylistModalComponent.show({
+                    trackIds: [t.id],
+                    playlistService: this.playlistService!
+                  });
+                }
+              : undefined
           },
           this.artworkService
         );

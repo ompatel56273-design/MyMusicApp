@@ -103,16 +103,44 @@ export class LibraryService implements ILibraryService {
   }
 
   public async getLibraryStats(): Promise<{ trackCount: number; albumCount: number; artistCount: number }> {
-    const [trackCount, albumsResult, artistsResult] = await Promise.all([
+    const [trackCount, albumsResult, artistsResult, allTracksResult] = await Promise.all([
       this.trackRepo.count(),
-      this.albumRepo.list({ offset: 0, limit: 1 }),
-      this.artistRepo.list({ offset: 0, limit: 1 })
+      this.albumRepo.list({ offset: 0, limit: 10000 }),
+      this.artistRepo.list({ offset: 0, limit: 10000 }),
+      this.trackRepo.list({ limit: 10000 })
     ]);
+
+    const realArtistsInRepo = (artistsResult.items || []).filter(a => a.name && a.name.toLowerCase() !== 'unknown artist');
+    const realAlbumsInRepo = (albumsResult.items || []).filter(a => a.title && a.title.toLowerCase() !== 'unknown album');
+
+    let artistCount = artistsResult.total > 0 && artistsResult.items.length === artistsResult.total ? realArtistsInRepo.length : artistsResult.total;
+    let albumCount = albumsResult.total > 0 && albumsResult.items.length === albumsResult.total ? realAlbumsInRepo.length : albumsResult.total;
+
+    if (artistCount === 0 && allTracksResult.items.length > 0) {
+      const distinctArtists = new Set<string>();
+      for (const t of allTracksResult.items) {
+        if (t.artistName && t.artistName.toLowerCase() !== 'unknown artist') {
+          distinctArtists.add(t.artistName.trim().toLowerCase());
+        }
+      }
+      artistCount = distinctArtists.size;
+    }
+
+    if (albumCount === 0 && allTracksResult.items.length > 0) {
+      const distinctAlbums = new Set<string>();
+      for (const t of allTracksResult.items) {
+        if (t.albumTitle && t.albumTitle.toLowerCase() !== 'unknown album') {
+          const key = `${t.albumTitle.trim().toLowerCase()}:::${(t.artistName || '').trim().toLowerCase()}`;
+          distinctAlbums.add(key);
+        }
+      }
+      albumCount = distinctAlbums.size;
+    }
 
     return {
       trackCount,
-      albumCount: albumsResult.total,
-      artistCount: artistsResult.total
+      albumCount,
+      artistCount
     };
   }
 }
