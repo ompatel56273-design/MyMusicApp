@@ -234,6 +234,24 @@ export class AppBootstrap {
       duplicateDetectorService,
       eventBus: this.eventBus
     });
+    const libraryAnalyticsService = new LibraryAnalyticsService({
+      trackRepo,
+      audioFileRepo,
+      artistRepo,
+      albumRepo,
+      genreRepo,
+      playlistRepo,
+      historyRepo,
+      statsService,
+      libraryHealthService: healthService,
+      duplicateDetectorService,
+      eventBus: this.eventBus
+    });
+    const albumMergeService = new AlbumMergeService({
+      albumRepo,
+      trackRepo,
+      eventBus: this.eventBus
+    });
 
     // 4.1 Apply Audio Settings to Engine & PlaybackManager
     try {
@@ -286,6 +304,8 @@ export class AppBootstrap {
       dashboardService,
       scannerService,
       statsService,
+      libraryAnalyticsService,
+      albumMergeService,
       sleepTimerService,
       duplicateDetectorService,
       healthService,

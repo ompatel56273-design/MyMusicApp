@@ -39,6 +39,8 @@ import { getIconSvg, type IconName } from '../icons/icon-registry';
 
 import type { LibraryAnalyticsService } from '../../services/analytics/library-analytics-service';
 import type { AlbumMergeService } from '../../services/library/album-merge-service';
+import type { DuplicateDetectorService } from '../../services/duplicate/duplicate-detector-service';
+import type { LibraryHealthService } from '../../services/library/library-health-service';
 
 export interface AppShellDependencies {
   playbackManager: IPlaybackManager;
@@ -56,6 +58,8 @@ export interface AppShellDependencies {
   statsService?: StatsService | undefined;
   libraryAnalyticsService?: LibraryAnalyticsService | undefined;
   albumMergeService?: AlbumMergeService | undefined;
+  duplicateDetectorService?: DuplicateDetectorService | undefined;
+  healthService?: LibraryHealthService | undefined;
   sleepTimerService?: SleepTimerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   dbAdapter?: IDatabaseAdapter | undefined;
