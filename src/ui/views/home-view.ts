@@ -12,9 +12,9 @@ import type { EventBus } from '../../core/events/event-bus';
 import type { Track, Artist, Playlist } from '../../domain/entities/models';
 import type { Disposable } from '../../core/types/common';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
-import type { DashboardSectionId } from '../../domain/entities/dashboard-settings';
-import { SUPPORTED_DASHBOARD_SECTIONS } from '../../domain/entities/dashboard-settings';
+import { type DashboardSectionId, SUPPORTED_DASHBOARD_SECTIONS } from '../../domain/entities/dashboard-settings';
 import { DomainEvents } from '../../domain/events/domain-events';
+import heroHeadphonesImg from '../../assets/images/hero-headphones.webp';
 
 export interface HomeViewDependencies {
   playbackManager?: IPlaybackManager | undefined;
@@ -45,8 +45,8 @@ export const HERO_SLIDES: readonly DashboardHeroSlide[] = [
     id: 'slide-discovery',
     eyebrow: 'Morning Discovery',
     eyebrowIcon: 'sparkles',
-    title: 'Music For A<br/><span class="hero-title-accent">Better You</span>',
-    description: 'Different moods. Same you. Lossless audio quality with 10-band EQ.',
+    title: 'Music For A <span class="hero-title-accent">Better You</span>',
+    description: 'Different moods. Same you. Lossless sound with 10-band EQ.',
     secondaryLine1: 'Good Music',
     secondaryLine2: 'Brighter Days',
     primaryActionLabel: 'Play Now',
@@ -59,8 +59,8 @@ export const HERO_SLIDES: readonly DashboardHeroSlide[] = [
     id: 'slide-audio-quality',
     eyebrow: 'Studio Grade Audio',
     eyebrowIcon: 'equalizer',
-    title: 'Hear Every<br/><span class="hero-title-accent">Detail</span>',
-    description: 'Your music. Your sound. Your way. Bit-perfect playback powered by 64-bit processing.',
+    title: 'Hear Every <span class="hero-title-accent">Detail</span>',
+    description: 'Bit-perfect playback. Pure sound. No compromise.',
     secondaryLine1: 'Pure Sound',
     secondaryLine2: 'Zero Compromise',
     primaryActionLabel: 'Listen In Hi-Res',
@@ -73,8 +73,8 @@ export const HERO_SLIDES: readonly DashboardHeroSlide[] = [
     id: 'slide-personal-library',
     eyebrow: 'Personal Sanctuary',
     eyebrowIcon: 'library',
-    title: 'Your Music.<br/><span class="hero-title-accent">Your Space.</span>',
-    description: 'Everything you love, organized your way. Smart playlists, custom tags, and local sync.',
+    title: 'Your Music. <span class="hero-title-accent">Your Space.</span>',
+    description: 'Your collection, organized your way.',
     secondaryLine1: 'Your Library',
     secondaryLine2: 'Beautifully Curated',
     primaryActionLabel: 'Explore Library',
@@ -87,10 +87,10 @@ export const HERO_SLIDES: readonly DashboardHeroSlide[] = [
     id: 'slide-deep-listening',
     eyebrow: 'Deep Listening',
     eyebrowIcon: 'headphones',
-    title: 'Press Play.<br/><span class="hero-title-accent">Stay In The Moment.</span>',
-    description: 'Designed around the way you listen. Seamless crossfade and ambient spatial visualizers.',
+    title: 'Press Play. <span class="hero-title-accent">Stay In The Moment.</span>',
+    description: 'Seamless playback designed around the way you listen.',
     secondaryLine1: 'Flow State',
-    secondaryLine2: 'Endless Tracks',
+    secondaryLine2: 'Endless Focus',
     primaryActionLabel: 'Start Flow',
     primaryActionIcon: 'play',
     secondaryActionLabel: 'Random Vibe',
@@ -101,29 +101,15 @@ export const HERO_SLIDES: readonly DashboardHeroSlide[] = [
     id: 'slide-collection',
     eyebrow: 'Archival Collection',
     eyebrowIcon: 'disc',
-    title: 'Every Track<br/><span class="hero-title-accent">Has A Place.</span>',
-    description: 'Your entire collection beautifully cataloged with rich metadata and high-res artwork.',
+    title: 'Every Track <span class="hero-title-accent">Has A Place.</span>',
+    description: 'Your collection, beautifully organized with rich metadata.',
     secondaryLine1: 'Every Detail',
-    secondaryLine2: 'In Perfect Harmony',
+    secondaryLine2: 'Pure Harmony',
     primaryActionLabel: 'Play Collection',
     primaryActionIcon: 'play',
     secondaryActionLabel: 'Shuffle Artists',
     secondaryActionIcon: 'shuffle',
     variant: 'offset'
-  },
-  {
-    id: 'slide-pure-music',
-    eyebrow: 'Distraction Free',
-    eyebrowIcon: 'galaxy',
-    title: 'Less Noise.<br/><span class="hero-title-accent">More Music.</span>',
-    description: 'An ad-free home for your collection. Clean interface built for true music lovers.',
-    secondaryLine1: 'Pure Passion',
-    secondaryLine2: 'Uninterrupted',
-    primaryActionLabel: 'Play Favorites',
-    primaryActionIcon: 'play',
-    secondaryActionLabel: 'Quick Mix',
-    secondaryActionIcon: 'shuffle',
-    variant: 'minimal'
   }
 ];
 
@@ -149,6 +135,7 @@ export class HomeView implements IView {
   private subscriptions: Disposable[] = [];
   private activeMood = 'For You';
   private activeSlideIndex = 0;
+  private slideInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(libraryService?: ILibraryService, deps?: HomeViewDependencies) {
     this.libraryService = libraryService;
@@ -169,15 +156,31 @@ export class HomeView implements IView {
     this.render();
     void this.loadData();
     this.subscribeEvents();
+    this.startSlideTimer();
   }
 
   public unmount(): void {
+    this.stopSlideTimer();
     this.subscriptions.forEach(sub => sub.dispose());
     this.subscriptions = [];
 
     if (this.container) {
       this.container.innerHTML = '';
       this.container = null;
+    }
+  }
+
+  private startSlideTimer(): void {
+    this.stopSlideTimer();
+    this.slideInterval = setInterval(() => {
+      this.nextSlide();
+    }, 5000);
+  }
+
+  private stopSlideTimer(): void {
+    if (this.slideInterval !== null) {
+      clearInterval(this.slideInterval);
+      this.slideInterval = null;
     }
   }
 
@@ -229,285 +232,320 @@ export class HomeView implements IView {
           min-width: 0;
           width: 100%;
           box-sizing: border-box;
+          position: sticky;
+          top: var(--space-6);
+          align-self: start;
         }
 
-        /* Atmospheric Hero Banner — Matching Approved Templates 1, 2 & 11 */
+        /* ==========================================================
+           ATMOSPHERIC HERO BANNER — DYNAMIC RESPONSIVE DESIGN SYSTEM
+           ========================================================== */
         .home-hero-card {
           position: relative;
-          border-radius: var(--radius-2xl);
-          background: linear-gradient(135deg, rgba(30, 20, 70, 0.95) 0%, rgba(15, 23, 42, 0.95) 55%, rgba(10, 10, 20, 0.98) 100%);
-          border: 1px solid var(--glass-border-interactive);
-          padding: var(--space-8) var(--space-9);
+          border-radius: 28px;
+          background: #060814;
+          border: 1px solid rgba(139, 92, 246, 0.28);
+          padding: clamp(32px, 3.2vw, 40px) clamp(36px, 3.8vw, 48px);
           overflow: hidden;
-          box-shadow: var(--shadow-elevation-high), 0 0 32px rgba(124, 58, 237, 0.2);
+          box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.85), 0 0 36px rgba(124, 58, 237, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.1);
           display: flex;
           flex-direction: row;
           align-items: center;
           justify-content: space-between;
-          min-height: 250px;
+          height: auto;
+          min-height: clamp(320px, 28vw, 360px);
           box-sizing: border-box;
           width: 100%;
-          gap: var(--space-6);
+          gap: clamp(20px, 2.5vw, 40px);
           transition: border-color var(--duration-normal) var(--ease-smooth), box-shadow var(--duration-normal) var(--ease-smooth);
+        }
+
+        /* Large Headphone Background Artwork Layer */
+        .home-hero-bg-art {
+          position: absolute;
+          right: 0;
+          top: 0;
+          bottom: 0;
+          width: clamp(50%, 48vw, 68%);
+          height: 100%;
+          background-image: url('${heroHeadphonesImg}');
+          background-size: cover;
+          background-position: center right;
+          background-repeat: no-repeat;
+          pointer-events: none;
+          z-index: 1;
+          opacity: 0.95;
+          mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.12) 12%, rgba(0, 0, 0, 0.95) 42%, #000000 100%);
+          -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.12) 12%, rgba(0, 0, 0, 0.95) 42%, #000000 100%);
         }
 
         .home-hero-glow-1 {
           position: absolute;
-          right: 20%;
-          top: -35%;
-          width: 420px;
-          height: 420px;
+          right: 22%;
+          top: -20%;
+          width: 380px;
+          height: 380px;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(124, 58, 237, 0.35) 0%, rgba(6, 182, 212, 0.15) 50%, transparent 70%);
+          background: radial-gradient(circle, rgba(168, 85, 247, 0.35) 0%, rgba(6, 182, 212, 0.15) 50%, transparent 70%);
           pointer-events: none;
+          z-index: 0;
+          filter: blur(28px);
         }
 
         .home-hero-glow-2 {
           position: absolute;
-          left: -10%;
-          bottom: -40%;
-          width: 320px;
-          height: 320px;
+          left: -8%;
+          bottom: -35%;
+          width: 340px;
+          height: 340px;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(236, 72, 153, 0.2) 0%, transparent 65%);
+          background: radial-gradient(circle, rgba(236, 72, 153, 0.22) 0%, transparent 65%);
           pointer-events: none;
+          z-index: 0;
+          filter: blur(36px);
         }
 
         .home-hero-content {
-          z-index: 2;
-          max-width: 560px;
+          position: relative;
+          z-index: 3;
+          width: min(100%, 58%);
+          max-width: 680px;
           display: flex;
           flex-direction: column;
-          gap: var(--space-3);
-          flex: 1;
+          justify-content: center;
+          flex: 0 1 auto;
+          min-width: 0;
           box-sizing: border-box;
+          transition: opacity 0.3s var(--ease-smooth), transform 0.3s var(--ease-smooth);
         }
 
         .home-hero-greeting {
-          font-size: var(--font-size-xs);
-          font-weight: var(--font-weight-bold);
+          font-size: clamp(11px, 1vw, 13px);
+          font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.14em;
+          letter-spacing: 1.5px;
           color: var(--color-accent-cyan);
-          display: flex;
+          display: inline-flex;
           align-items: center;
           gap: 8px;
-          padding: 4px 12px;
-          background: rgba(6, 182, 212, 0.1);
-          border: 1px solid rgba(6, 182, 212, 0.25);
+          padding: 6px 16px;
+          min-height: 34px;
+          background: rgba(6, 182, 212, 0.12);
+          border: 1px solid rgba(6, 182, 212, 0.35);
           border-radius: var(--radius-full);
           width: fit-content;
-          backdrop-filter: blur(8px);
+          backdrop-filter: blur(12px);
+          box-shadow: 0 0 16px rgba(6, 182, 212, 0.2);
+          margin-bottom: clamp(14px, 1.4vw, 18px);
         }
 
         .home-hero-title {
-          font-size: var(--font-size-4xl);
-          font-weight: var(--font-weight-extrabold);
-          letter-spacing: -0.035em;
-          line-height: 1.12;
-          margin: 0;
+          font-size: clamp(38px, 3.8vw, 56px);
+          font-weight: 800;
+          letter-spacing: -1.5px;
+          line-height: 1.02;
+          margin: 0 0 clamp(14px, 1.4vw, 18px) 0;
           color: #ffffff;
-          text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+          text-shadow: 0 4px 24px rgba(0, 0, 0, 0.85);
+          width: 100%;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
         }
 
         .hero-title-accent {
-          background: linear-gradient(135deg, #ffffff 0%, var(--color-accent-cyan) 60%, var(--color-accent-purple-glow) 100%);
+          background: linear-gradient(135deg, #ec4899 0%, #a855f7 50%, #38bdf8 100%);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
-          display: inline-block;
+          display: inline;
         }
 
         /* Typography Composition Variants */
         .home-hero-card[data-variant="editorial"] .home-hero-title {
           font-weight: 800;
-          letter-spacing: -0.04em;
+          letter-spacing: -1.2px;
         }
 
         .home-hero-card[data-variant="split"] .home-hero-title {
           text-transform: uppercase;
-          letter-spacing: -0.02em;
-          font-size: calc(var(--font-size-4xl) * 0.95);
+          letter-spacing: -0.5px;
+          font-size: clamp(34px, 3.2vw, 50px);
         }
 
         .home-hero-card[data-variant="italic"] .home-hero-title {
           font-family: var(--font-family-serif, Georgia, serif);
           font-weight: 700;
           font-style: italic;
-          letter-spacing: -0.02em;
+          letter-spacing: -0.8px;
         }
 
         .home-hero-card[data-variant="poster"] .home-hero-title {
           font-weight: 900;
-          letter-spacing: -0.045em;
-          line-height: 1.08;
+          letter-spacing: -1.4px;
+          line-height: 1.03;
         }
 
         .home-hero-card[data-variant="offset"] .home-hero-title {
-          letter-spacing: -0.01em;
+          letter-spacing: -0.5px;
         }
 
         .home-hero-card[data-variant="minimal"] .home-hero-title {
           font-weight: 600;
-          letter-spacing: -0.03em;
+          letter-spacing: -0.8px;
         }
 
         .home-hero-subtitle {
-          font-size: var(--font-size-sm);
-          color: rgba(241, 245, 249, 0.88);
-          margin: 0 0 var(--space-3) 0;
-          font-weight: var(--font-weight-normal);
-          line-height: 1.55;
-          max-width: 480px;
-          text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+          font-size: clamp(14px, 1.15vw, 16.5px);
+          color: rgba(226, 232, 240, 0.88);
+          margin: 0;
+          font-weight: 450;
+          line-height: 1.5;
+          max-width: clamp(440px, 42vw, 540px);
+          width: 100%;
+          text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
         }
 
         .home-hero-actions {
           display: flex;
-          gap: var(--space-3);
+          gap: clamp(12px, 1.2vw, 16px);
           align-items: center;
           flex-wrap: wrap;
+          margin-top: clamp(22px, 2vw, 28px);
         }
 
         .home-hero-btn-play {
           display: inline-flex;
           align-items: center;
-          gap: var(--space-2);
-          padding: 12px 28px;
-          min-height: 46px;
+          justify-content: center;
+          gap: 8px;
+          padding-inline: clamp(22px, 2vw, 28px);
+          padding-block: 10px;
+          min-height: 48px;
           border-radius: var(--radius-full);
-          background: linear-gradient(135deg, var(--color-accent-purple), #9333ea);
+          background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
           color: #ffffff;
-          font-weight: var(--font-weight-bold);
-          font-size: var(--font-size-sm);
+          font-weight: 600;
+          font-size: 15px;
           border: none;
           cursor: pointer;
-          box-shadow: 0 4px 20px rgba(124, 58, 237, 0.55);
+          box-shadow: 0 6px 24px rgba(236, 72, 153, 0.45), 0 0 16px rgba(139, 92, 246, 0.35);
           transition: transform var(--duration-fast) var(--ease-smooth), box-shadow var(--duration-fast) var(--ease-smooth);
         }
         .home-hero-btn-play:hover {
           transform: translateY(-2px);
-          box-shadow: 0 6px 28px rgba(124, 58, 237, 0.75);
+          box-shadow: 0 8px 32px rgba(236, 72, 153, 0.65), 0 0 24px rgba(139, 92, 246, 0.5);
         }
 
         .home-hero-btn-shuffle {
           display: inline-flex;
           align-items: center;
-          gap: var(--space-2);
-          padding: 12px 24px;
-          min-height: 46px;
+          justify-content: center;
+          gap: 8px;
+          padding-inline: clamp(20px, 1.8vw, 26px);
+          padding-block: 10px;
+          min-height: 48px;
           border-radius: var(--radius-full);
-          background: var(--glass-bg-interactive);
-          border: 1px solid var(--glass-border-interactive);
-          color: var(--color-text-primary);
-          font-weight: var(--font-weight-semibold);
-          font-size: var(--font-size-sm);
+          background: rgba(15, 23, 42, 0.6);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          color: #ffffff;
+          font-weight: 600;
+          font-size: 15px;
           cursor: pointer;
-          transition: background var(--duration-fast) var(--ease-smooth), transform var(--duration-fast) var(--ease-smooth);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          transition: background var(--duration-fast) var(--ease-smooth), transform var(--duration-fast) var(--ease-smooth), border-color var(--duration-fast) var(--ease-smooth);
         }
         .home-hero-btn-shuffle:hover {
-          background: var(--glass-bg-subtle);
+          background: rgba(30, 41, 59, 0.75);
+          border-color: rgba(255, 255, 255, 0.35);
           transform: translateY(-2px);
         }
 
-        /* Secondary Right Poster Card */
+        /* Floating Right-Side Slide Information & Controls (Directly over Artwork) */
         .home-hero-decor {
-          position: relative;
-          z-index: 2;
+          position: absolute;
+          right: clamp(28px, 4vw, 56px);
+          bottom: clamp(28px, 4vw, 52px);
+          z-index: 3;
           display: flex;
           flex-direction: column;
-          align-items: flex-end;
-          gap: var(--space-4);
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid var(--glass-border-interactive);
-          border-radius: var(--radius-xl);
-          padding: var(--space-5) var(--space-6);
-          backdrop-filter: blur(12px);
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-          min-width: 220px;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          gap: 3px;
+          background: transparent;
+          border: none;
+          border-radius: 0;
+          padding: 0;
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+          box-shadow: none;
           box-sizing: border-box;
+          pointer-events: auto;
         }
 
         .home-hero-tagline {
           display: flex;
           flex-direction: column;
-          align-items: flex-end;
-          text-align: right;
+          align-items: center;
+          text-align: center;
           gap: 2px;
+          margin-bottom: 6px;
         }
 
         .home-hero-tagline-primary {
-          font-size: var(--font-size-xs);
-          font-weight: var(--font-weight-bold);
+          font-size: clamp(10px, 0.8vw, 13px);
+          font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.16em;
-          color: rgba(255, 255, 255, 0.95);
-          text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+          letter-spacing: 0.14em;
+          color: rgba(255, 255, 255, 0.92);
+          text-shadow: 0 2px 10px rgba(0, 0, 0, 0.75);
         }
 
         .home-hero-tagline-secondary {
           font-family: 'Brush Script MT', 'Segoe Script', 'Georgia', cursive, serif;
-          font-size: 24px;
+          font-size: clamp(18px, 1.6vw, 25px);
           font-style: italic;
           font-weight: 600;
-          color: var(--color-accent-cyan);
-          line-height: 1.2;
-          text-shadow: 0 2px 10px rgba(6, 182, 212, 0.4);
+          background: linear-gradient(135deg, #38bdf8 0%, #c084fc 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          line-height: 1.1;
+          text-shadow: 0 2px 10px rgba(0, 0, 0, 0.65);
         }
 
         .home-hero-controls {
           display: flex;
           align-items: center;
-          gap: var(--space-2);
-        }
-
-        .home-hero-nav-btn {
-          display: inline-flex;
-          align-items: center;
           justify-content: center;
-          width: 28px;
-          height: 28px;
-          border-radius: var(--radius-full);
-          background: rgba(255, 255, 255, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          color: rgba(255, 255, 255, 0.85);
-          cursor: pointer;
-          padding: 0;
-          transition: all var(--duration-fast) var(--ease-smooth);
-        }
-        .home-hero-nav-btn:hover {
-          background: rgba(255, 255, 255, 0.2);
-          color: #ffffff;
-          border-color: rgba(255, 255, 255, 0.35);
-        }
-        .home-hero-nav-btn:focus-visible {
-          outline: 2px solid var(--color-accent-cyan);
-          outline-offset: 2px;
+          margin-top: 2px;
         }
 
         .home-hero-dots {
           display: flex;
           align-items: center;
+          justify-content: center;
           gap: 6px;
         }
 
         .home-hero-dot {
-          width: 8px;
-          height: 8px;
+          width: 7px;
+          height: 7px;
           border-radius: 50%;
-          background: rgba(255, 255, 255, 0.25);
-          border: 1px solid transparent;
+          background: rgba(255, 255, 255, 0.35);
+          border: none;
           padding: 0;
           cursor: pointer;
           transition: all var(--duration-fast) var(--ease-smooth);
         }
         .home-hero-dot:hover {
-          background: rgba(255, 255, 255, 0.5);
+          background: rgba(255, 255, 255, 0.65);
         }
         .home-hero-dot.active {
           background: var(--color-accent-cyan);
-          width: 24px;
+          width: 22px;
+          height: 7px;
           border-radius: var(--radius-full);
-          box-shadow: 0 0 10px rgba(6, 182, 212, 0.6);
+          box-shadow: 0 0 10px rgba(6, 182, 212, 0.7);
         }
         .home-hero-dot:focus-visible {
           outline: 2px solid var(--color-accent-cyan);
@@ -869,16 +907,39 @@ export class HomeView implements IView {
           }
 
           .home-hero-card {
-            padding: var(--space-6);
-            min-height: 190px;
+            padding: clamp(24px, 3.5vw, 36px);
+            height: auto;
+            min-height: clamp(260px, 28vw, 320px);
+          }
+
+          .home-hero-bg-art {
+            width: 55%;
+            opacity: 0.85;
           }
 
           .home-hero-title {
-            font-size: var(--font-size-3xl);
+            font-size: clamp(32px, 3.8vw, 46px);
+            margin-bottom: clamp(12px, 1.5vw, 18px);
           }
 
-          .home-hero-tagline {
-            font-size: 22px;
+          .home-hero-subtitle {
+            font-size: clamp(14px, 1.5vw, 16px);
+          }
+
+          .home-hero-actions {
+            margin-top: clamp(18px, 2vw, 26px);
+            gap: 12px;
+          }
+
+          .home-hero-btn-play, .home-hero-btn-shuffle {
+            min-height: 48px;
+            padding-inline: 20px;
+            font-size: 14px;
+          }
+
+          .home-hero-decor {
+            right: clamp(16px, 2.5vw, 32px);
+            bottom: clamp(16px, 2.5vw, 28px);
           }
 
           .home-track-grid {
@@ -896,6 +957,9 @@ export class HomeView implements IView {
         @media (min-width: 768px) and (max-width: 899px) {
           .home-grid-layout {
             grid-template-columns: 1fr;
+          }
+          .home-side-col {
+            position: static;
           }
         }
 
@@ -927,8 +991,9 @@ export class HomeView implements IView {
           }
 
           .home-hero-card {
-            padding: var(--space-5) var(--space-4);
-            min-height: 160px;
+            padding: clamp(20px, 4vw, 28px) clamp(16px, 3.5vw, 22px);
+            height: auto;
+            min-height: auto;
             flex-direction: column;
             align-items: flex-start;
             border-radius: var(--radius-xl);
@@ -937,21 +1002,47 @@ export class HomeView implements IView {
             box-sizing: border-box;
           }
 
+          .home-hero-bg-art {
+            width: 100%;
+            opacity: 0.2;
+            background-position: center right;
+          }
+
+          .home-hero-greeting {
+            font-size: clamp(11px, 2.8vw, 13px);
+            letter-spacing: 1.5px;
+            padding: 6px 14px;
+            min-height: 32px;
+            margin-bottom: 12px;
+          }
+
           .home-hero-title {
-            font-size: var(--font-size-2xl);
-            line-height: 1.15;
+            font-size: clamp(28px, 8vw, 40px);
+            line-height: 1.1;
+            margin-bottom: 12px;
+            max-width: 100%;
             word-break: break-word;
           }
 
           .home-hero-subtitle {
-            font-size: var(--font-size-xs);
-            margin: 2px 0 var(--space-3) 0;
+            font-size: clamp(14px, 4vw, 16px);
+            line-height: 1.45;
+            margin: 0;
+            max-width: 100%;
+          }
+
+          .home-hero-actions {
+            margin-top: 20px;
+            gap: 10px;
+            width: 100%;
           }
 
           .home-hero-btn-play, .home-hero-btn-shuffle {
-            padding: 10px 20px;
-            font-size: var(--font-size-xs);
-            min-height: 44px;
+            min-height: 48px;
+            padding-inline: 18px;
+            font-size: 14px;
+            flex: 1 1 calc(50% - 6px);
+            justify-content: center;
           }
 
           .home-hero-decor {
@@ -1108,6 +1199,7 @@ export class HomeView implements IView {
           <div class="home-main-col">
             <!-- 1. Atmospheric Multi-Slide Hero Banner -->
             <div class="home-hero-card" data-variant="${currentSlide.variant}" aria-roledescription="carousel" aria-label="Featured music hero banner">
+              <div class="home-hero-bg-art" aria-hidden="true"></div>
               <div class="home-hero-glow-1"></div>
               <div class="home-hero-glow-2"></div>
               
@@ -1140,9 +1232,6 @@ export class HomeView implements IView {
                   <span class="home-hero-tagline-secondary">${this.escapeHtml(currentSlide.secondaryLine2)}</span>
                 </div>
                 <div class="home-hero-controls" aria-label="Slide navigation">
-                  <button class="home-hero-nav-btn" id="home-hero-prev-btn" aria-label="Previous slide">
-                    ${getIconSvg('chevron-left', { size: 16, color: '#ffffff' })}
-                  </button>
                   <div class="home-hero-dots" role="tablist" aria-label="Hero slide indicators">
                     ${HERO_SLIDES.map((slide, idx) => `
                       <button
@@ -1157,9 +1246,6 @@ export class HomeView implements IView {
                       ><span style="display:none;">${idx + 1}</span></button>
                     `).join('')}
                   </div>
-                  <button class="home-hero-nav-btn" id="home-hero-next-btn" aria-label="Next slide">
-                    ${getIconSvg('chevron-right', { size: 16, color: '#ffffff' })}
-                  </button>
                 </div>
               </div>
             </div>
@@ -2260,20 +2346,12 @@ export class HomeView implements IView {
   private bindStaticEvents(): void {
     if (!this.container) return;
 
-    // Hero Slideshow Controls
-    this.container.querySelector('#home-hero-prev-btn')?.addEventListener('click', () => {
-      this.prevSlide();
-    });
-
-    this.container.querySelector('#home-hero-next-btn')?.addEventListener('click', () => {
-      this.nextSlide();
-    });
-
     const dotElements = this.container.querySelectorAll<HTMLElement>('[data-slide-index]');
     dotElements.forEach((dot) => {
       dot.addEventListener('click', () => {
         const slideIdx = parseInt(dot.getAttribute('data-slide-index') || '0', 10);
         this.setActiveSlide(slideIdx);
+        this.startSlideTimer();
         dot.focus();
       });
 
@@ -2281,23 +2359,27 @@ export class HomeView implements IView {
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
           e.preventDefault();
           this.nextSlide();
+          this.startSlideTimer();
           const nextIdx = this.activeSlideIndex;
           const nextDot = this.container?.querySelector<HTMLElement>(`#hero-tab-${nextIdx}`);
           nextDot?.focus();
         } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
           e.preventDefault();
           this.prevSlide();
+          this.startSlideTimer();
           const prevIdx = this.activeSlideIndex;
           const prevDot = this.container?.querySelector<HTMLElement>(`#hero-tab-${prevIdx}`);
           prevDot?.focus();
         } else if (e.key === 'Home') {
           e.preventDefault();
           this.setActiveSlide(0);
+          this.startSlideTimer();
           const firstDot = this.container?.querySelector<HTMLElement>('#hero-tab-0');
           firstDot?.focus();
         } else if (e.key === 'End') {
           e.preventDefault();
           this.setActiveSlide(HERO_SLIDES.length - 1);
+          this.startSlideTimer();
           const lastDot = this.container?.querySelector<HTMLElement>(`#hero-tab-${HERO_SLIDES.length - 1}`);
           lastDot?.focus();
         }

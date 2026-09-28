@@ -1,5 +1,5 @@
 import type { RouterService } from '../navigation/router-service';
-import type { AppRoute, RouteState } from '../navigation/route-types';
+import type { AppRoute, RouteState, LibraryTab } from '../navigation/route-types';
 import type { Disposable } from '../../core/types/common';
 import type { ILibraryService } from '../../services/contracts/service-contracts';
 import type { EventBus } from '../../core/events/event-bus';
@@ -212,49 +212,65 @@ export class SidebarComponent {
         <!-- Spacer -->
         <div style="flex: 1; min-height: var(--space-2);"></div>
 
-        <!-- Bottom Local Library Card -->
+        <!-- Compact Library Summary Section -->
         <div
           id="sidebar-library-card"
-          class="glass-card"
-          role="button"
-          tabindex="0"
-          aria-label="Open Local Library"
+          role="region"
+          aria-label="Library Overview"
           style="
-            padding: var(--space-3) var(--space-4);
             display: flex;
             flex-direction: column;
             gap: var(--space-2);
-            cursor: pointer;
-            background: var(--color-bg-surface-elevated);
+            padding: var(--space-3) var(--space-2);
+            border-top: 1px solid var(--glass-border);
+            margin-top: auto;
           "
         >
-          <div style="display: flex; align-items: center; gap: var(--space-3);">
-            <div style="
-              width: 32px;
-              height: 32px;
-              border-radius: var(--radius-sm);
-              background: rgba(139, 92, 246, 0.15);
-              border: 1px solid rgba(139, 92, 246, 0.3);
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: var(--color-accent-purple-glow);
-              flex-shrink: 0;
-            ">
-              ${getIconSvg('folder', { size: 16 })}
-            </div>
-            <div style="display: flex; flex-direction: column; overflow: hidden;">
-              <span style="font-size: 12px; font-weight: 600; color: var(--color-text-primary);">
-                Local Library
-              </span>
-              <span id="sidebar-lib-stats" style="font-size: 11px; color: var(--color-text-muted);">
-                Ready to play
-              </span>
-            </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 0 var(--space-2);">
+            <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-dim);">
+              Library
+            </span>
+            <span id="sidebar-lib-stats" style="font-size: 11px; color: var(--color-text-muted); font-weight: 500;">
+              0 songs
+            </span>
           </div>
-          <!-- Storage Meter Progress Bar -->
-          <div style="width: 100%; height: 4px; border-radius: var(--radius-full); background: rgba(255, 255, 255, 0.08); overflow: hidden;">
-            <div id="sidebar-lib-meter" style="width: 35%; height: 100%; border-radius: var(--radius-full); background: var(--gradient-primary);"></div>
+
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <div
+              class="sidebar-summary-row"
+              data-library-tab="songs"
+              style="display: flex; justify-content: space-between; align-items: center; padding: 6px var(--space-2); border-radius: var(--radius-md); font-size: 13px; color: var(--color-text-secondary); cursor: pointer; transition: all var(--duration-fast) var(--ease-smooth);"
+            >
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="color: var(--color-accent-pink); display: flex;">${getIconSvg('music', { size: 15 })}</span>
+                <span>Songs</span>
+              </div>
+              <span id="sidebar-stat-songs" style="font-weight: 600; color: var(--color-text-primary); font-size: 12px;">0</span>
+            </div>
+
+            <div
+              class="sidebar-summary-row"
+              data-library-tab="folders"
+              style="display: flex; justify-content: space-between; align-items: center; padding: 6px var(--space-2); border-radius: var(--radius-md); font-size: 13px; color: var(--color-text-secondary); cursor: pointer; transition: all var(--duration-fast) var(--ease-smooth);"
+            >
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="color: var(--color-accent-cyan); display: flex;">${getIconSvg('folder', { size: 15 })}</span>
+                <span>Folders</span>
+              </div>
+              <span id="sidebar-stat-folders" style="font-weight: 600; color: var(--color-text-primary); font-size: 12px;">0</span>
+            </div>
+
+            <div
+              class="sidebar-summary-row"
+              data-library-tab="albums"
+              style="display: flex; justify-content: space-between; align-items: center; padding: 6px var(--space-2); border-radius: var(--radius-md); font-size: 13px; color: var(--color-text-secondary); cursor: pointer; transition: all var(--duration-fast) var(--ease-smooth);"
+            >
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="color: var(--color-accent-purple-glow); display: flex;">${getIconSvg('disc', { size: 15 })}</span>
+                <span>Albums</span>
+              </div>
+              <span id="sidebar-stat-albums" style="font-weight: 600; color: var(--color-text-primary); font-size: 12px;">0</span>
+            </div>
           </div>
         </div>
       </aside>
@@ -289,9 +305,13 @@ export class SidebarComponent {
       });
     });
 
-    // Bind Library card click -> library
-    this.container.querySelector('#sidebar-library-card')?.addEventListener('click', () => {
-      this.router.navigate('library');
+    // Bind Library summary row click events -> navigate to appropriate library tab
+    const summaryRows = this.container.querySelectorAll<HTMLElement>('.sidebar-summary-row');
+    summaryRows.forEach(row => {
+      row.addEventListener('click', () => {
+        const tab = row.getAttribute('data-library-tab') as LibraryTab | null;
+        this.router.navigate('library', tab ? { tab } : undefined);
+      });
     });
   }
 
@@ -312,14 +332,33 @@ export class SidebarComponent {
   private async fetchLibraryStats(): Promise<void> {
     if (!this.libraryService) return;
     try {
-      const stats = await this.libraryService.getLibraryStats();
+      const [stats, folders] = await Promise.all([
+        this.libraryService.getLibraryStats().catch(() => ({ trackCount: 0, albumCount: 0, artistCount: 0 })),
+        this.libraryService.listFolders().catch(() => [])
+      ]);
       if (!this.container) return;
+
       const statsEl = this.container.querySelector('#sidebar-lib-stats');
       if (statsEl && stats) {
-        statsEl.textContent = `${stats.trackCount} songs • ${stats.albumCount} albums`;
+        statsEl.textContent = `${stats.trackCount} songs`;
+      }
+
+      const songsEl = this.container.querySelector('#sidebar-stat-songs');
+      if (songsEl && stats) {
+        songsEl.textContent = stats.trackCount.toLocaleString();
+      }
+
+      const foldersEl = this.container.querySelector('#sidebar-stat-folders');
+      if (foldersEl) {
+        foldersEl.textContent = (folders?.length || 0).toLocaleString();
+      }
+
+      const albumsEl = this.container.querySelector('#sidebar-stat-albums');
+      if (albumsEl && stats) {
+        albumsEl.textContent = stats.albumCount.toLocaleString();
       }
     } catch {
-      // Gracefully retain placeholder text
+      // Gracefully retain default values
     }
   }
 }

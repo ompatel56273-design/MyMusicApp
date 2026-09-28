@@ -95,10 +95,10 @@ describe('F2.7 Dashboard Hero — Typography + Slideshow Polish', () => {
   });
 
   // 3. Multiple slides exist
-  it('3. supports multiple curated slide configurations (6 slides)', () => {
+  it('3. supports multiple curated slide configurations (5 slides)', () => {
     const slides = homeView.getSlides();
-    expect(slides.length).toBe(6);
-    expect(HERO_SLIDES.length).toBe(6);
+    expect(slides.length).toBe(5);
+    expect(HERO_SLIDES.length).toBe(5);
   });
 
   // 4. Slide IDs are unique
@@ -125,7 +125,7 @@ describe('F2.7 Dashboard Hero — Typography + Slideshow Polish', () => {
     homeView.nextSlide();
     expect(homeView.getActiveSlideIndex()).toBe(1);
 
-    homeView.setActiveSlide(5);
+    homeView.setActiveSlide(4);
     homeView.nextSlide();
     expect(homeView.getActiveSlideIndex()).toBe(0);
   });
@@ -136,17 +136,17 @@ describe('F2.7 Dashboard Hero — Typography + Slideshow Polish', () => {
     expect(homeView.getActiveSlideIndex()).toBe(0);
 
     homeView.prevSlide();
-    expect(homeView.getActiveSlideIndex()).toBe(5);
+    expect(homeView.getActiveSlideIndex()).toBe(4);
 
     homeView.prevSlide();
-    expect(homeView.getActiveSlideIndex()).toBe(4);
+    expect(homeView.getActiveSlideIndex()).toBe(3);
   });
 
   // 8. Dot navigation
   it('8. updates slide when clicking a dot indicator', () => {
     homeView.mount(container);
     const dots = container.querySelectorAll<HTMLElement>('[data-slide-index]');
-    expect(dots.length).toBe(6);
+    expect(dots.length).toBe(5);
 
     dots[2]?.click();
     expect(homeView.getActiveSlideIndex()).toBe(2);
@@ -177,25 +177,25 @@ describe('F2.7 Dashboard Hero — Typography + Slideshow Polish', () => {
     expect(homeView.getActiveSlideIndex()).toBe(0);
 
     firstDot.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
-    expect(homeView.getActiveSlideIndex()).toBe(5);
+    expect(homeView.getActiveSlideIndex()).toBe(4);
 
-    const lastDot = container.querySelector<HTMLElement>('#hero-tab-5')!;
+    const lastDot = container.querySelector<HTMLElement>('#hero-tab-4')!;
     lastDot.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
     expect(homeView.getActiveSlideIndex()).toBe(0);
   });
 
-  // 11. Accessible slide labels
-  it('11. provides descriptive ARIA labels for dots and slide controls', () => {
+  // 11. Accessible slide labels & no manual arrow buttons
+  it('11. provides descriptive ARIA labels for dots and has no manual arrow buttons', () => {
     homeView.mount(container);
     const dots = container.querySelectorAll<HTMLElement>('[data-slide-index]');
     dots.forEach((dot, idx) => {
-      expect(dot.getAttribute('aria-label')).toContain(`Slide ${idx + 1} of 6`);
+      expect(dot.getAttribute('aria-label')).toContain(`Slide ${idx + 1} of 5`);
     });
 
     const prevBtn = container.querySelector('#home-hero-prev-btn');
     const nextBtn = container.querySelector('#home-hero-next-btn');
-    expect(prevBtn?.getAttribute('aria-label')).toBe('Previous slide');
-    expect(nextBtn?.getAttribute('aria-label')).toBe('Next slide');
+    expect(prevBtn).toBeNull();
+    expect(nextBtn).toBeNull();
   });
 
   // 12. Active indicator accessibility
@@ -347,16 +347,17 @@ describe('F2.7 Dashboard Hero — Typography + Slideshow Polish', () => {
 
   // 27. No network dependency
   it('27. operates deterministically with local slide configurations without network requests', () => {
-    expect(HERO_SLIDES.length).toBe(6);
+    expect(HERO_SLIDES.length).toBe(5);
   });
 
   // 28. Cleanup / unsubscription
-  it('28. cleans up container and unmounts cleanly without leaking elements', () => {
+  it('28. cleans up container and unmounts cleanly without leaking elements or timers', () => {
     homeView.mount(container);
     expect(container.children.length).toBeGreaterThan(0);
 
     homeView.unmount();
     expect(container.innerHTML).toBe('');
+    expect((homeView as any).slideInterval).toBeNull();
   });
 
   // 29. Invalid slide configuration handling
@@ -370,5 +371,31 @@ describe('F2.7 Dashboard Hero — Typography + Slideshow Polish', () => {
     homeView.mount(container);
     const dynamicContainer = container.querySelector('#home-dynamic-sections-container');
     expect(dynamicContainer).not.toBeNull();
+  });
+
+  // 31. Automatic 5-second slide rotation
+  it('31. automatically advances slide every 5 seconds and loops continuously', () => {
+    vi.useFakeTimers();
+    try {
+      homeView.mount(container);
+      expect(homeView.getActiveSlideIndex()).toBe(0);
+
+      vi.advanceTimersByTime(5000);
+      expect(homeView.getActiveSlideIndex()).toBe(1);
+
+      vi.advanceTimersByTime(5000);
+      expect(homeView.getActiveSlideIndex()).toBe(2);
+
+      vi.advanceTimersByTime(5000);
+      expect(homeView.getActiveSlideIndex()).toBe(3);
+
+      vi.advanceTimersByTime(5000);
+      expect(homeView.getActiveSlideIndex()).toBe(4);
+
+      vi.advanceTimersByTime(5000);
+      expect(homeView.getActiveSlideIndex()).toBe(0); // Loops back to slide 1
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

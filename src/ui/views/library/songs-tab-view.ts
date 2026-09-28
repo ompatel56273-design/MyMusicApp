@@ -73,7 +73,7 @@ export class SongsTabView {
           <div style="text-align: center;">Fav</div>
         </div>
 
-        <div id="songs-viewport" style="flex: 1; overflow-y: auto; max-height: calc(100vh - 320px); min-height: 300px;">
+        <div id="songs-viewport" style="flex: 1; overflow-y: auto; max-height: calc(100vh - 320px); min-height: 300px; scroll-behavior: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;">
           <div id="songs-loading" style="padding: var(--space-12); text-align: center; color: var(--color-text-muted);">
             <div style="font-size: 28px; margin-bottom: 8px;">🎵</div>
             <div>Loading songs...</div>
