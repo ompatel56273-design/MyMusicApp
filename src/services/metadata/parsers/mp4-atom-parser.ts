@@ -18,7 +18,7 @@ export class Mp4AtomParser {
     const tags: Record<string, any> = {};
     let artwork: ExtractedArtwork | undefined;
 
-    // Traverse root atoms searching for 'moov'
+    // Traverse root atoms searching for 'moov' -> 'udta' -> 'meta' -> 'ilst'
     const ilstAtom = this.findAtomPath(buffer, view, 0, buffer.length, ['moov', 'udta', 'meta', 'ilst']);
 
     if (ilstAtom) {

@@ -6,19 +6,23 @@ export type SmartRuleField =
   | 'album'
   | 'genre'
   | 'folder'
+  | 'year'
   | 'codec'
   | 'format'
   | 'playCount'
   | 'skipCount'
   | 'duration'
   | 'addedAt'
+  | 'dateAdded'
   | 'lastPlayedAt'
-  | 'favorite';
+  | 'lastPlayed'
+  | 'favorite'
+  | 'availability';
 
-export type TextOperator = 'equals' | 'contains' | 'startsWith' | 'endsWith';
+export type TextOperator = 'equals' | 'contains' | 'startsWith' | 'endsWith' | 'notEquals';
 export type NumericOperator = 'equals' | 'greaterThan' | 'greaterThanOrEqual' | 'lessThan' | 'lessThanOrEqual';
 export type DateOperator = 'before' | 'after' | 'withinLast';
-export type BooleanOperator = 'is' | 'isNot';
+export type BooleanOperator = 'is' | 'isNot' | 'isTrue' | 'isFalse';
 
 export type SmartRuleOperator = TextOperator | NumericOperator | DateOperator | BooleanOperator;
 
@@ -34,6 +38,7 @@ export type SmartSortField =
   | 'title'
   | 'artist'
   | 'album'
+  | 'year'
   | 'duration'
   | 'dateAdded'
   | 'lastPlayed'

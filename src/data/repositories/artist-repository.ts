@@ -16,7 +16,11 @@ export class ArtistRepository implements IArtistRepository {
   }
 
   public async getByName(name: string): Promise<Artist | null> {
-    return this.db.getByIndex<Artist>(STORES.ARTISTS, 'by_name', name);
+    const exact = await this.db.getByIndex<Artist>(STORES.ARTISTS, 'by_name', name);
+    if (exact) return exact;
+    const all = await this.db.getAll<Artist>(STORES.ARTISTS);
+    const target = name.trim().toLowerCase();
+    return all.find(a => a.name.trim().toLowerCase() === target) || null;
   }
 
   public async list(options?: PaginationOptions): Promise<PaginatedResult<Artist>> {

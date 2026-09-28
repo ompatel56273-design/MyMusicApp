@@ -8,8 +8,12 @@ import type { Disposable } from '../../core/types/common';
 import { DomainEvents } from '../../domain/events/domain-events';
 import { getIconSvg } from '../icons/icon-registry';
 
+import type { LibraryAnalyticsService } from '../../services/analytics/library-analytics-service';
+import type { LibraryAnalyticsSnapshot } from '../../domain/entities/library-analytics-types';
+
 export interface StatsViewDependencies {
   statsService: StatsService;
+  analyticsService?: LibraryAnalyticsService | undefined;
   playbackManager?: IPlaybackManager | undefined;
   artworkService?: IArtworkService | undefined;
   router?: RouterService | undefined;
@@ -44,8 +48,12 @@ export class StatsView implements IView {
   private isLoading = true;
   private subscriptions: Disposable[] = [];
 
+  private readonly analyticsService?: LibraryAnalyticsService | undefined;
+  private analyticsSnapshot: LibraryAnalyticsSnapshot | null = null;
+
   constructor(deps: StatsViewDependencies) {
     this.statsService = deps.statsService;
+    this.analyticsService = deps.analyticsService;
     this.playbackManager = deps.playbackManager;
     this.eventBus = deps.eventBus;
   }
@@ -83,13 +91,14 @@ export class StatsView implements IView {
   public async loadStatistics(): Promise<void> {
     this.isLoading = true;
     try {
-      const [overview, topSongs, topArtists, topAlbums, recentHistory, activity] = await Promise.all([
+      const [overview, topSongs, topArtists, topAlbums, recentHistory, activity, analyticsSnapshot] = await Promise.all([
         this.statsService.getOverview(),
         this.statsService.getTopSongs(10),
         this.statsService.getTopArtists(8),
         this.statsService.getTopAlbums(8),
         this.statsService.getRecentHistory(15),
-        this.statsService.getListeningActivity(7)
+        this.statsService.getListeningActivity(7),
+        this.analyticsService ? this.analyticsService.getAnalyticsSnapshot({ forceRefresh: true }) : Promise.resolve(null)
       ]);
 
       this.overview = overview;
@@ -98,6 +107,7 @@ export class StatsView implements IView {
       this.topAlbums = topAlbums;
       this.recentHistory = recentHistory;
       this.activity = activity;
+      this.analyticsSnapshot = analyticsSnapshot;
     } catch (err) {
       console.error('Failed to load music statistics:', err);
     } finally {
@@ -668,6 +678,9 @@ export class StatsView implements IView {
           </div>
           ${this.renderRecentHistoryList()}
         </section>
+
+        <!-- Storage & Audio Specs Analytics -->
+        ${this.renderStorageAndFormatsSection()}
       </div>
     `;
   }
@@ -858,6 +871,94 @@ export class StatsView implements IView {
           .join('')}
       </div>
     `;
+  }
+
+  private renderStorageAndFormatsSection(): string {
+    const storage = this.analyticsSnapshot?.storage;
+    const formats = storage?.formats || [];
+    const genres = this.analyticsSnapshot?.genreBreakdown || [];
+
+    return `
+      <div class="stats-rankings-grid">
+        <!-- Storage & Format Breakdown -->
+        <section class="stats-panel-card" aria-label="Audio Storage & Specs">
+          <div class="stats-section-title">
+            <span>Audio Storage & Formats</span>
+            <span style="font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: normal;">
+              ${this.formatBytes(storage?.totalStorageBytes || 0)} total
+            </span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 8px;">
+            <div style="padding: 10px; background: rgba(255, 255, 255, 0.03); border-radius: var(--radius-md); border: 1px solid var(--glass-border);">
+              <div style="font-size: 11px; color: var(--color-text-muted);">Lossless Tracks</div>
+              <div style="font-size: 18px; font-weight: 800; color: #10b981;">${(storage?.losslessTrackCount || 0).toLocaleString()}</div>
+            </div>
+            <div style="padding: 10px; background: rgba(255, 255, 255, 0.03); border-radius: var(--radius-md); border: 1px solid var(--glass-border);">
+              <div style="font-size: 11px; color: var(--color-text-muted);">Lossy Tracks</div>
+              <div style="font-size: 18px; font-weight: 800; color: #60a5fa;">${(storage?.lossyTrackCount || 0).toLocaleString()}</div>
+            </div>
+          </div>
+          ${formats.length === 0 ? `
+            <div class="stats-empty-state">
+              <div class="stats-empty-title">No Storage Data</div>
+            </div>
+          ` : `
+            <div class="stats-list">
+              ${formats.map(fmt => `
+                <div class="stats-row-item">
+                  <div class="stats-item-art" style="font-size: 11px; font-weight: 800; color: var(--color-accent-purple-glow);">
+                    ${fmt.formatName}
+                  </div>
+                  <div class="stats-item-info">
+                    <span class="stats-item-title">${fmt.formatName} (${fmt.isLossless ? 'Lossless' : 'Lossy'})</span>
+                    <span class="stats-item-sub">${fmt.trackCount} tracks • ${this.formatBytes(fmt.totalSizeBytes)}</span>
+                  </div>
+                  <span class="stats-count-badge">${fmt.percentageShare}%</span>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </section>
+
+        <!-- Genre Distribution -->
+        <section class="stats-panel-card" aria-label="Genre Distribution">
+          <div class="stats-section-title">
+            <span>Genre Distribution</span>
+            <span style="font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: normal;">
+              ${genres.length} genres discovered
+            </span>
+          </div>
+          ${genres.length === 0 ? `
+            <div class="stats-empty-state">
+              <div class="stats-empty-title">No Genre Data</div>
+            </div>
+          ` : `
+            <div class="stats-list">
+              ${genres.slice(0, 8).map(g => `
+                <div class="stats-row-item">
+                  <div class="stats-item-art">
+                    ${getIconSvg('sparkles', { size: 18 })}
+                  </div>
+                  <div class="stats-item-info">
+                    <span class="stats-item-title">${g.genreName}</span>
+                    <span class="stats-item-sub">${g.trackCount} tracks • ${g.playCount} plays</span>
+                  </div>
+                  <span class="stats-count-badge">${g.percentageShare}% share</span>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </section>
+      </div>
+    `;
+  }
+
+  private formatBytes(bytes: number): string {
+    if (!bytes || bytes <= 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 
   private bindEvents(): void {

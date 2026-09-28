@@ -51,7 +51,8 @@ export class MetadataService {
   public async enrichTrackMetadata(
     trackId: EntityId,
     fileBuffer: Uint8Array,
-    containerHint?: AudioContainer
+    containerHint?: AudioContainer,
+    suppressEvent?: boolean
   ): Promise<Track | null> {
     const track = await this.trackRepo.getById(trackId);
     if (!track) {
@@ -86,13 +87,14 @@ export class MetadataService {
           const allArtists = await this.artistRepo.list({ limit: 2000 });
           artist = allArtists.items.find(a => a.name.trim().toLowerCase() === cleanArtist.toLowerCase()) || null;
         }
+
         if (!artist) {
           artistId = `artist_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
           const newArtist: Artist = {
             id: artistId,
             name: cleanArtist,
             trackCount: 1,
-            albumCount: normalized.albumTitle ? 1 : 0
+            albumCount: (normalized.albumTitle && normalized.albumTitle.toLowerCase() !== 'unknown album') ? 1 : 0
           };
           await this.artistRepo.save(newArtist);
         } else {
@@ -141,7 +143,8 @@ export class MetadataService {
             await this.albumRepo.save({
               ...album,
               trackCount: (album.trackCount || 0) + 1,
-              durationMs: (album.durationMs || 0) + (normalized.durationMs || 0)
+              durationMs: (album.durationMs || 0) + (normalized.durationMs || 0),
+              artworkId: album.artworkId || artworkId
             });
           }
         }
@@ -158,6 +161,7 @@ export class MetadataService {
           const allGenres = await this.genreRepo.list({ limit: 500 });
           genre = allGenres.items.find(g => g.name.trim().toLowerCase() === cleanGenre.toLowerCase()) || null;
         }
+
         if (!genre) {
           genreId = `genre_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
           const newGenre: Genre = {
@@ -199,8 +203,8 @@ export class MetadataService {
           sampleRate: rawMetadata.sampleRate ?? track.format.sampleRate,
           bitDepth: rawMetadata.bitDepth ?? track.format.bitDepth,
           channels: rawMetadata.channels ?? track.format.channels,
-          isLossless: rawMetadata.isLossless,
-          bitrate: rawMetadata.bitrate ?? track.format.bitrate
+          bitrate: rawMetadata.bitrate ?? track.format.bitrate,
+          isLossless: rawMetadata.isLossless
         },
         replayGain: rawMetadata.replayGain ?? track.replayGain,
         dateModified: Date.now()
@@ -208,12 +212,14 @@ export class MetadataService {
 
       await this.trackRepo.save(updatedTrack);
 
-      this.eventBus.publish(DomainEvents.LIBRARY_UPDATED, {
-        tracksAdded: 0,
-        tracksUpdated: 1,
-        tracksRemoved: 0,
-        timestamp: Date.now()
-      });
+      if (!suppressEvent) {
+        this.eventBus.publish(DomainEvents.LIBRARY_UPDATED, {
+          tracksAdded: 0,
+          tracksUpdated: 1,
+          tracksRemoved: 0,
+          timestamp: Date.now()
+        });
+      }
 
       return updatedTrack;
     } catch (err) {
@@ -230,8 +236,16 @@ export class MetadataService {
   ): Promise<number> {
     let enrichedCount = 0;
     for (const item of items) {
-      const res = await this.enrichTrackMetadata(item.trackId, item.buffer, item.container);
+      const res = await this.enrichTrackMetadata(item.trackId, item.buffer, item.container, true);
       if (res) enrichedCount++;
+    }
+    if (enrichedCount > 0) {
+      this.eventBus.publish(DomainEvents.LIBRARY_UPDATED, {
+        tracksAdded: 0,
+        tracksUpdated: enrichedCount,
+        tracksRemoved: 0,
+        timestamp: Date.now()
+      });
     }
     return enrichedCount;
   }

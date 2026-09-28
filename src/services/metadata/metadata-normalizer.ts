@@ -28,53 +28,44 @@ export class MetadataNormalizer {
   private static readonly ARTIST_DELIMITERS = /\s+(?:feat\.|ft\.|featuring|with|vs\.)\s+|[;/&]\s*/i;
 
   public static normalize(raw: ExtractedMetadata, fallbackFilename?: string): NormalizedMetadataResult {
-    let extractedArtist: string | undefined;
+    // Standardize raw strings
+    let rawTitle = (raw.title || '').trim();
+    let rawArtist = (raw.artist || '').trim();
     let extractedAlbum: string | undefined;
     let extractedTrackNumber: number | undefined;
 
-    // Check filename for fallback metadata if embedded tags are incomplete
+    // 1. Filename Parsing Fallback if embedded title or artist is missing
     if (fallbackFilename) {
       const lastDot = fallbackFilename.lastIndexOf('.');
-      const base = lastDot > 0 ? fallbackFilename.substring(0, lastDot).trim() : fallbackFilename.trim();
-      const parts = base.split(/\s*-\s*/);
+      const baseName = lastDot > 0 ? fallbackFilename.substring(0, lastDot).trim() : fallbackFilename.trim();
 
-      if (parts.length === 2) {
-        const p0 = parts[0]!.trim();
-        const numMatch = p0.match(/^(\d+)[\.\s]*$/);
-        if (numMatch && numMatch[1]) {
-          extractedTrackNumber = parseInt(numMatch[1], 10);
-        } else if (p0.length > 0) {
-          extractedArtist = p0;
-        }
-      } else if (parts.length >= 3) {
-        const p0 = parts[0]!.trim();
-        const p1 = parts[1]!.trim();
-        const numMatch = p0.match(/^(\d+)[\.\s]*$/);
-        if (numMatch && numMatch[1]) {
-          extractedTrackNumber = parseInt(numMatch[1], 10);
-          if (p1.length > 0) extractedArtist = p1;
-        } else {
-          if (p0.length > 0) extractedArtist = p0;
-          if (p1.length > 0) extractedAlbum = p1;
+      if (!rawTitle && rawArtist) {
+        // Artist is known, use baseName as title fallback
+        rawTitle = baseName;
+      } else if (!rawTitle || !rawArtist) {
+        // Pattern: "01 - Artist - Title" or "Artist - Title"
+        const matchWithTrack = baseName.match(/^(\d+)[\s._-]+\s*(.+?)\s+-\s+(.+)$/);
+        const matchSimple = baseName.match(/^(.+?)\s+-\s+(.+)$/);
+
+        if (matchWithTrack) {
+          extractedTrackNumber = parseInt(matchWithTrack[1]!, 10);
+          if (!rawArtist) rawArtist = matchWithTrack[2]!.trim();
+          if (!rawTitle) rawTitle = matchWithTrack[3]!.trim();
+        } else if (matchSimple) {
+          if (!rawArtist) rawArtist = matchSimple[1]!.trim();
+          if (!rawTitle) rawTitle = matchSimple[2]!.trim();
+        } else if (!rawTitle) {
+          rawTitle = baseName;
         }
       }
     }
 
-    // 1. Normalize Title (Precedence: embedded title -> filename -> "Unknown Track")
-    let title = (raw.title || '').trim();
-    if (!title && fallbackFilename) {
-      const lastDot = fallbackFilename.lastIndexOf('.');
-      title = lastDot > 0 ? fallbackFilename.substring(0, lastDot).trim() : fallbackFilename.trim();
-    }
-    if (!title) {
-      title = 'Unknown Track';
-    }
+    const title = rawTitle || 'Unknown Track';
+    const effectiveArtist = rawArtist || '';
+    const hasRealArtist = !!effectiveArtist && effectiveArtist.toLowerCase() !== 'unknown artist';
 
     // 2. Multi-Artist Extraction
     const artistList: NormalizedArtistEntry[] = [];
-    const rawArtist = (raw.artist || '').trim();
-    const effectiveArtist = rawArtist || extractedArtist || '';
-    const hasRealArtist = !!effectiveArtist && effectiveArtist.toLowerCase() !== 'unknown artist';
 
     if (raw.artists && raw.artists.length > 0) {
       for (const a of raw.artists) {

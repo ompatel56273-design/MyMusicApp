@@ -1,6 +1,13 @@
 import type { IView } from './view-interface';
 import type { RouteParams, LibraryTab } from '../navigation/route-types';
-import type { ILibraryService, IPlaybackManager, IArtworkService, IScannerService, IDuplicateDetectorService } from '../../services/contracts/service-contracts';
+import type {
+  ILibraryService,
+  IPlaybackManager,
+  IArtworkService,
+  IScannerService,
+  IPlaylistService,
+  IDuplicateDetectorService
+} from '../../services/contracts/service-contracts';
 import type { BrowserFilesystemAdapter } from '../../services/scanner/browser-filesystem-adapter';
 import type { EventBus } from '../../core/events/event-bus';
 import { DomainEvents } from '../../domain/events/domain-events';
@@ -16,14 +23,22 @@ import { FoldersTabView } from './library/folders-tab-view';
 import { FavoritesTabView } from './library/favorites-tab-view';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
 
+import type { DuplicateDetectorService } from '../../services/duplicate/duplicate-detector-service';
+import type { LibraryHealthService } from '../../services/library/library-health-service';
+import { LibraryHealthDashboard } from '../components/library/library-health-dashboard';
+import type { AlbumMergeService } from '../../services/library/album-merge-service';
+
 export interface LibraryViewDependencies {
   libraryService: ILibraryService;
+  albumMergeService?: AlbumMergeService | undefined;
   playbackManager?: IPlaybackManager | undefined;
   artworkService?: IArtworkService | undefined;
   scannerService?: IScannerService | undefined;
   fsAdapter?: BrowserFilesystemAdapter | undefined;
   eventBus?: EventBus | undefined;
-  duplicateDetectorService?: IDuplicateDetectorService | undefined;
+  duplicateDetectorService?: (IDuplicateDetectorService | DuplicateDetectorService) | undefined;
+  healthService?: LibraryHealthService | undefined;
+  playlistService?: IPlaylistService | undefined;
 }
 
 /**
@@ -41,12 +56,15 @@ export class LibraryView implements IView {
   private container: HTMLElement | null = null;
   private currentTab: LibraryTab = 'songs';
   private readonly libraryService: ILibraryService;
+  private readonly albumMergeService?: AlbumMergeService | undefined;
   private readonly playbackManager?: IPlaybackManager | undefined;
   private readonly artworkService?: IArtworkService | undefined;
   private readonly scannerService?: IScannerService | undefined;
   private readonly fsAdapter?: BrowserFilesystemAdapter | undefined;
   private readonly eventBus?: EventBus | undefined;
-  private readonly duplicateDetectorService?: IDuplicateDetectorService | undefined;
+  private readonly duplicateDetectorService?: (IDuplicateDetectorService | DuplicateDetectorService) | undefined;
+  private readonly healthService?: LibraryHealthService | undefined;
+  private readonly playlistService?: IPlaylistService | undefined;
   private libraryUpdateSub: Disposable | null = null;
 
   private toolbar: LibraryToolbar | null = null;
@@ -63,12 +81,15 @@ export class LibraryView implements IView {
   constructor(depsOrService?: LibraryViewDependencies | ILibraryService) {
     if (depsOrService && 'libraryService' in depsOrService) {
       this.libraryService = depsOrService.libraryService;
+      this.albumMergeService = depsOrService.albumMergeService;
       this.playbackManager = depsOrService.playbackManager;
       this.artworkService = depsOrService.artworkService;
       this.scannerService = depsOrService.scannerService;
       this.fsAdapter = depsOrService.fsAdapter;
       this.eventBus = depsOrService.eventBus;
       this.duplicateDetectorService = depsOrService.duplicateDetectorService;
+      this.healthService = depsOrService.healthService;
+      this.playlistService = depsOrService.playlistService;
     } else {
       this.libraryService = depsOrService as ILibraryService;
     }
@@ -365,16 +386,24 @@ export class LibraryView implements IView {
             </p>
           </div>
 
-          <!-- Quick Actions Button (Find Duplicates & Add Music / Scan) -->
+          <!-- Quick Actions Button (Add Music / Scan + Find Duplicates + Library Health) -->
           <div class="library-header-metrics" style="display: flex; align-items: center; gap: var(--space-3); z-index: 1;">
-            <button id="library-duplicates-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); cursor: pointer; border: 1px solid var(--glass-border-interactive); background: var(--glass-bg-interactive); color: var(--color-text-primary); transition: all var(--duration-fast) var(--ease-smooth);">
-              <span style="color: var(--color-accent-cyan); display: flex;">${getIconSvg('filter', { size: 15 })}</span>
-              <span>Find Duplicates</span>
-            </button>
             <button id="library-scan-quick-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; border: none; background: linear-gradient(135deg, var(--color-accent-purple) 0%, #9333ea 100%); color: #ffffff; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.5); transition: all var(--duration-fast) var(--ease-smooth);">
               <span>${getIconSvg('plus', { size: 16, color: '#ffffff' })}</span>
               <span>Add Music / Scan</span>
             </button>
+            ${this.duplicateDetectorService ? `
+              <button id="library-duplicates-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; border: 1px solid var(--glass-border-interactive); background: rgba(168, 85, 247, 0.12); color: var(--color-text-primary); transition: all var(--duration-fast) var(--ease-smooth);">
+                <span style="color: var(--color-accent-purple-glow); display: flex;">${getIconSvg('filter', { size: 15 })}</span>
+                <span>Find Duplicates</span>
+              </button>
+            ` : ''}
+            ${this.healthService ? `
+              <button id="library-health-btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; border: 1px solid var(--glass-border-interactive); background: rgba(56, 189, 248, 0.12); color: var(--color-text-primary); transition: all var(--duration-fast) var(--ease-smooth);">
+                <span>${getIconSvg('heart', { size: 16, color: 'var(--color-accent-cyan)' })}</span>
+                <span>Library Health</span>
+              </button>
+            ` : ''}
           </div>
         </header>
 
@@ -489,7 +518,6 @@ export class LibraryView implements IView {
 
   private bindHeaderEvents(): void {
     if (!this.container) return;
-
     const dupBtn = this.container.querySelector<HTMLButtonElement>('#library-duplicates-btn');
     dupBtn?.addEventListener('click', () => {
       if (this.duplicateDetectorService) {
@@ -500,6 +528,43 @@ export class LibraryView implements IView {
             this.mountActiveTab();
           }
         });
+      }
+    });
+
+    const healthBtn = this.container.querySelector<HTMLButtonElement>('#library-health-btn');
+    healthBtn?.addEventListener('click', () => {
+      if (this.healthService) {
+        const dashboard = new LibraryHealthDashboard({
+          healthService: this.healthService,
+          onOpenDuplicates: () => {
+            if (this.duplicateDetectorService) {
+              DuplicateDetectionModalComponent.show({
+                duplicateDetector: this.duplicateDetectorService,
+                onCompleted: async () => {
+                  await this.updateStats();
+                  this.mountActiveTab();
+                }
+              });
+            }
+          },
+          onNavigateTab: (tab) => {
+            if (tab === 'duplicates') {
+              if (this.duplicateDetectorService) {
+                DuplicateDetectionModalComponent.show({
+                  duplicateDetector: this.duplicateDetectorService,
+                  onCompleted: async () => {
+                    await this.updateStats();
+                    this.mountActiveTab();
+                  }
+                });
+              }
+            } else {
+              this.currentTab = tab as LibraryTab;
+              this.render();
+            }
+          }
+        });
+        dashboard.mount();
       }
     });
 
@@ -633,7 +698,8 @@ export class LibraryView implements IView {
         const songsView = new SongsTabView({
           libraryService: this.libraryService,
           playbackManager: this.playbackManager,
-          artworkService: this.artworkService
+          artworkService: this.artworkService,
+          playlistService: this.playlistService
         });
         this.activeSubView = songsView;
         void songsView.mount(contentSlot, this.toolbar ? this.toolbar.getState() : undefined);
@@ -643,6 +709,7 @@ export class LibraryView implements IView {
       case 'albums': {
         const albumsView = new AlbumsTabView({
           libraryService: this.libraryService,
+          albumMergeService: this.albumMergeService,
           playbackManager: this.playbackManager,
           artworkService: this.artworkService,
           onSelectAlbum: _album => {
@@ -698,7 +765,8 @@ export class LibraryView implements IView {
         const favoritesView = new FavoritesTabView({
           libraryService: this.libraryService,
           playbackManager: this.playbackManager,
-          artworkService: this.artworkService
+          artworkService: this.artworkService,
+          playlistService: this.playlistService
         });
         this.activeSubView = favoritesView;
         void favoritesView.mount(contentSlot);

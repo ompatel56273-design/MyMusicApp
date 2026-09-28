@@ -111,11 +111,21 @@ export class GalaxyLayoutEngine {
       });
     }
 
-    // Position any orphan artists around main origin
+    // Position any orphan artists around main origin across expanding concentric shells
     unparentedArtists.forEach((artist, idx) => {
-      const angle = (idx / (unparentedArtists.length || 1)) * Math.PI * 2;
-      artist.x = originX + Math.cos(angle) * 400;
-      artist.y = originY + Math.sin(angle) * 400;
+      let shellIndex = 0;
+      let capacity = 8;
+      let countSoFar = 0;
+      while (countSoFar + capacity <= idx) {
+        countSoFar += capacity;
+        shellIndex++;
+        capacity += 4;
+      }
+      const itemInShell = idx - countSoFar;
+      const shellRadius = 380 + shellIndex * 120;
+      const angle = (itemInShell / capacity) * Math.PI * 2 + shellIndex * 0.4;
+      artist.x = originX + Math.cos(angle) * shellRadius;
+      artist.y = originY + Math.sin(angle) * shellRadius;
       artist.radius = artist.radius || GalaxyLayoutEngine.RADIUS_MAP.artist;
       artist.color = artist.color || GalaxyLayoutEngine.COLOR_MAP.artist;
     });
@@ -141,9 +151,19 @@ export class GalaxyLayoutEngine {
     }
 
     unparentedAlbums.forEach((album, idx) => {
-      const angle = (idx / (unparentedAlbums.length || 1)) * Math.PI * 2;
-      album.x = originX + Math.cos(angle) * 300;
-      album.y = originY + Math.sin(angle) * 300;
+      let shellIndex = 0;
+      let capacity = 10;
+      let countSoFar = 0;
+      while (countSoFar + capacity <= idx) {
+        countSoFar += capacity;
+        shellIndex++;
+        capacity += 5;
+      }
+      const itemInShell = idx - countSoFar;
+      const shellRadius = 300 + shellIndex * 110;
+      const angle = (itemInShell / capacity) * Math.PI * 2 + shellIndex * 0.3;
+      album.x = originX + Math.cos(angle) * shellRadius;
+      album.y = originY + Math.sin(angle) * shellRadius;
       album.radius = album.radius || GalaxyLayoutEngine.RADIUS_MAP.album;
       album.color = album.color || GalaxyLayoutEngine.COLOR_MAP.album;
     });
@@ -153,51 +173,38 @@ export class GalaxyLayoutEngine {
     for (const [albumId, trackList] of albumToTracks.entries()) {
       const parentAlbum = albums.find(al => al.id === albumId);
       const center = parentAlbum ? { x: parentAlbum.x, y: parentAlbum.y } : defaultCenter;
+      const tCount = trackList.length || 1;
+      const trackOrbit = 50;
 
-      let trackOrbit = 65;
-      let tIdx = 0;
-      while (tIdx < trackList.length) {
-        const circumference = 2 * Math.PI * trackOrbit;
-        const maxOnRing = Math.max(5, Math.floor(circumference / 50));
-        const countOnThisRing = Math.min(maxOnRing, trackList.length - tIdx);
-        const angleOffset = (trackOrbit * 0.05);
-
-        for (let i = 0; i < countOnThisRing; i++) {
-          const track = trackList[tIdx++];
-          if (!track) break;
-          const angle = (i / countOnThisRing) * Math.PI * 2 + angleOffset;
-          track.x = center.x + Math.cos(angle) * trackOrbit;
-          track.y = center.y + Math.sin(angle) * trackOrbit;
-          track.radius = track.radius || GalaxyLayoutEngine.RADIUS_MAP.track;
-          track.color = track.color || GalaxyLayoutEngine.COLOR_MAP.track;
-
-          const uIdx = unparentedTracks.indexOf(track);
-          if (uIdx !== -1) unparentedTracks.splice(uIdx, 1);
-        }
-        trackOrbit += 55;
-      }
-    }
-
-    // Distribute unparented tracks across concentric orbital shells around origin
-    let unparentedRadius = 220;
-    let upIdx = 0;
-    while (upIdx < unparentedTracks.length) {
-      const circumference = 2 * Math.PI * unparentedRadius;
-      const maxOnRing = Math.max(8, Math.floor(circumference / 85));
-      const countOnThisRing = Math.min(maxOnRing, unparentedTracks.length - upIdx);
-      const angleOffset = (unparentedRadius * 0.04);
-
-      for (let i = 0; i < countOnThisRing; i++) {
-        const track = unparentedTracks[upIdx++];
-        if (!track) break;
-        const angle = (i / countOnThisRing) * Math.PI * 2 + angleOffset;
-        track.x = originX + Math.cos(angle) * unparentedRadius;
-        track.y = originY + Math.sin(angle) * unparentedRadius;
+      trackList.forEach((track, tIdx) => {
+        const angle = (tIdx / tCount) * Math.PI * 2;
+        track.x = center.x + Math.cos(angle) * trackOrbit;
+        track.y = center.y + Math.sin(angle) * trackOrbit;
         track.radius = track.radius || GalaxyLayoutEngine.RADIUS_MAP.track;
         track.color = track.color || GalaxyLayoutEngine.COLOR_MAP.track;
-      }
-      unparentedRadius += 95;
+
+        const uIdx = unparentedTracks.indexOf(track);
+        if (uIdx !== -1) unparentedTracks.splice(uIdx, 1);
+      });
     }
+
+    unparentedTracks.forEach((track, idx) => {
+      let shellIndex = 0;
+      let capacity = 12;
+      let countSoFar = 0;
+      while (countSoFar + capacity <= idx) {
+        countSoFar += capacity;
+        shellIndex++;
+        capacity += 6;
+      }
+      const itemInShell = idx - countSoFar;
+      const shellRadius = 220 + shellIndex * 95;
+      const angle = (itemInShell / capacity) * Math.PI * 2 + shellIndex * 0.35;
+      track.x = originX + Math.cos(angle) * shellRadius;
+      track.y = originY + Math.sin(angle) * shellRadius;
+      track.radius = track.radius || GalaxyLayoutEngine.RADIUS_MAP.track;
+      track.color = track.color || GalaxyLayoutEngine.COLOR_MAP.track;
+    });
 
     // 5. Outer Orbits for Playlists & Folders
     playlists.forEach((pl, idx) => {
@@ -246,7 +253,7 @@ export class GalaxyLayoutEngine {
           const dx = n2.x - n1.x;
           const dy = n2.y - n1.y;
           const distSq = dx * dx + dy * dy || 1;
-          const minDist = n1.radius + n2.radius + 30;
+          const minDist = n1.radius + n2.radius + 35;
 
           if (distSq < minDist * minDist) {
             const dist = Math.sqrt(distSq);

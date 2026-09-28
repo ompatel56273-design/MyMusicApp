@@ -142,8 +142,57 @@ export class ScannerService implements IScannerService {
           const existing = existingRootFiles.get(entry.path);
 
           if (existing) {
-            // Check if modified
-            if (existing.sizeBytes === entry.sizeBytes && existing.modifiedTimeMs === entry.modifiedTimeMs) {
+            // Check if corresponding track exists and is available
+            const existingTrack = await this.trackRepo.getByFileId(existing.id);
+            const isTrackMissing = !existingTrack || existingTrack.availability === 'missing';
+
+            if (isTrackMissing) {
+              filesUpdated++;
+              const fileId = existing.id;
+              const trackId = existingTrack?.id || this.generateUniqueId('track');
+
+              const updatedFile: AudioFile = {
+                id: fileId,
+                path: entry.path,
+                filename: entry.name,
+                extension: entry.extension,
+                sizeBytes: entry.sizeBytes,
+                modifiedTimeMs: entry.modifiedTimeMs,
+                scanSessionId: sessionId,
+                availability: 'available'
+              };
+
+              const lastDot = entry.name.lastIndexOf('.');
+              const cleanTitle = lastDot > 0 ? entry.name.substring(0, lastDot) : entry.name;
+              const normalizedExt = entry.extension.toLowerCase();
+              const container: AudioContainer = (normalizedExt === 'aif' ? 'aiff' : normalizedExt || 'unknown') as AudioContainer;
+
+              const restoredTrack: Track = existingTrack
+                ? { ...existingTrack, availability: 'available', dateModified: Date.now() }
+                : {
+                    id: trackId,
+                    fileId,
+                    title: cleanTitle,
+                    durationMs: 0,
+                    format: {
+                      container,
+                      codec: container as unknown as AudioCodec,
+                      sampleRate: 44100,
+                      channels: 2,
+                      isLossless: container === 'flac' || container === 'wav' || container === 'alac' || container === 'aiff'
+                    },
+                    dateAdded: Date.now(),
+                    dateModified: entry.modifiedTimeMs,
+                    playCount: 0,
+                    isFavorite: false,
+                    hasLyrics: false,
+                    availability: 'available'
+                  };
+
+              pendingFileBatches.push(updatedFile);
+              pendingTrackBatches.push(restoredTrack);
+              newlyAddedTrackIds.push({ trackId, filePath: entry.path, container });
+            } else if (existing.sizeBytes === entry.sizeBytes && existing.modifiedTimeMs === entry.modifiedTimeMs) {
               filesUnchanged++;
             } else {
               filesUpdated++;
@@ -257,7 +306,7 @@ export class ScannerService implements IScannerService {
           if (signal.aborted) break;
           try {
             const buffer = await this.fsAdapter.readFile(item.filePath);
-            await this.metadataService.enrichTrackMetadata(item.trackId, buffer, item.container);
+            await this.metadataService.enrichTrackMetadata(item.trackId, buffer, item.container, true);
           } catch (enrichErr) {
             this.logger.warn(`Metadata enrichment skipped for: ${item.filePath}`, { error: String(enrichErr) });
           }
@@ -371,15 +420,19 @@ export class ScannerService implements IScannerService {
           (this.fsAdapter as any).registerFile(virtualPath, file);
         }
 
-        // Check if already in repository with same name/size/modified
+        // Check if already in repository with same name/size/modified and available track
         const existing = existingPaths.get(virtualPath);
         if (existing && existing.sizeBytes === file.size && existing.modifiedTimeMs === file.lastModified) {
-          filesSkipped++;
-          continue;
+          const existingTrack = await this.trackRepo.getByFileId(existing.id);
+          if (existingTrack && existingTrack.availability === 'available') {
+            filesSkipped++;
+            continue;
+          }
         }
 
-        const fileId = this.generateUniqueId('file');
-        const trackId = this.generateUniqueId('track');
+        const fileId = existing?.id || this.generateUniqueId('file');
+        const existingTrack = existing ? await this.trackRepo.getByFileId(existing.id) : null;
+        const trackId = existingTrack?.id || this.generateUniqueId('track');
 
         const audioFile: AudioFile = {
           id: fileId,
@@ -396,25 +449,27 @@ export class ScannerService implements IScannerService {
         const cleanTitle = lastDot > 0 ? file.name.substring(0, lastDot) : file.name;
         const container: AudioContainer = (ext === 'aif' ? 'aiff' : ext || 'unknown') as AudioContainer;
 
-        const track: Track = {
-          id: trackId,
-          fileId,
-          title: cleanTitle,
-          durationMs: 0,
-          format: {
-            container,
-            codec: container as unknown as AudioCodec,
-            sampleRate: 44100,
-            channels: 2,
-            isLossless: container === 'flac' || container === 'wav' || container === 'alac' || container === 'aiff'
-          },
-          dateAdded: Date.now(),
-          dateModified: file.lastModified,
-          playCount: 0,
-          isFavorite: false,
-          hasLyrics: false,
-          availability: 'available'
-        };
+        const track: Track = existingTrack
+          ? { ...existingTrack, availability: 'available', dateModified: Date.now() }
+          : {
+              id: trackId,
+              fileId,
+              title: cleanTitle,
+              durationMs: 0,
+              format: {
+                container,
+                codec: container as unknown as AudioCodec,
+                sampleRate: 44100,
+                channels: 2,
+                isLossless: container === 'flac' || container === 'wav' || container === 'alac' || container === 'aiff'
+              },
+              dateAdded: Date.now(),
+              dateModified: file.lastModified,
+              playCount: 0,
+              isFavorite: false,
+              hasLyrics: false,
+              availability: 'available'
+            };
 
         await this.audioFileRepo.save(audioFile);
         await this.trackRepo.save(track);
@@ -426,7 +481,7 @@ export class ScannerService implements IScannerService {
           try {
             const arrayBuffer = await file.arrayBuffer();
             const buffer = new Uint8Array(arrayBuffer);
-            await this.metadataService.enrichTrackMetadata(trackId, buffer, container);
+            await this.metadataService.enrichTrackMetadata(trackId, buffer, container, true);
           } catch (enrichErr) {
             this.logger.warn(`Metadata extraction failed for ${file.name}:`, { error: String(enrichErr) });
           }

@@ -109,12 +109,34 @@ export class StatsService {
       let totalPlays = 0;
       let favoriteSongsCount = 0;
 
+      const distinctArtists = new Set<string>();
+      const distinctAlbums = new Set<string>();
+      const distinctGenres = new Set<string>();
+
       for (const track of tracks) {
         totalPlays += (track.playCount || 0);
         if (track.isFavorite) {
           favoriteSongsCount++;
         }
+        if (track.artistName && track.artistName.toLowerCase() !== 'unknown artist') {
+          distinctArtists.add(track.artistName.trim().toLowerCase());
+        }
+        if (track.albumTitle && track.albumTitle.toLowerCase() !== 'unknown album') {
+          const key = `${track.albumTitle.trim().toLowerCase()}:::${(track.artistName || '').trim().toLowerCase()}`;
+          distinctAlbums.add(key);
+        }
+        if (track.genreName && track.genreName.toLowerCase() !== 'unknown genre') {
+          distinctGenres.add(track.genreName.trim().toLowerCase());
+        }
       }
+
+      const realArtistsRepoCount = (artistsResult.items || []).filter(a => a.name && a.name.toLowerCase() !== 'unknown artist').length;
+      const realAlbumsRepoCount = (albumsResult.items || []).filter(a => a.title && a.title.toLowerCase() !== 'unknown album').length;
+      const realGenresRepoCount = (genresResult.items || []).filter(g => g.name && g.name.toLowerCase() !== 'unknown genre').length;
+
+      const totalArtists = Math.max(realArtistsRepoCount, distinctArtists.size);
+      const totalAlbums = Math.max(realAlbumsRepoCount, distinctAlbums.size);
+      const totalGenres = Math.max(realGenresRepoCount, distinctGenres.size);
 
       // Calculate total listening time from playback history if available
       let totalListeningTimeMs = 0;
@@ -137,52 +159,6 @@ export class StatsService {
         for (const item of recent) {
           totalListeningTimeMs += (item.durationListenedMs || 0);
         }
-      }
-
-      // Calculate real artist count (excluding Unknown Artist)
-      let totalArtists = artistsResult.items.filter(
-        a => a.name && a.name.trim() && a.name.trim().toLowerCase() !== 'unknown artist'
-      ).length;
-
-      // Calculate real album count (excluding Unknown Album)
-      let totalAlbums = albumsResult.items.filter(
-        a => a.title && a.title.trim() && a.title.trim().toLowerCase() !== 'unknown album'
-      ).length;
-
-      // Calculate real genre count (excluding Unknown Genre)
-      let totalGenres = genresResult.items.filter(
-        g => g.name && g.name.trim() && g.name.trim().toLowerCase() !== 'unknown genre'
-      ).length;
-
-      // Fallback derivation directly from tracks if stores were not populated
-      if (totalArtists === 0 && tracks.length > 0) {
-        const unique = new Set<string>();
-        for (const t of tracks) {
-          if (t.artistName && t.artistName.trim() && t.artistName.trim().toLowerCase() !== 'unknown artist') {
-            unique.add(t.artistName.trim().toLowerCase());
-          }
-        }
-        totalArtists = unique.size;
-      }
-
-      if (totalAlbums === 0 && tracks.length > 0) {
-        const unique = new Set<string>();
-        for (const t of tracks) {
-          if (t.albumTitle && t.albumTitle.trim() && t.albumTitle.trim().toLowerCase() !== 'unknown album') {
-            unique.add(t.albumTitle.trim().toLowerCase());
-          }
-        }
-        totalAlbums = unique.size;
-      }
-
-      if (totalGenres === 0 && tracks.length > 0) {
-        const unique = new Set<string>();
-        for (const t of tracks) {
-          if (t.genreName && t.genreName.trim() && t.genreName.trim().toLowerCase() !== 'unknown genre') {
-            unique.add(t.genreName.trim().toLowerCase());
-          }
-        }
-        totalGenres = unique.size;
       }
 
       return {
@@ -244,11 +220,10 @@ export class StatsService {
       const artistMap = new Map<string, TopArtistItem>();
 
       for (const track of result.items) {
-        const rawName = track.artistName?.trim();
-        if (!rawName || rawName.toLowerCase() === 'unknown artist') {
+        const name = track.artistName?.trim();
+        if (!name || name.toLowerCase() === 'unknown artist') {
           continue;
         }
-        const name = rawName;
         const existing = artistMap.get(name);
         const pCount = track.playCount || 0;
 
@@ -292,11 +267,10 @@ export class StatsService {
       const albumMap = new Map<string, TopAlbumItem>();
 
       for (const track of result.items) {
-        const rawTitle = track.albumTitle?.trim();
-        if (!rawTitle || rawTitle.toLowerCase() === 'unknown album') {
+        const title = track.albumTitle?.trim();
+        if (!title || title.toLowerCase() === 'unknown album') {
           continue;
         }
-        const title = rawTitle;
         const artist = (track.artistName && track.artistName.trim()) || 'Unknown Artist';
         const key = `${title}:::${artist}`;
         const existing = albumMap.get(key);
