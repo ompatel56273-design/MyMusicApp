@@ -145,6 +145,7 @@ export class SmartPlaylistModalComponent {
               <option value="title" ${currentSortField === 'title' ? 'selected' : ''}>Title</option>
               <option value="artist" ${currentSortField === 'artist' ? 'selected' : ''}>Artist</option>
               <option value="album" ${currentSortField === 'album' ? 'selected' : ''}>Album</option>
+              <option value="year" ${currentSortField === 'year' ? 'selected' : ''}>Year</option>
               <option value="duration" ${currentSortField === 'duration' ? 'selected' : ''}>Duration</option>
               <option value="dateAdded" ${currentSortField === 'dateAdded' ? 'selected' : ''}>Date Added</option>
               <option value="lastPlayed" ${currentSortField === 'lastPlayed' ? 'selected' : ''}>Last Played</option>
@@ -213,12 +214,15 @@ export class SmartPlaylistModalComponent {
             <option value="artist" ${rule.field === 'artist' ? 'selected' : ''}>Artist</option>
             <option value="album" ${rule.field === 'album' ? 'selected' : ''}>Album</option>
             <option value="title" ${rule.field === 'title' ? 'selected' : ''}>Title</option>
+            <option value="folder" ${rule.field === 'folder' ? 'selected' : ''}>Folder</option>
+            <option value="year" ${rule.field === 'year' ? 'selected' : ''}>Year</option>
             <option value="playCount" ${rule.field === 'playCount' ? 'selected' : ''}>Play Count</option>
             <option value="skipCount" ${rule.field === 'skipCount' ? 'selected' : ''}>Skip Count</option>
             <option value="duration" ${rule.field === 'duration' ? 'selected' : ''}>Duration (sec)</option>
-            <option value="addedAt" ${rule.field === 'addedAt' ? 'selected' : ''}>Added (days)</option>
-            <option value="lastPlayedAt" ${rule.field === 'lastPlayedAt' ? 'selected' : ''}>Last Played (days)</option>
+            <option value="addedAt" ${rule.field === 'addedAt' || rule.field === 'dateAdded' ? 'selected' : ''}>Date Added</option>
+            <option value="lastPlayedAt" ${rule.field === 'lastPlayedAt' || rule.field === 'lastPlayed' ? 'selected' : ''}>Last Played</option>
             <option value="favorite" ${rule.field === 'favorite' ? 'selected' : ''}>Favorite</option>
+            <option value="availability" ${rule.field === 'availability' ? 'selected' : ''}>Availability</option>
           </select>
 
           <select class="sp-rule-operator" data-index="${idx}" style="padding: 6px; background: rgba(10, 14, 23, 0.85); border: 1px solid var(--glass-border); border-radius: 6px; color: #ffffff; font-size: 12px;">
@@ -262,8 +266,8 @@ export class SmartPlaylistModalComponent {
           if (activeRules[i]) {
             let val: string | number | boolean = inp.value;
             if (activeRules[i]!.field === 'favorite') {
-              val = inp.value === 'true';
-            } else if (['playCount', 'skipCount', 'duration', 'addedAt', 'lastPlayedAt'].includes(activeRules[i]!.field)) {
+              val = inp.value === 'true' || inp.value === '1';
+            } else if (['playCount', 'skipCount', 'duration', 'year', 'addedAt', 'dateAdded', 'lastPlayedAt', 'lastPlayed'].includes(activeRules[i]!.field)) {
               val = parseFloat(inp.value) || 0;
             }
             activeRules[i] = { ...activeRules[i]!, value: val };
@@ -341,14 +345,15 @@ export class SmartPlaylistModalComponent {
   private static getOperatorOptions(field: SmartRuleField, currentOp: SmartRuleOperator): string {
     let ops: { val: string; label: string }[] = [];
 
-    if (['title', 'artist', 'album', 'genre', 'folder', 'codec', 'format'].includes(field)) {
+    if (['title', 'artist', 'album', 'genre', 'folder', 'codec', 'format', 'availability'].includes(field)) {
       ops = [
         { val: 'equals', label: 'Equals' },
+        { val: 'notEquals', label: 'Does not equal' },
         { val: 'contains', label: 'Contains' },
         { val: 'startsWith', label: 'Starts with' },
         { val: 'endsWith', label: 'Ends with' }
       ];
-    } else if (['playCount', 'skipCount', 'duration'].includes(field)) {
+    } else if (['playCount', 'skipCount', 'duration', 'year'].includes(field)) {
       ops = [
         { val: 'equals', label: 'Equals (=)' },
         { val: 'greaterThan', label: 'Greater than (>)' },
@@ -356,7 +361,7 @@ export class SmartPlaylistModalComponent {
         { val: 'lessThan', label: 'Less than (<)' },
         { val: 'lessThanOrEqual', label: 'Less or equal (<=)' }
       ];
-    } else if (['addedAt', 'lastPlayedAt'].includes(field)) {
+    } else if (['addedAt', 'dateAdded', 'lastPlayedAt', 'lastPlayed'].includes(field)) {
       ops = [
         { val: 'withinLast', label: 'Within last (days)' },
         { val: 'after', label: 'After (timestamp)' },
@@ -364,6 +369,8 @@ export class SmartPlaylistModalComponent {
       ];
     } else if (field === 'favorite') {
       ops = [
+        { val: 'isTrue', label: 'Is true' },
+        { val: 'isFalse', label: 'Is false' },
         { val: 'is', label: 'Is' },
         { val: 'isNot', label: 'Is not' }
       ];
@@ -375,18 +382,19 @@ export class SmartPlaylistModalComponent {
   }
 
   private static getDefaultOperator(field: SmartRuleField): SmartRuleOperator {
-    if (['title', 'artist', 'album', 'genre', 'folder', 'codec', 'format'].includes(field)) return 'equals';
-    if (['playCount', 'skipCount', 'duration'].includes(field)) return 'greaterThan';
-    if (['addedAt', 'lastPlayedAt'].includes(field)) return 'withinLast';
-    if (field === 'favorite') return 'is';
+    if (['title', 'artist', 'album', 'genre', 'folder', 'codec', 'format', 'availability'].includes(field)) return 'equals';
+    if (['playCount', 'skipCount', 'duration', 'year'].includes(field)) return 'greaterThan';
+    if (['addedAt', 'dateAdded', 'lastPlayedAt', 'lastPlayed'].includes(field)) return 'withinLast';
+    if (field === 'favorite') return 'isTrue';
     return 'equals';
   }
 
   private static getDefaultValue(field: SmartRuleField): string | number | boolean {
-    if (['title', 'artist', 'album', 'genre', 'folder', 'codec', 'format'].includes(field)) return '';
+    if (['title', 'artist', 'album', 'genre', 'folder', 'codec', 'format', 'availability'].includes(field)) return '';
     if (['playCount', 'skipCount'].includes(field)) return 0;
+    if (field === 'year') return 2000;
     if (field === 'duration') return 180;
-    if (['addedAt', 'lastPlayedAt'].includes(field)) return 30;
+    if (['addedAt', 'dateAdded', 'lastPlayedAt', 'lastPlayed'].includes(field)) return 30;
     if (field === 'favorite') return true;
     return '';
   }

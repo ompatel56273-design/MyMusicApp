@@ -15,8 +15,14 @@ export class SmartPlaylistEvaluator {
 
     const rules = definition.rules || [];
 
+    // Filter out unavailable tracks unless a rule explicitly targets availability
+    const targetsAvailability = rules.some(r => r.field === 'availability');
+    const pool = targetsAvailability
+      ? tracks
+      : tracks.filter(t => t.availability !== 'missing');
+
     // 1. Filter tracks
-    const filtered = tracks.filter(track => {
+    const filtered = pool.filter(track => {
       if (rules.length === 0) return true;
 
       if (definition.matchMode === 'any') {
@@ -56,11 +62,15 @@ export class SmartPlaylistEvaluator {
         return this.evalText(track.format?.codec || '', operator, String(value));
       case 'format':
         return this.evalText(track.format?.container || '', operator, String(value));
+      case 'availability':
+        return this.evalText(track.availability || 'available', operator, String(value));
 
       case 'playCount':
         return this.evalNumeric(track.playCount || 0, operator, Number(value));
       case 'skipCount':
         return this.evalNumeric((track as any).skipCount || 0, operator, Number(value));
+      case 'year':
+        return this.evalNumeric(track.year || 0, operator, Number(value));
       case 'duration': {
         const numVal = Number(value);
         // If target value is in seconds (< 100000), convert track.durationMs to seconds
@@ -70,8 +80,10 @@ export class SmartPlaylistEvaluator {
       }
 
       case 'addedAt':
+      case 'dateAdded':
         return this.evalDate(track.dateAdded || 0, operator, Number(value));
       case 'lastPlayedAt':
+      case 'lastPlayed':
         return this.evalDate(track.lastPlayedAt || 0, operator, Number(value));
 
       case 'favorite':
@@ -89,6 +101,8 @@ export class SmartPlaylistEvaluator {
     switch (operator) {
       case 'equals':
         return act === tgt;
+      case 'notEquals':
+        return act !== tgt;
       case 'contains':
         return act.includes(tgt);
       case 'startsWith':
@@ -144,6 +158,10 @@ export class SmartPlaylistEvaluator {
         return actual === target;
       case 'isNot':
         return actual !== target;
+      case 'isTrue':
+        return actual === true;
+      case 'isFalse':
+        return actual === false;
       default:
         return false;
     }
@@ -166,6 +184,9 @@ export class SmartPlaylistEvaluator {
         break;
       case 'album':
         cmp = (a.albumTitle || '').localeCompare(b.albumTitle || '');
+        break;
+      case 'year':
+        cmp = (a.year || 0) - (b.year || 0);
         break;
       case 'duration':
         cmp = a.durationMs - b.durationMs;
@@ -191,7 +212,19 @@ export class SmartPlaylistEvaluator {
         break;
     }
 
-    return isDesc ? -cmp : cmp;
+    if (isDesc && cmp !== 0) {
+      cmp = -cmp;
+    }
+
+    // Deterministic tie-breaking: Title -> Track ID
+    if (cmp === 0) {
+      cmp = (a.title || '').localeCompare(b.title || '');
+    }
+    if (cmp === 0) {
+      cmp = (a.id || '').localeCompare(b.id || '');
+    }
+
+    return cmp;
   }
 
   private static hashString(str: string): number {

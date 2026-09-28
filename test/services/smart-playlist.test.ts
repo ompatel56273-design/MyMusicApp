@@ -307,6 +307,102 @@ describe('Feature 8 — Smart Playlists', () => {
       });
       expect(res.map(t => t.id)).toEqual(['t2', 't3']);
     });
+
+    it('9b. Text notEquals', () => {
+      const res = SmartPlaylistEvaluator.evaluate(allTracks, {
+        id: 'sp',
+        name: 'Test',
+        rules: [{ field: 'genre', operator: 'notEquals', value: 'Rock' }],
+        matchMode: 'all',
+        sort: { field: 'title', order: 'asc' },
+        limit: null,
+        createdAt: 0,
+        updatedAt: 0,
+        enabled: true
+      });
+      expect(res.map(t => t.id)).toEqual(['t2']);
+    });
+
+    it('15b. Boolean operators (isTrue and isFalse)', () => {
+      const resTrue = SmartPlaylistEvaluator.evaluate(allTracks, {
+        id: 'sp',
+        name: 'Test',
+        rules: [{ field: 'favorite', operator: 'isTrue', value: true }],
+        matchMode: 'all',
+        sort: { field: 'title', order: 'asc' },
+        limit: null,
+        createdAt: 0,
+        updatedAt: 0,
+        enabled: true
+      });
+      expect(resTrue.map(t => t.id)).toEqual(['t1', 't3']);
+
+      const resFalse = SmartPlaylistEvaluator.evaluate(allTracks, {
+        id: 'sp',
+        name: 'Test',
+        rules: [{ field: 'favorite', operator: 'isFalse', value: false }],
+        matchMode: 'all',
+        sort: { field: 'title', order: 'asc' },
+        limit: null,
+        createdAt: 0,
+        updatedAt: 0,
+        enabled: true
+      });
+      expect(resFalse.map(t => t.id)).toEqual(['t2']);
+    });
+
+    it('15c. Year filtering', () => {
+      const tracksWithYear: Track[] = [
+        { ...mockTrack1, year: 1985 },
+        { ...mockTrack2, year: 1999 },
+        { ...mockTrack3, year: 2020 }
+      ];
+      const res = SmartPlaylistEvaluator.evaluate(tracksWithYear, {
+        id: 'sp',
+        name: 'Test',
+        rules: [{ field: 'year', operator: 'greaterThan', value: 1990 }],
+        matchMode: 'all',
+        sort: { field: 'year', order: 'asc' },
+        limit: null,
+        createdAt: 0,
+        updatedAt: 0,
+        enabled: true
+      });
+      expect(res.map(t => t.year)).toEqual([1999, 2020]);
+    });
+
+    it('15d. Unavailable/missing track filtering', () => {
+      const missingTrack: Track = { ...mockTrack1, id: 'tm', availability: 'missing' };
+      const tracks = [...allTracks, missingTrack];
+      const res = SmartPlaylistEvaluator.evaluate(tracks, {
+        id: 'sp',
+        name: 'Test',
+        rules: [],
+        matchMode: 'all',
+        sort: { field: 'title', order: 'asc' },
+        limit: null,
+        createdAt: 0,
+        updatedAt: 0,
+        enabled: true
+      });
+      expect(res.map(t => t.id)).not.toContain('tm');
+    });
+
+    it('15e. Track immutability check', () => {
+      const trackCopy = { ...mockTrack1 };
+      SmartPlaylistEvaluator.evaluate([mockTrack1], {
+        id: 'sp',
+        name: 'Test',
+        rules: [{ field: 'title', operator: 'equals', value: 'Alpha Song' }],
+        matchMode: 'all',
+        sort: { field: 'title', order: 'asc' },
+        limit: null,
+        createdAt: 0,
+        updatedAt: 0,
+        enabled: true
+      });
+      expect(mockTrack1).toEqual(trackCopy);
+    });
   });
 
   describe('3. Sorting', () => {

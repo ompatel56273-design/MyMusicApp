@@ -5,12 +5,12 @@ import type {
   SmartRuleOperator
 } from '../../domain/value-objects/smart-playlist-types';
 
-const TEXT_FIELDS: SmartRuleField[] = ['title', 'artist', 'album', 'genre', 'folder', 'codec', 'format'];
-const NUMERIC_FIELDS: SmartRuleField[] = ['playCount', 'skipCount', 'duration'];
-const DATE_FIELDS: SmartRuleField[] = ['addedAt', 'lastPlayedAt'];
+const TEXT_FIELDS: SmartRuleField[] = ['title', 'artist', 'album', 'genre', 'folder', 'codec', 'format', 'availability'];
+const NUMERIC_FIELDS: SmartRuleField[] = ['playCount', 'skipCount', 'duration', 'year'];
+const DATE_FIELDS: SmartRuleField[] = ['addedAt', 'dateAdded', 'lastPlayedAt', 'lastPlayed'];
 const BOOLEAN_FIELDS: SmartRuleField[] = ['favorite'];
 
-const TEXT_OPERATORS: SmartRuleOperator[] = ['equals', 'contains', 'startsWith', 'endsWith'];
+const TEXT_OPERATORS: SmartRuleOperator[] = ['equals', 'contains', 'startsWith', 'endsWith', 'notEquals'];
 const NUMERIC_OPERATORS: SmartRuleOperator[] = [
   'equals',
   'greaterThan',
@@ -19,7 +19,7 @@ const NUMERIC_OPERATORS: SmartRuleOperator[] = [
   'lessThanOrEqual'
 ];
 const DATE_OPERATORS: SmartRuleOperator[] = ['before', 'after', 'withinLast'];
-const BOOLEAN_OPERATORS: SmartRuleOperator[] = ['is', 'isNot'];
+const BOOLEAN_OPERATORS: SmartRuleOperator[] = ['is', 'isNot', 'isTrue', 'isFalse'];
 
 export class SmartPlaylistValidator {
   public static validate(def: Partial<SmartPlaylistDefinition>): void {
@@ -38,7 +38,7 @@ export class SmartPlaylistValidator {
     }
 
     if (def.sort) {
-      const validSortFields = ['title', 'artist', 'album', 'duration', 'dateAdded', 'lastPlayed', 'playCount', 'rating', 'random'];
+      const validSortFields = ['title', 'artist', 'album', 'year', 'duration', 'dateAdded', 'lastPlayed', 'playCount', 'rating', 'random'];
       if (!validSortFields.includes(def.sort.field)) {
         throw new Error(`Invalid sort field: ${def.sort.field}`);
       }
@@ -90,7 +90,7 @@ export class SmartPlaylistValidator {
       if (!BOOLEAN_OPERATORS.includes(operator)) {
         throw new Error(`Invalid operator "${operator}" for boolean field "${field}" at index ${index}`);
       }
-      if (typeof value !== 'boolean') {
+      if (typeof value !== 'boolean' && operator !== 'isTrue' && operator !== 'isFalse') {
         throw new Error(`Value for boolean field "${field}" at index ${index} must be a boolean`);
       }
     } else {
