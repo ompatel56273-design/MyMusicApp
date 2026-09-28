@@ -51,7 +51,8 @@ export class MetadataService {
   public async enrichTrackMetadata(
     trackId: EntityId,
     fileBuffer: Uint8Array,
-    containerHint?: AudioContainer
+    containerHint?: AudioContainer,
+    suppressEvent?: boolean
   ): Promise<Track | null> {
     const track = await this.trackRepo.getById(trackId);
     if (!track) {
@@ -183,12 +184,14 @@ export class MetadataService {
 
       await this.trackRepo.save(updatedTrack);
 
-      this.eventBus.publish(DomainEvents.LIBRARY_UPDATED, {
-        tracksAdded: 0,
-        tracksUpdated: 1,
-        tracksRemoved: 0,
-        timestamp: Date.now()
-      });
+      if (!suppressEvent) {
+        this.eventBus.publish(DomainEvents.LIBRARY_UPDATED, {
+          tracksAdded: 0,
+          tracksUpdated: 1,
+          tracksRemoved: 0,
+          timestamp: Date.now()
+        });
+      }
 
       return updatedTrack;
     } catch (err) {
@@ -205,8 +208,16 @@ export class MetadataService {
   ): Promise<number> {
     let enrichedCount = 0;
     for (const item of items) {
-      const res = await this.enrichTrackMetadata(item.trackId, item.buffer, item.container);
+      const res = await this.enrichTrackMetadata(item.trackId, item.buffer, item.container, true);
       if (res) enrichedCount++;
+    }
+    if (enrichedCount > 0) {
+      this.eventBus.publish(DomainEvents.LIBRARY_UPDATED, {
+        tracksAdded: 0,
+        tracksUpdated: enrichedCount,
+        tracksRemoved: 0,
+        timestamp: Date.now()
+      });
     }
     return enrichedCount;
   }

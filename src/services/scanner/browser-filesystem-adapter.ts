@@ -116,17 +116,35 @@ export class BrowserFilesystemAdapter extends BaseFilesystemAdapter implements I
           }
         }
 
-        // Iterate entries safely
-        let entriesIterable: AsyncIterable<[string, FileSystemHandle]>;
+        // Iterate entries safely with broad API fallback (entries(), values(), or async iterator)
+        let entriesArray: Array<[string, FileSystemHandle]> = [];
         try {
-          entriesIterable = (dirHandle as any).entries();
+          if (typeof (dirHandle as any).entries === 'function') {
+            for await (const entry of (dirHandle as any).entries()) {
+              entriesArray.push(entry as [string, FileSystemHandle]);
+            }
+          } else if (typeof (dirHandle as any)[Symbol.asyncIterator] === 'function') {
+            for await (const entry of dirHandle as any) {
+              if (Array.isArray(entry)) {
+                entriesArray.push(entry as [string, FileSystemHandle]);
+              } else if (entry && entry.name) {
+                entriesArray.push([entry.name, entry as FileSystemHandle]);
+              }
+            }
+          } else if (typeof (dirHandle as any).values === 'function') {
+            for await (const handleItem of (dirHandle as any).values()) {
+              if (handleItem && handleItem.name) {
+                entriesArray.push([handleItem.name, handleItem as FileSystemHandle]);
+              }
+            }
+          }
         } catch (entriesErr) {
           this.logger.warn(`Failed to open directory entries for: ${currentPath}`, { error: entriesErr });
           options?.onError?.(currentPath, entriesErr as Error);
           return;
         }
 
-        for await (const [name, entryHandle] of entriesIterable) {
+        for (const [name, entryHandle] of entriesArray) {
           if (options?.signal?.aborted) break;
 
           const entryPath = `${currentPath}/${name}`;
