@@ -27,6 +27,7 @@
   - [10. Futuristic Cinematic Design System](#10-futuristic-cinematic-design-system)
   - [11. Production Hardening & Reliability (F21)](#11-production-hardening--reliability-f21)
   - [12. Local Backup, Snapshot & Migration Engine (F27)](#12-local-backup-snapshot--migration-engine-f27)
+  - [13. Advanced Local Tag Editor & Batch Metadata Manager (F22)](#13-advanced-local-tag-editor--batch-metadata-manager-f22)
 - [System Architecture & Layering](#-system-architecture--layering)
 - [Project Directory Structure](#-project-directory-structure)
 - [Technology Stack](#-technology-stack)
@@ -153,6 +154,29 @@ Custom binary parsers implemented with pure `ArrayBuffer` and `DataView` operati
 - **Audio File Reference Re-Linking**: Preserves file path and metadata attributes. Honesty flags track availability as `available` vs. `missing` without destroying library records.
 - **Universal M3U / M3U8 Playlist Support**: Export static playlists to standard `.m3u8` format with `#EXTINF` metadata tags, and import external M3U playlists resolving tracks against the local library.
 - **Privacy & Safety Guarantees**: 100% offline, local-first processing with zero cloud API dependency, zero telemetry, and reactive domain event notifications (`BACKUP_IMPORTED`, `LIBRARY_UPDATED`, `PLAYLIST_UPDATED`, `HISTORY_UPDATED`).
+
+### 13. Advanced Local Tag Editor & Batch Metadata Manager (F22)
+- **Metadata READ vs. WRITE Capability Matrix**:
+  - **MP3 / ID3v2.3**: Full READ & WRITE support (`TIT2`, `TPE1`, `TPE2`, `TALB`, `TCON`, `TYER`, `TRCK`, `TPOS`, `TCOM`, `COMM`, `APIC` embedded artwork).
+  - **FLAC / Vorbis Comments & PICTURE**: Full READ & WRITE support (`TITLE`, `ARTIST`, `ALBUMARTIST`, `ALBUM`, `GENRE`, `DATE`, `TRACKNUMBER`, `DISCNUMBER`, `COMPOSER`, `COMMENT`, `METADATA_BLOCK_PICTURE`).
+  - **MP4 / M4A / AAC**: Full READ & WRITE support (`©nam`, `©ART`, `aART`, `©alb`, `©gen`, `©day`, `trkn`, `disk`, `©wrt`, `©cmt`, `covr` artwork atom).
+  - **WAV / RIFF**: Full READ & WRITE support (`INAM`, `IART`, `IPRD`, `IGNR`, `ICRD`, `ICMT` chunks).
+  - **Unsupported Formats**: `.ogg`, `.opus`, `.aiff`, `.webm` are supported for READ & PLAYBACK only. Attempts to edit return explicit feedback: *"Metadata editing is not supported for this file format."*
+- **Single-Track & Batch Tag Editor**:
+  - Editable fields: *Title, Artist, Album Artist, Album, Genre, Year, Track Number / Total, Disc Number / Total, Composer, Comment*.
+  - Explicit strategy per field: `KEEP EXISTING` vs. `REPLACE ALL SELECTED`.
+  - Sequential Track Numbering: Optional auto-numbering starting from a configurable index (preserves disc info).
+- **Embedded Artwork Management**:
+  - Replace or remove embedded artwork.
+  - Image size & type safety validation (bounds checked at 10MB limit, JPEG/PNG magic bytes verification).
+- **Pattern-Based File Renaming & Tag Generation**:
+  - Filename -> Tag & Tag -> Filename using customizable token patterns (`%title%`, `%artist%`, `%album%`, `%albumartist%`, `%genre%`, `%year%`, `%track%`, `%disc%`, `%composer%`).
+  - Strict POSIX/Windows illegal character sanitization (`< > : " / \ | ? *`), trailing period stripping, path traversal protection (`../`), and collision detection.
+- **Metadata Text Normalization Engine**:
+  - Whitespace trimming, collapsing repeated spaces, preposition-aware Title Casing (`imagine dragons` ➔ `Imagine Dragons`), and comment removal.
+- **Defensive Preview-First Writing**:
+  - Preview modifications before writing to disk.
+  - Physical file binary update and re-verification before IndexedDB database update. If re-parsing verification fails, physical write rolls back and IndexedDB is untouched.
 
 ---
 

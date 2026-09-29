@@ -61,6 +61,7 @@ export interface AppShellDependencies {
   duplicateDetectorService?: IDuplicateDetectorService | undefined;
   audioFileRepo?: IAudioFileRepository | undefined;
   backupService?: import('../../services/backup/backup-service').BackupService | undefined;
+  metadataEditorService?: import('../../services/metadata-editor/metadata-editor-service').MetadataEditorService | undefined;
 }
 
 /**
@@ -160,7 +161,8 @@ export class AppShell {
           scannerService: deps.scannerService,
           fsAdapter: deps.fsAdapter,
           eventBus: deps.eventBus,
-          duplicateDetectorService: deps.duplicateDetectorService
+          duplicateDetectorService: deps.duplicateDetectorService,
+          metadataEditorService: deps.metadataEditorService
         })
       ],
       [

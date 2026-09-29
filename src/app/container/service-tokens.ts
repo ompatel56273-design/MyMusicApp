@@ -55,5 +55,6 @@ export const ServiceTokens = {
   VisualizerService: createToken<import('../../services/contracts/service-contracts').IVisualizerService>('IVisualizerService'),
   GalaxyService: createToken<import('../../services/contracts/service-contracts').IGalaxyService>('IGalaxyService'),
   DashboardService: createToken<import('../../services/contracts/service-contracts').IDashboardService>('IDashboardService'),
-  BackupService: createToken<import('../../services/backup/backup-service').BackupService>('BackupService')
-} as const;
+  BackupService: createToken<import('../../services/backup/backup-service').BackupService>('BackupService'),
+  MetadataEditorService: createToken<import('../../services/metadata-editor/metadata-editor-service').MetadataEditorService>('MetadataEditorService')
+};

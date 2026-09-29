@@ -6,11 +6,18 @@ import { AddToPlaylistModalComponent } from '../../components/playlist/add-to-pl
 import type { LibraryToolbarState } from '../../components/library/library-toolbar';
 import { ThemeManager } from '../../theme/theme-manager';
 
+import type { MetadataEditorService } from '../../../services/metadata-editor/metadata-editor-service';
+import { BatchMetadataModal } from '../../components/library/batch-metadata-modal';
+import { FilenameRenameModal } from '../../components/library/filename-rename-modal';
+import { NormalizationModal } from '../../components/library/normalization-modal';
+import { getIconSvg } from '../../icons/icon-registry';
+
 export interface SongsTabViewDependencies {
   libraryService: ILibraryService;
   playbackManager?: IPlaybackManager | undefined;
   artworkService?: IArtworkService | undefined;
   playlistService?: IPlaylistService | undefined;
+  metadataEditorService?: MetadataEditorService | undefined;
 }
 
 export class SongsTabView {
@@ -19,6 +26,7 @@ export class SongsTabView {
   private readonly playbackManager?: IPlaybackManager | undefined;
   private readonly artworkService?: IArtworkService | undefined;
   private readonly playlistService?: IPlaylistService | undefined;
+  private readonly metadataEditorService?: MetadataEditorService | undefined;
 
   private allTracks: Track[] = [];
   private filteredTracks: Track[] = [];
@@ -36,6 +44,7 @@ export class SongsTabView {
     this.playbackManager = deps.playbackManager;
     this.artworkService = deps.artworkService;
     this.playlistService = deps.playlistService;
+    this.metadataEditorService = deps.metadataEditorService;
   }
 
   public async mount(container: HTMLElement, filterOverride?: Partial<LibraryToolbarState>): Promise<void> {
@@ -46,6 +55,31 @@ export class SongsTabView {
 
     this.container.innerHTML = `
       <div class="songs-tab-container glass-panel" style="display: flex; flex-direction: column; flex: 1; min-height: 400px; background: rgba(18, 24, 38, 0.4); border-radius: var(--radius-xl); border: 1px solid var(--glass-border); padding: var(--space-3); overflow: hidden;">
+
+        ${this.metadataEditorService ? `
+          <!-- Metadata Batch Action Bar -->
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) var(--space-3); margin-bottom: var(--space-2); background: rgba(124, 58, 237, 0.08); border-radius: var(--radius-lg); border: 1px solid var(--glass-border-interactive);">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--color-accent-purple-glow);">
+              <span>${getIconSvg('edit', { size: 15 })}</span>
+              <span>Metadata & File Management</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button id="batch-edit-btn" style="padding: 6px 14px; background: rgba(168, 85, 247, 0.2); border: 1px solid var(--glass-border-interactive); border-radius: var(--radius-md); color: #ffffff; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                <span>${getIconSvg('edit', { size: 13 })}</span>
+                <span>Batch Edit Tags</span>
+              </button>
+              <button id="batch-norm-btn" style="padding: 6px 14px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: var(--radius-md); color: var(--color-accent-cyan); font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                <span>${getIconSvg('sparkles', { size: 13 })}</span>
+                <span>Normalize</span>
+              </button>
+              <button id="batch-rename-btn" style="padding: 6px 14px; background: rgba(236, 72, 153, 0.15); border: 1px solid rgba(236, 72, 153, 0.3); border-radius: var(--radius-md); color: var(--color-accent-pink); font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                <span>${getIconSvg('folder', { size: 13 })}</span>
+                <span>Rename Files</span>
+              </button>
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Songs Table Header (Template 3) -->
         <div
           class="songs-table-header"
@@ -82,6 +116,7 @@ export class SongsTabView {
       </div>
     `;
 
+    this.bindMetadataActionEvents();
     await this.loadTracks();
   }
 
@@ -258,6 +293,43 @@ export class SongsTabView {
         this.scroller.setItems(this.filteredTracks);
       }
     }
+  }
+
+  private bindMetadataActionEvents(): void {
+    if (!this.container || !this.metadataEditorService) return;
+
+    this.container.querySelector('#batch-edit-btn')?.addEventListener('click', () => {
+      const targetTracks = this.filteredTracks.length > 0 ? this.filteredTracks : this.allTracks;
+      if (targetTracks.length === 0) return;
+
+      void BatchMetadataModal.show({
+        tracks: targetTracks,
+        metadataEditorService: this.metadataEditorService!,
+        onSuccess: () => void this.loadTracks()
+      });
+    });
+
+    this.container.querySelector('#batch-norm-btn')?.addEventListener('click', () => {
+      const targetTracks = this.filteredTracks.length > 0 ? this.filteredTracks : this.allTracks;
+      if (targetTracks.length === 0) return;
+
+      void NormalizationModal.show({
+        tracks: targetTracks,
+        metadataEditorService: this.metadataEditorService!,
+        onSuccess: () => void this.loadTracks()
+      });
+    });
+
+    this.container.querySelector('#batch-rename-btn')?.addEventListener('click', () => {
+      const targetTracks = this.filteredTracks.length > 0 ? this.filteredTracks : this.allTracks;
+      if (targetTracks.length === 0) return;
+
+      void FilenameRenameModal.show({
+        tracks: targetTracks,
+        metadataEditorService: this.metadataEditorService!,
+        onSuccess: () => void this.loadTracks()
+      });
+    });
   }
 }
 

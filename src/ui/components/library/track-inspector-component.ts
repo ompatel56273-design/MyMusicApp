@@ -3,9 +3,13 @@ import type { IArtworkService, IPlaybackManager } from '../../../services/contra
 import { getIconSvg } from '../../icons/icon-registry';
 import { escapeHtml } from '../../../core/security/html-sanitizer';
 
+import type { MetadataEditorService } from '../../../services/metadata-editor/metadata-editor-service';
+import { SingleTrackMetadataModal } from './single-track-metadata-modal';
+
 export interface TrackInspectorDependencies {
   playbackManager?: IPlaybackManager | undefined;
   artworkService?: IArtworkService | undefined;
+  metadataEditorService?: MetadataEditorService | undefined;
 }
 
 /**
@@ -16,11 +20,13 @@ export class TrackInspectorComponent {
   private container: HTMLElement | null = null;
   private readonly playbackManager?: IPlaybackManager | undefined;
   private readonly artworkService?: IArtworkService | undefined;
+  private readonly metadataEditorService?: MetadataEditorService | undefined;
   private selectedTrack: Track | null = null;
 
   constructor(deps: TrackInspectorDependencies) {
     this.playbackManager = deps.playbackManager;
     this.artworkService = deps.artworkService;
+    this.metadataEditorService = deps.metadataEditorService;
   }
 
   public mount(container: HTMLElement): void {
@@ -129,6 +135,15 @@ export class TrackInspectorComponent {
 
     this.loadArtwork(track);
     this.bindQueueEvents();
+
+    if (track && this.metadataEditorService) {
+      this.container.querySelector('#inspector-edit-meta-btn')?.addEventListener('click', () => {
+        void SingleTrackMetadataModal.show({
+          track,
+          metadataEditorService: this.metadataEditorService!
+        });
+      });
+    }
   }
 
   private renderTrackDetails(track: Track): string {
@@ -184,6 +199,16 @@ export class TrackInspectorComponent {
           <span style="font-size: 12px; font-weight: var(--font-weight-semibold); color: #ffffff;">${fileSizeStr}</span>
         </div>
       </div>
+
+      ${this.metadataEditorService ? `
+        <button
+          id="inspector-edit-meta-btn"
+          style="width: 100%; padding: 8px 14px; background: rgba(168, 85, 247, 0.15); border: 1px solid var(--glass-border-interactive); border-radius: var(--radius-lg); color: var(--color-accent-purple-glow); font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 4px; transition: all var(--duration-fast);"
+        >
+          <span>${getIconSvg('edit', { size: 14 })}</span>
+          <span>Edit Metadata</span>
+        </button>
+      ` : ''}
     `;
   }
 

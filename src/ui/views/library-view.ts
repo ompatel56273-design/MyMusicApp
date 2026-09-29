@@ -27,6 +27,7 @@ import type { DuplicateDetectorService } from '../../services/duplicate/duplicat
 import type { LibraryHealthService } from '../../services/library/library-health-service';
 import { LibraryHealthDashboard } from '../components/library/library-health-dashboard';
 import type { AlbumMergeService } from '../../services/library/album-merge-service';
+import type { MetadataEditorService } from '../../services/metadata-editor/metadata-editor-service';
 
 export interface LibraryViewDependencies {
   libraryService: ILibraryService;
@@ -39,6 +40,7 @@ export interface LibraryViewDependencies {
   duplicateDetectorService?: (IDuplicateDetectorService | DuplicateDetectorService) | undefined;
   healthService?: LibraryHealthService | undefined;
   playlistService?: IPlaylistService | undefined;
+  metadataEditorService?: MetadataEditorService | undefined;
 }
 
 /**
@@ -65,6 +67,7 @@ export class LibraryView implements IView {
   private readonly duplicateDetectorService?: (IDuplicateDetectorService | DuplicateDetectorService) | undefined;
   private readonly healthService?: LibraryHealthService | undefined;
   private readonly playlistService?: IPlaylistService | undefined;
+  private readonly metadataEditorService?: MetadataEditorService | undefined;
   private libraryUpdateSub: Disposable | null = null;
 
   private toolbar: LibraryToolbar | null = null;
@@ -90,6 +93,7 @@ export class LibraryView implements IView {
       this.duplicateDetectorService = depsOrService.duplicateDetectorService;
       this.healthService = depsOrService.healthService;
       this.playlistService = depsOrService.playlistService;
+      this.metadataEditorService = depsOrService.metadataEditorService;
     } else {
       this.libraryService = depsOrService as ILibraryService;
     }
@@ -673,7 +677,8 @@ export class LibraryView implements IView {
 
     this.inspector = new TrackInspectorComponent({
       playbackManager: this.playbackManager,
-      artworkService: this.artworkService
+      artworkService: this.artworkService,
+      metadataEditorService: this.metadataEditorService
     });
     this.inspector.mount(inspectorSlot);
   }
@@ -699,7 +704,8 @@ export class LibraryView implements IView {
           libraryService: this.libraryService,
           playbackManager: this.playbackManager,
           artworkService: this.artworkService,
-          playlistService: this.playlistService
+          playlistService: this.playlistService,
+          metadataEditorService: this.metadataEditorService
         });
         this.activeSubView = songsView;
         void songsView.mount(contentSlot, this.toolbar ? this.toolbar.getState() : undefined);
