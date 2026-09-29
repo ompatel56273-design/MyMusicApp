@@ -62,6 +62,7 @@ export interface AppShellDependencies {
   audioFileRepo?: IAudioFileRepository | undefined;
   backupService?: import('../../services/backup/backup-service').BackupService | undefined;
   metadataEditorService?: import('../../services/metadata-editor/metadata-editor-service').MetadataEditorService | undefined;
+  virtualTrackService?: import('../../services/cue/virtual-track-service').VirtualTrackService | undefined;
 }
 
 /**
@@ -162,7 +163,8 @@ export class AppShell {
           fsAdapter: deps.fsAdapter,
           eventBus: deps.eventBus,
           duplicateDetectorService: deps.duplicateDetectorService,
-          metadataEditorService: deps.metadataEditorService
+          metadataEditorService: deps.metadataEditorService,
+          virtualTrackService: deps.virtualTrackService
         })
       ],
       [

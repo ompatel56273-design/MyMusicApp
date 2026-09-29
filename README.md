@@ -4,7 +4,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-6.2-646CFF.svg?style=flat-square&logo=vite)](https://vitejs.dev/)
-[![Vitest](https://img.shields.io/badge/Tests-747%20Passed%20(103%20Suites)-green.svg?style=flat-square&logo=vitest)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Tests-788%20Passed%20(108%20Suites)-green.svg?style=flat-square&logo=vitest)](https://vitest.dev/)
 [![Zero Dependencies](https://img.shields.io/badge/Runtime%20Dependencies-Zero%20Frameworks-success.svg?style=flat-square)](#technology-stack)
 [![License](https://img.shields.io/badge/License-Proprietary-lightgrey.svg?style=flat-square)](#license)
 
@@ -28,6 +28,7 @@
   - [11. Production Hardening & Reliability (F21)](#11-production-hardening--reliability-f21)
   - [12. Local Backup, Snapshot & Migration Engine (F27)](#12-local-backup-snapshot--migration-engine-f27)
   - [13. Advanced Local Tag Editor & Batch Metadata Manager (F22)](#13-advanced-local-tag-editor--batch-metadata-manager-f22)
+  - [14. Native CUE Sheet Parser & Virtual Track Splitter (F23)](#14-native-cue-sheet-parser--virtual-track-splitter-f23)
 - [System Architecture & Layering](#-system-architecture--layering)
 - [Project Directory Structure](#-project-directory-structure)
 - [Technology Stack](#-technology-stack)
@@ -177,6 +178,13 @@ Custom binary parsers implemented with pure `ArrayBuffer` and `DataView` operati
 - **Defensive Preview-First Writing**:
   - Preview modifications before writing to disk.
   - Physical file binary update and re-verification before IndexedDB database update. If re-parsing verification fails, physical write rolls back and IndexedDB is untouched.
+
+### 14. Native CUE Sheet Parser & Virtual Track Splitter (F23)
+- **Zero-Modification Virtual Track Splitting**: Single-file album rips (FLAC, WAV, APE, MP3) are parsed and represented as individual virtual tracks in the library without physically splitting, re-encoding, or altering the source audio file.
+- **Robust CUE Parser**: Standard CUE syntax support including `REM` tags, `FILE` types, `TRACK` types, `TITLE`, `PERFORMER`, `INDEX 00` (pregap), `INDEX 01` (track index), `PREGAP`, `POSTGAP`, `FLAGS`, `ISRC`, and `CATALOG`.
+- **Sub-Millisecond Timestamp Conversion**: $75\text{ frames/sec}$ timestamp conversion formula ($1\text{ frame} = 13.3333\dots\text{ms}$) ensuring zero boundary drift across entire multi-hour albums.
+- **Virtual Playback Engine Integration**: Seeking and time updates in `PlaybackManager` translate virtual relative offsets ($0.0\text{s}$ to virtual track duration) into physical file offsets while respecting track boundary termination ($150\text{ms}$ end-of-virtual-track threshold).
+- **Interactive Import Modal**: Local `.cue` file picker displaying metadata preview, track list, timestamp boundaries, and validation errors/warnings before committing to IndexedDB.
 
 ---
 

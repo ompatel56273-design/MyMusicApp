@@ -28,6 +28,7 @@ import type { LibraryHealthService } from '../../services/library/library-health
 import { LibraryHealthDashboard } from '../components/library/library-health-dashboard';
 import type { AlbumMergeService } from '../../services/library/album-merge-service';
 import type { MetadataEditorService } from '../../services/metadata-editor/metadata-editor-service';
+import type { VirtualTrackService } from '../../services/cue/virtual-track-service';
 
 export interface LibraryViewDependencies {
   libraryService: ILibraryService;
@@ -41,6 +42,7 @@ export interface LibraryViewDependencies {
   healthService?: LibraryHealthService | undefined;
   playlistService?: IPlaylistService | undefined;
   metadataEditorService?: MetadataEditorService | undefined;
+  virtualTrackService?: VirtualTrackService | undefined;
 }
 
 /**
@@ -68,6 +70,7 @@ export class LibraryView implements IView {
   private readonly healthService?: LibraryHealthService | undefined;
   private readonly playlistService?: IPlaylistService | undefined;
   private readonly metadataEditorService?: MetadataEditorService | undefined;
+  private readonly virtualTrackService?: VirtualTrackService | undefined;
   private libraryUpdateSub: Disposable | null = null;
 
   private toolbar: LibraryToolbar | null = null;
@@ -94,6 +97,7 @@ export class LibraryView implements IView {
       this.healthService = depsOrService.healthService;
       this.playlistService = depsOrService.playlistService;
       this.metadataEditorService = depsOrService.metadataEditorService;
+      this.virtualTrackService = depsOrService.virtualTrackService;
     } else {
       this.libraryService = depsOrService as ILibraryService;
     }
@@ -705,7 +709,8 @@ export class LibraryView implements IView {
           playbackManager: this.playbackManager,
           artworkService: this.artworkService,
           playlistService: this.playlistService,
-          metadataEditorService: this.metadataEditorService
+          metadataEditorService: this.metadataEditorService,
+          virtualTrackService: this.virtualTrackService
         });
         this.activeSubView = songsView;
         void songsView.mount(contentSlot, this.toolbar ? this.toolbar.getState() : undefined);

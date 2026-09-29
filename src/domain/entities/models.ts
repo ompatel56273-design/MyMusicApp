@@ -32,6 +32,9 @@ export interface Track {
   readonly isFavorite: boolean;
   readonly hasLyrics: boolean;
   readonly availability: AvailabilityState;
+  readonly isVirtualTrack?: boolean | undefined;
+  readonly virtualStartTimeMs?: number | undefined;
+  readonly virtualEndTimeMs?: number | undefined;
 }
 
 export interface AudioFile {

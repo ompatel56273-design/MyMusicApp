@@ -465,6 +465,14 @@ export class PlaybackManager implements IPlaybackManager {
 
       this.transitionToState('ready');
       await this.audioEngine.play();
+
+      // If virtual CUE track, seek to virtual start position
+      const isVirtual = (track as any).isVirtual || (track as any).startTimeMs !== undefined;
+      if (isVirtual && (track as any).startTimeMs > 0) {
+        const startSec = (track as any).startTimeMs / 1000.0;
+        this.audioEngine.seek(startSec);
+      }
+
       this.transitionToState('playing');
 
       // Preload next track in queue in the background for gapless transition
@@ -517,7 +525,11 @@ export class PlaybackManager implements IPlaybackManager {
   }
 
   public async seek(positionMs: number): Promise<void> {
-    let clamped = Math.max(0, Math.min(this.currentDurationMs || Infinity, positionMs));
+    const isVirtual = (this.currentTrackEntity as any)?.isVirtual || (this.currentTrackEntity as any)?.startTimeMs !== undefined;
+    const startMs = isVirtual ? ((this.currentTrackEntity as any).startTimeMs ?? 0) : 0;
+    const durationMs = this.currentDurationMs || Infinity;
+
+    let clamped = Math.max(0, Math.min(durationMs, positionMs));
     if (this.abLoopState.isActive && this.abLoopState.pointB !== null && this.abLoopState.pointA !== null) {
       if (clamped >= this.abLoopState.pointB) {
         clamped = this.abLoopState.pointA;
@@ -525,7 +537,9 @@ export class PlaybackManager implements IPlaybackManager {
     }
     this.currentPositionMs = clamped;
     this.cancelPreload();
-    this.audioEngine.seek(clamped / 1000.0);
+
+    const physicalSeekMs = startMs + clamped;
+    this.audioEngine.seek(physicalSeekMs / 1000.0);
 
     this.eventBus.publish(DomainEvents.PLAYBACK_TIME_UPDATED, {
       positionMs: this.currentPositionMs,
@@ -839,9 +853,33 @@ export class PlaybackManager implements IPlaybackManager {
   }
 
   private handleTimeUpdate(sec: number, durSec: number): void {
-    this.currentPositionMs = Math.round(sec * 1000);
-    if (durSec > 0) {
-      this.currentDurationMs = Math.round(durSec * 1000);
+    const physicalPosMs = Math.round(sec * 1000);
+    const track = this.currentTrackEntity;
+    const isVirtual = (track as any)?.isVirtual || (track as any)?.startTimeMs !== undefined;
+
+    if (isVirtual && track) {
+      const startMs = (track as any).startTimeMs ?? 0;
+      const endMs = (track as any).endTimeMs ?? (startMs + (track.durationMs || 0));
+
+      // 1. Virtual track end boundary reached -> trigger track ended
+      if (physicalPosMs >= endMs - 150) {
+        void this.handleTrackEnded();
+        return;
+      }
+
+      // 2. Pre-start position protection -> seek to start
+      if (physicalPosMs < startMs - 500) {
+        this.audioEngine.seek(startMs / 1000.0);
+      }
+
+      // 3. Calculate virtual relative position & duration
+      this.currentPositionMs = Math.max(0, Math.min(track.durationMs, physicalPosMs - startMs));
+      this.currentDurationMs = track.durationMs;
+    } else {
+      this.currentPositionMs = physicalPosMs;
+      if (durSec > 0) {
+        this.currentDurationMs = Math.round(durSec * 1000);
+      }
     }
 
     // A/B Loop Boundary Check: takes immediate precedence over Crossfade and Gapless

@@ -50,6 +50,7 @@ import { FileAccessCapabilityService } from '../services/scanner/file-access-cap
 import { LocalMusicOnboardingModal } from '../ui/components/onboarding/local-music-onboarding-modal';
 import { BackupService } from '../services/backup/backup-service';
 import { MetadataEditorService } from '../services/metadata-editor/metadata-editor-service';
+import { VirtualTrackService } from '../services/cue/virtual-track-service';
 
 export interface AppContext {
   logger: Logger;
@@ -237,6 +238,12 @@ export class AppBootstrap {
       adapter,
       this.eventBus
     );
+    const virtualTrackService = new VirtualTrackService(
+      trackRepo,
+      audioFileRepo,
+      adapter,
+      this.eventBus
+    );
 
     // 4.1 Apply Audio Settings to Engine & PlaybackManager
     try {
@@ -296,7 +303,8 @@ export class AppBootstrap {
       duplicateDetectorService,
       audioFileRepo,
       backupService,
-      metadataEditorService
+      metadataEditorService,
+      virtualTrackService
     });
     this.appShell.mount(root);
 
