@@ -60,6 +60,7 @@ export interface AppShellDependencies {
   eventBus: EventBus;
   duplicateDetectorService?: IDuplicateDetectorService | undefined;
   audioFileRepo?: IAudioFileRepository | undefined;
+  backupService?: import('../../services/backup/backup-service').BackupService | undefined;
 }
 
 /**
@@ -189,7 +190,8 @@ export class AppShell {
           eventBus: deps.eventBus,
           router: this.router,
           playbackManager: deps.playbackManager,
-          sleepTimerService: deps.sleepTimerService
+          sleepTimerService: deps.sleepTimerService,
+          backupService: deps.backupService
         })
       ],
       [

@@ -48,6 +48,7 @@ import { SleepTimerService } from '../services/playback/sleep-timer-service';
 import { DuplicateDetectorService } from '../services/duplicate/duplicate-detector-service';
 import { FileAccessCapabilityService } from '../services/scanner/file-access-capability';
 import { LocalMusicOnboardingModal } from '../ui/components/onboarding/local-music-onboarding-modal';
+import { BackupService } from '../services/backup/backup-service';
 
 export interface AppContext {
   logger: Logger;
@@ -227,6 +228,7 @@ export class AppBootstrap {
       trackRepo,
       eventBus: this.eventBus
     });
+    const backupService = new BackupService(adapter, this.eventBus);
 
     // 4.1 Apply Audio Settings to Engine & PlaybackManager
     try {
@@ -284,7 +286,8 @@ export class AppBootstrap {
       dbAdapter: adapter,
       eventBus: this.eventBus,
       duplicateDetectorService,
-      audioFileRepo
+      audioFileRepo,
+      backupService
     });
     this.appShell.mount(root);
 

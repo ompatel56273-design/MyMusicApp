@@ -26,6 +26,7 @@
   - [9. Synchronized Lyrics & Stream Inspector](#9-synchronized-lyrics--stream-inspector)
   - [10. Futuristic Cinematic Design System](#10-futuristic-cinematic-design-system)
   - [11. Production Hardening & Reliability (F21)](#11-production-hardening--reliability-f21)
+  - [12. Local Backup, Snapshot & Migration Engine (F27)](#12-local-backup-snapshot--migration-engine-f27)
 - [System Architecture & Layering](#-system-architecture--layering)
 - [Project Directory Structure](#-project-directory-structure)
 - [Technology Stack](#-technology-stack)
@@ -142,7 +143,16 @@ Custom binary parsers implemented with pure `ArrayBuffer` and `DataView` operati
 - **Defensive Binary Parsing**: Bounds-guarded binary parsing for FLAC, MP4, ID3, and WAV preventing `RangeError`s on truncated or corrupted media files.
 - **Graceful Fault Tolerance**: Scanner-isolated parser execution ensuring corrupted files are skipped without halting whole-library scanning.
 - **Authoritative Playback State Synchronization**: Deterministic state callback transitions ensuring playback, pause, and stop states stay synchronized across all UI components.
-- **Leak-Free UI Lifecycle**: Strict subscription disposal on all views and components upon unmounting.
+### 12. Local Backup, Snapshot & Migration Engine (F27)
+- **Versioned `.mymusic` Backup Format**: Deterministic portable JSON snapshot format (`format: "mymusic"`, `version: 1`, timestamp, `appVersion`) containing complete metadata, playlists, smart rules, listening history, favorites, settings, EQ presets, and queue state.
+- **Strict Pre-Import Schema Validation**: Robust validation engine verifying schema versioning, field types, required properties, and duplicate ID detection. Rejects corrupted or malformed files safely before database modification.
+- **Interactive Import Preview**: Calculates pre-commit metrics (Tracks to Add/Update, Playlists to Merge, Missing Files, History items) and presents an interactive modal for explicit user confirmation.
+- **Dual Migration Modes**:
+  - **Restore Mode**: Transactionally clears current IndexedDB library tables and restores full backup state.
+  - **Merge Mode**: Non-destructive integration. Matches tracks by ID or composite key (`Title` + `Artist` + `Album`), merges play counts (`Math.max`), preserves favorite markers, appends non-duplicate playlist tracks while maintaining order, and re-maps IDs to prevent collisions.
+- **Audio File Reference Re-Linking**: Preserves file path and metadata attributes. Honesty flags track availability as `available` vs. `missing` without destroying library records.
+- **Universal M3U / M3U8 Playlist Support**: Export static playlists to standard `.m3u8` format with `#EXTINF` metadata tags, and import external M3U playlists resolving tracks against the local library.
+- **Privacy & Safety Guarantees**: 100% offline, local-first processing with zero cloud API dependency, zero telemetry, and reactive domain event notifications (`BACKUP_IMPORTED`, `LIBRARY_UPDATED`, `PLAYLIST_UPDATED`, `HISTORY_UPDATED`).
 
 ---
 

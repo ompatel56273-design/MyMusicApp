@@ -101,5 +101,6 @@ export const DomainEvents = {
   SLEEP_TIMER_CHANGED: 'playback:sleep-timer-changed',
   SLEEP_TIMER_EXPIRED: 'playback:sleep-timer-expired',
   DASHBOARD_SETTINGS_CHANGED: 'dashboard:settings-changed',
-  HISTORY_UPDATED: 'history:updated'
+  HISTORY_UPDATED: 'history:updated',
+  BACKUP_IMPORTED: 'backup:imported'
 } as const;

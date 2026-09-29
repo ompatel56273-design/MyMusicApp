@@ -23,11 +23,13 @@ import { FileAccessCapabilityService } from '../../services/scanner/file-access-
 import type { EventBus } from '../../core/events/event-bus';
 import { DomainEvents } from '../../domain/events/domain-events';
 import type { ScanProgressReport } from '../../services/scanner/scanner-types';
+import type { Playlist } from '../../domain/entities/models';
 import type { Disposable } from '../../core/types/common';
 import type { RouterService } from '../navigation/router-service';
 import { SleepTimerService } from '../../services/playback/sleep-timer-service';
 import { SleepTimerModalComponent } from '../components/player/sleep-timer-modal';
 import { getIconSvg } from '../icons/icon-registry';
+import { BackupService } from '../../services/backup/backup-service';
 
 export interface SettingsViewDependencies {
   audioEngine?: IAudioEngine | undefined;
@@ -43,6 +45,7 @@ export interface SettingsViewDependencies {
   eventBus?: EventBus | undefined;
   router?: RouterService | undefined;
   dashboardService?: IDashboardService | undefined;
+  backupService?: BackupService | undefined;
 }
 
 export type SettingsSectionId =
@@ -54,6 +57,7 @@ export type SettingsSectionId =
   | 'visualizer'
   | 'galaxy'
   | 'storage'
+  | 'backup'
   | 'devices'
   | 'privacy'
   | 'about';
@@ -84,6 +88,7 @@ export class SettingsView implements IView {
   private readonly eventBus?: EventBus | undefined;
   private readonly router?: RouterService | undefined;
   private readonly dashboardService?: IDashboardService | undefined;
+  private readonly backupService?: BackupService | undefined;
   private readonly capabilityService = FileAccessCapabilityService.getInstance();
 
   private equalizerComponent: EqualizerComponent | null = null;
@@ -107,6 +112,7 @@ export class SettingsView implements IView {
     { id: 'visualizer', label: 'Audio Visualizer', icon: 'maximize' },
     { id: 'galaxy', label: 'Audio Galaxy', icon: 'galaxy' },
     { id: 'storage', label: 'Storage & Database', icon: 'library' },
+    { id: 'backup', label: 'Data & Backup', icon: 'download' },
     { id: 'devices', label: 'Audio Output', icon: 'volume' },
     { id: 'privacy', label: 'Privacy & Architecture', icon: 'check' },
     { id: 'about', label: 'About & Diagnostics', icon: 'music' }
@@ -126,6 +132,7 @@ export class SettingsView implements IView {
     this.eventBus = deps?.eventBus;
     this.router = deps?.router;
     this.dashboardService = deps?.dashboardService;
+    this.backupService = deps?.backupService;
   }
 
   public mount(container: HTMLElement, params?: RouteParams): void {
@@ -144,6 +151,7 @@ export class SettingsView implements IView {
     this.attachGalaxySettingsListeners();
     this.attachMusicAccessListeners();
     this.attachStorageListeners();
+    this.attachBackupListeners();
     this.attachDeviceListeners();
     this.renderDashboardSectionList();
     this.attachEventBusSubscriptions();
@@ -1389,6 +1397,66 @@ export class SettingsView implements IView {
               </div>
             </section>
 
+            <!-- DATA & BACKUP Section -->
+            <section id="section-backup" class="settings-card" tabindex="-1">
+              <div class="settings-card-header">
+                <div>
+                  <span class="settings-card-category">Library & Portable Backup</span>
+                  <h2 class="settings-card-title">Data & Backup</h2>
+                </div>
+                <span id="settings-backup-status-badge" style="font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: var(--radius-full); background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">
+                  Local Backup Ready
+                </span>
+              </div>
+
+              <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 14px 16px; display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 20px;">📦</span>
+                <p style="margin: 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.4;">
+                  <strong>Export your data into a portable .mymusic bundle.</strong> Preserves playlists, smart rules, favorites, history logs, EQ presets, and user settings. (Audio files remain in your local storage).
+                </p>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Full Application Backup</span>
+                  <span class="settings-form-row-desc">Export or restore portable .mymusic application state snapshot</span>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <button id="settings-btn-export-backup" class="settings-action-btn settings-action-btn-primary">
+                    <span>📥</span>
+                    <span>Export Backup (.mymusic)</span>
+                  </button>
+                  <button id="settings-btn-import-backup" class="settings-action-btn">
+                    <span>📤</span>
+                    <span>Import Backup (.mymusic)</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="settings-form-row">
+                <div class="settings-form-row-label">
+                  <span class="settings-form-row-title">Playlist Import & Export (M3U / M3U8)</span>
+                  <span class="settings-form-row-desc">Import or export static playlists using universal M3U/M3U8 file format</span>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <button id="settings-btn-export-playlist-m3u" class="settings-action-btn">
+                    <span>🎵</span>
+                    <span>Export Playlist (.m3u8)</span>
+                  </button>
+                  <button id="settings-btn-import-playlist-m3u" class="settings-action-btn">
+                    <span>🎶</span>
+                    <span>Import Playlist (.m3u8)</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Status message container -->
+              <div id="settings-backup-status-msg" style="display: none; padding: 10px 14px; border-radius: var(--radius-lg); font-size: 12px; font-weight: 600;"></div>
+
+              <input type="file" id="settings-backup-file-input" accept=".mymusic,application/json" style="display: none;" />
+              <input type="file" id="settings-m3u-file-input" accept=".m3u,.m3u8" style="display: none;" />
+            </section>
+
             <!-- 8. Audio Output & Devices Section -->
             <section id="section-devices" class="settings-card" tabindex="-1">
               <div class="settings-card-header">
@@ -2504,6 +2572,274 @@ export class SettingsView implements IView {
     overlay.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         overlay.remove();
+      }
+    });
+  }
+
+  private attachBackupListeners(): void {
+    if (!this.container || !this.backupService) return;
+
+    const exportBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-export-backup');
+    const importBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-import-backup');
+    const backupFileInput = this.container.querySelector<HTMLInputElement>('#settings-backup-file-input');
+
+    const exportM3uBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-export-playlist-m3u');
+    const importM3uBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-import-playlist-m3u');
+    const m3uFileInput = this.container.querySelector<HTMLInputElement>('#settings-m3u-file-input');
+
+    const statusMsg = this.container.querySelector<HTMLElement>('#settings-backup-status-msg');
+
+    const setStatus = (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
+      if (!statusMsg) return;
+      statusMsg.style.display = 'block';
+      statusMsg.textContent = msg;
+      if (type === 'success') {
+        statusMsg.style.background = 'rgba(52, 211, 153, 0.15)';
+        statusMsg.style.color = '#34d399';
+        statusMsg.style.border = '1px solid rgba(52, 211, 153, 0.3)';
+      } else if (type === 'error') {
+        statusMsg.style.background = 'rgba(239, 68, 68, 0.15)';
+        statusMsg.style.color = '#ef4444';
+        statusMsg.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+      } else {
+        statusMsg.style.background = 'rgba(99, 102, 241, 0.15)';
+        statusMsg.style.color = '#818cf8';
+        statusMsg.style.border = '1px solid rgba(99, 102, 241, 0.3)';
+      }
+    };
+
+    // Export Backup (.mymusic)
+    exportBtn?.addEventListener('click', async () => {
+      try {
+        setStatus('Preparing backup snapshot...', 'info');
+        await this.backupService!.exportBackupFile();
+        setStatus('Backup ready! Download started.', 'success');
+      } catch (err) {
+        setStatus(`Backup export failed: ${(err as Error).message}`, 'error');
+      }
+    });
+
+    // Import Backup (.mymusic)
+    importBtn?.addEventListener('click', () => {
+      backupFileInput?.click();
+    });
+
+    backupFileInput?.addEventListener('change', async () => {
+      const file = backupFileInput.files?.[0];
+      if (!file) return;
+
+      try {
+        setStatus('Validating backup bundle...', 'info');
+        const { validation, preview } = await this.backupService!.getImportPreview(file);
+
+        if (!validation.isValid || !preview) {
+          const errors = validation.issues.filter(i => i.severity === 'error').map(i => i.message).join(' ');
+          setStatus(`Invalid backup file: ${errors}`, 'error');
+          return;
+        }
+
+        this.showBackupPreviewModal(file, preview);
+      } catch (err) {
+        setStatus(`Validation error: ${(err as Error).message}`, 'error');
+      } finally {
+        backupFileInput.value = '';
+      }
+    });
+
+    // Export M3U8 Playlist
+    exportM3uBtn?.addEventListener('click', async () => {
+      if (!this.dbAdapter) return;
+      try {
+        const playlists = await this.dbAdapter.getAll<Playlist>(STORES.PLAYLISTS);
+        const staticPlaylists = playlists.filter(p => !p.isSmart);
+
+        if (staticPlaylists.length === 0) {
+          setStatus('No static playlists available to export.', 'error');
+          return;
+        }
+
+        const pl = staticPlaylists[0];
+        setStatus(`Exporting playlist "${pl.name}"...`, 'info');
+        await this.backupService!.exportPlaylistM3u8(pl.id);
+        setStatus(`Exported playlist "${pl.name}.m3u8".`, 'success');
+      } catch (err) {
+        setStatus(`Playlist export failed: ${(err as Error).message}`, 'error');
+      }
+    });
+
+    // Import M3U8 Playlist
+    importM3uBtn?.addEventListener('click', () => {
+      m3uFileInput?.click();
+    });
+
+    m3uFileInput?.addEventListener('change', async () => {
+      const file = m3uFileInput.files?.[0];
+      if (!file) return;
+
+      try {
+        setStatus(`Importing playlist "${file.name}"...`, 'info');
+        const res = await this.backupService!.importPlaylistM3u(file);
+        setStatus(`Imported playlist "${res.playlist.name}" (${res.tracksMatched} of ${res.totalEntries} tracks matched).`, 'success');
+        this.refreshAllStats();
+      } catch (err) {
+        setStatus(`M3U import failed: ${(err as Error).message}`, 'error');
+      } finally {
+        m3uFileInput.value = '';
+      }
+    });
+  }
+
+  private showBackupPreviewModal(file: File, preview: import('../../services/backup/backup-types').BackupImportPreview): void {
+    const existing = document.querySelector('#backup-preview-modal-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'backup-preview-modal-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.style.cssText = `
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: var(--space-4);
+      box-sizing: border-box;
+    `;
+
+    overlay.innerHTML = `
+      <div style="background: var(--color-bg-surface-elevated, #0f172a); border: 1px solid var(--glass-border); border-radius: var(--radius-2xl); width: 100%; max-width: 580px; padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); box-shadow: var(--shadow-2xl); color: var(--color-text-primary);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: var(--space-3);">
+          <div>
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-accent-secondary);">
+              .mymusic Portable Backup
+            </span>
+            <h2 style="font-size: 20px; font-weight: 800; margin: 2px 0 0 0;">Import Preview</h2>
+          </div>
+          <button id="backup-modal-close-btn" style="background: transparent; border: none; color: var(--color-text-muted); cursor: pointer; font-size: 20px; padding: 4px;">✕</button>
+        </div>
+
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border); border-radius: var(--radius-xl); padding: 14px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; justify-content: space-between; font-size: 12px;">
+            <span style="color: var(--color-text-secondary);">Created Date:</span>
+            <span style="font-weight: 700; color: var(--color-text-primary);">${new Date(preview.createdAt).toLocaleString()}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 12px;">
+            <span style="color: var(--color-text-secondary);">Format & Version:</span>
+            <span style="font-weight: 700; color: var(--color-text-primary);">v${preview.version} (${preview.appVersion})</span>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 10px; text-align: center;">
+            <div style="font-size: 18px; font-weight: 800;">${preview.totalTracksInBackup}</div>
+            <div style="font-size: 11px; color: var(--color-text-muted);">Songs</div>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 10px; text-align: center;">
+            <div style="font-size: 18px; font-weight: 800;">${preview.totalPlaylistsInBackup}</div>
+            <div style="font-size: 11px; color: var(--color-text-muted);">Playlists (${preview.totalSmartPlaylistsInBackup} Smart)</div>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 10px; text-align: center;">
+            <div style="font-size: 18px; font-weight: 800;">${preview.totalHistoryInBackup}</div>
+            <div style="font-size: 11px; color: var(--color-text-muted);">History Logs</div>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 10px; text-align: center;">
+            <div style="font-size: 18px; font-weight: 800;">${preview.totalFavoritesInBackup}</div>
+            <div style="font-size: 11px; color: var(--color-text-muted);">Favorites</div>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 10px; text-align: center;">
+            <div style="font-size: 18px; font-weight: 800;">${preview.totalEqPresetsInBackup}</div>
+            <div style="font-size: 11px; color: var(--color-text-muted);">EQ Presets</div>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 10px; text-align: center;">
+            <div style="font-size: 18px; font-weight: 800; color: ${preview.tracksMissingFile > 0 ? '#f59e0b' : '#34d399'};">${preview.tracksMissingFile}</div>
+            <div style="font-size: 11px; color: var(--color-text-muted);">Missing Files</div>
+          </div>
+        </div>
+
+        ${preview.warnings.length > 0 ? `
+          <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-lg); padding: 10px 14px; font-size: 12px; color: #fbbf24;">
+            ⚠️ ${preview.warnings.join('<br>')}
+          </div>
+        ` : ''}
+
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <label style="font-size: 13px; font-weight: 700;">Select Import Mode:</label>
+
+          <label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border: 1px solid var(--glass-border); border-radius: var(--radius-lg); cursor: pointer; background: rgba(255, 255, 255, 0.02);">
+            <input type="radio" name="backup-import-mode" value="merge" checked style="accent-color: var(--color-accent-primary); margin-top: 3px;" />
+            <div>
+              <div style="font-size: 13px; font-weight: 700; color: var(--color-text-primary);">Merge Data (Recommended)</div>
+              <div style="font-size: 11px; color: var(--color-text-secondary);">Non-destructive integration. Safely combines backup tracks, playlists, favorites, and history with your current library without overwriting existing data.</div>
+            </div>
+          </label>
+
+          <label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-lg); cursor: pointer; background: rgba(239, 68, 68, 0.05);">
+            <input type="radio" name="backup-import-mode" value="restore" style="accent-color: #ef4444; margin-top: 3px;" />
+            <div>
+              <div style="font-size: 13px; font-weight: 700; color: #ef4444;">Restore Snapshot (Overwrite)</div>
+              <div style="font-size: 11px; color: var(--color-text-secondary);">Replaces current library tables with the backup contents. Warning: existing playlists and play logs will be reset to match the backup state.</div>
+            </div>
+          </label>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: var(--space-2);">
+          <button id="backup-modal-cancel-btn" class="settings-action-btn">Cancel</button>
+          <button id="backup-modal-confirm-btn" class="settings-action-btn settings-action-btn-primary">Confirm & Import</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const closeBtn = overlay.querySelector<HTMLButtonElement>('#backup-modal-close-btn');
+    const cancelBtn = overlay.querySelector<HTMLButtonElement>('#backup-modal-cancel-btn');
+    const confirmBtn = overlay.querySelector<HTMLButtonElement>('#backup-modal-confirm-btn');
+
+    const closeModal = () => overlay.remove();
+
+    closeBtn?.addEventListener('click', closeModal);
+    cancelBtn?.addEventListener('click', closeModal);
+
+    confirmBtn?.addEventListener('click', async () => {
+      const modeRadio = overlay.querySelector<HTMLInputElement>('input[name="backup-import-mode"]:checked');
+      const mode = (modeRadio?.value || 'merge') as 'restore' | 'merge';
+
+      closeModal();
+      const statusMsg = this.container?.querySelector<HTMLElement>('#settings-backup-status-msg');
+      if (statusMsg) {
+        statusMsg.style.display = 'block';
+        statusMsg.textContent = `Importing backup snapshot (${mode} mode)...`;
+        statusMsg.style.background = 'rgba(99, 102, 241, 0.15)';
+        statusMsg.style.color = '#818cf8';
+      }
+
+      try {
+        const result = await this.backupService!.importBackup(file, { mode });
+        if (result.success) {
+          if (statusMsg) {
+            statusMsg.textContent = `Import completed! Added ${result.tracksImported} track(s), ${result.playlistsImported} playlist(s), ${result.historyImported} history record(s).`;
+            statusMsg.style.background = 'rgba(52, 211, 153, 0.15)';
+            statusMsg.style.color = '#34d399';
+          }
+          this.refreshAllStats();
+        } else {
+          if (statusMsg) {
+            statusMsg.textContent = `Import failed: ${result.errors.join(', ')}`;
+            statusMsg.style.background = 'rgba(239, 68, 68, 0.15)';
+            statusMsg.style.color = '#ef4444';
+          }
+        }
+      } catch (err) {
+        if (statusMsg) {
+          statusMsg.textContent = `Import error: ${(err as Error).message}`;
+          statusMsg.style.background = 'rgba(239, 68, 68, 0.15)';
+          statusMsg.style.color = '#ef4444';
+        }
       }
     });
   }
