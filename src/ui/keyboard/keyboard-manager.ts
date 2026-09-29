@@ -4,6 +4,7 @@ import type { RouterService } from '../navigation/router-service';
 export interface KeyboardManagerOptions {
   playbackManager: IPlaybackManager;
   router: RouterService;
+  onToggleCinemaMode?: () => void;
 }
 
 /**
@@ -13,11 +14,13 @@ export interface KeyboardManagerOptions {
 export class KeyboardManager {
   private readonly playbackManager: IPlaybackManager;
   private readonly router: RouterService;
+  private readonly onToggleCinemaMode?: (() => void) | undefined;
   private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(options: KeyboardManagerOptions) {
     this.playbackManager = options.playbackManager;
     this.router = options.router;
+    this.onToggleCinemaMode = options.onToggleCinemaMode;
   }
 
   public init(): void {
@@ -148,6 +151,15 @@ export class KeyboardManager {
           this.playbackManager.setLoopB?.();
         } else {
           this.playbackManager.clearAbLoop?.();
+        }
+        break;
+      }
+
+      case 'KeyF':
+      case 'KeyV': {
+        if (this.onToggleCinemaMode) {
+          e.preventDefault();
+          this.onToggleCinemaMode();
         }
         break;
       }

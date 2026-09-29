@@ -4,6 +4,8 @@ import type { VisualizerMode, VisualizerSettings } from '../../../domain/entitie
 import { EventBus } from '../../../core/events/event-bus';
 import { DomainEvents } from '../../../domain/events/domain-events';
 import type { Disposable } from '../../../core/types/common';
+import { VisualizerStudioModal } from './visualizer-studio-modal';
+import { getIconSvg } from '../../icons/icon-registry';
 
 export interface VisualizerComponentDependencies {
   audioEngine: IAudioEngine;
@@ -140,40 +142,66 @@ export class VisualizerComponent {
             </label>
           </div>
 
-          <!-- Mode Picker Chips -->
-          <div
-            role="radiogroup"
-            aria-label="Visualizer Style Selection"
-            style="display: flex; gap: 4px; background: rgba(0, 0, 0, 0.3); padding: 4px; border-radius: var(--radius-xl); border: 1px solid var(--glass-border); flex-wrap: wrap;"
-          >
-            ${primaryModes.map(m => {
-              const isActive = (m.id === 'off' && (!this.currentSettings.enabled || currentMode === 'off')) ||
-                (this.currentSettings.enabled && (currentMode === m.id || (m.id === 'bars' && currentMode === 'spectrum-bars') || (m.id === 'circular' && currentMode === 'circular-spectrum')));
-              return `
-                <button
-                  type="button"
-                  class="vis-mode-btn ${isActive ? 'active' : ''}"
-                  data-mode="${m.id}"
-                  role="radio"
-                  aria-checked="${isActive ? 'true' : 'false'}"
-                  tabindex="0"
-                  style="
-                    padding: 6px 14px;
-                    border-radius: var(--radius-lg);
-                    border: none;
-                    font-size: 12px;
-                    font-weight: 600;
-                    cursor: pointer;
-                    background: ${isActive ? 'var(--color-accent-gradient)' : 'transparent'};
-                    color: ${isActive ? '#ffffff' : 'var(--color-text-secondary)'};
-                    box-shadow: ${isActive ? 'var(--shadow-glow-purple)' : 'none'};
-                    transition: all var(--duration-fast) var(--ease-smooth);
-                  "
-                >
-                  ${m.label}
-                </button>
-              `;
-            }).join('')}
+          <!-- Right Toolbar: Mode Picker & 3D WebGL Studio Button -->
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <div
+              role="radiogroup"
+              aria-label="Visualizer Style Selection"
+              style="display: flex; gap: 4px; background: rgba(0, 0, 0, 0.3); padding: 4px; border-radius: var(--radius-xl); border: 1px solid var(--glass-border); flex-wrap: wrap;"
+            >
+              ${primaryModes.map(m => {
+                const isActive = (m.id === 'off' && (!this.currentSettings.enabled || currentMode === 'off')) ||
+                  (this.currentSettings.enabled && (currentMode === m.id || (m.id === 'bars' && currentMode === 'spectrum-bars') || (m.id === 'circular' && currentMode === 'circular-spectrum')));
+                return `
+                  <button
+                    type="button"
+                    class="vis-mode-btn ${isActive ? 'active' : ''}"
+                    data-mode="${m.id}"
+                    role="radio"
+                    aria-checked="${isActive ? 'true' : 'false'}"
+                    tabindex="0"
+                    style="
+                      padding: 6px 14px;
+                      border-radius: var(--radius-lg);
+                      border: none;
+                      font-size: 12px;
+                      font-weight: 600;
+                      cursor: pointer;
+                      background: ${isActive ? 'var(--color-accent-gradient)' : 'transparent'};
+                      color: ${isActive ? '#ffffff' : 'var(--color-text-secondary)'};
+                      box-shadow: ${isActive ? 'var(--shadow-glow-purple)' : 'none'};
+                      transition: all var(--duration-fast) var(--ease-smooth);
+                    "
+                  >
+                    ${m.label}
+                  </button>
+                `;
+              }).join('')}
+            </div>
+
+            <!-- 3D WebGL Studio Launch Button -->
+            <button
+              type="button"
+              id="open-3d-studio-btn"
+              style="
+                padding: 7px 16px;
+                border-radius: var(--radius-xl);
+                border: 1px solid var(--glass-border-interactive);
+                font-size: 12px;
+                font-weight: 700;
+                cursor: pointer;
+                background: linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(6, 182, 212, 0.25) 100%);
+                color: #ffffff;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                box-shadow: 0 4px 15px rgba(168, 85, 247, 0.2);
+                transition: all var(--duration-fast);
+              "
+            >
+              <span>${getIconSvg('maximize', { size: 14 })}</span>
+              <span>3D Studio (Cinema)</span>
+            </button>
           </div>
         </div>
 
@@ -294,6 +322,15 @@ export class VisualizerComponent {
           e.preventDefault();
           void selectMode();
         }
+      });
+    });
+
+    // 3. Open 3D WebGL Studio button
+    this.container.querySelector('#open-3d-studio-btn')?.addEventListener('click', () => {
+      VisualizerStudioModal.show({
+        audioEngine: this.renderer['audioEngine'],
+        playbackManager: this.playbackManager,
+        eventBus: this.eventBus
       });
     });
   }

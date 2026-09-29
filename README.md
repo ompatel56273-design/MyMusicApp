@@ -4,7 +4,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-6.2-646CFF.svg?style=flat-square&logo=vite)](https://vitejs.dev/)
-[![Vitest](https://img.shields.io/badge/Tests-788%20Passed%20(108%20Suites)-green.svg?style=flat-square&logo=vitest)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Tests-805%20Passed%20(112%20Suites)-green.svg?style=flat-square&logo=vitest)](https://vitest.dev/)
 [![Zero Dependencies](https://img.shields.io/badge/Runtime%20Dependencies-Zero%20Frameworks-success.svg?style=flat-square)](#technology-stack)
 [![License](https://img.shields.io/badge/License-Proprietary-lightgrey.svg?style=flat-square)](#license)
 
@@ -29,6 +29,7 @@
   - [12. Local Backup, Snapshot & Migration Engine (F27)](#12-local-backup-snapshot--migration-engine-f27)
   - [13. Advanced Local Tag Editor & Batch Metadata Manager (F22)](#13-advanced-local-tag-editor--batch-metadata-manager-f22)
   - [14. Native CUE Sheet Parser & Virtual Track Splitter (F23)](#14-native-cue-sheet-parser--virtual-track-splitter-f23)
+  - [15. 3D WebGL Audio Visualizer Studio & Cinema Mode (F24)](#15-3d-webgl-audio-visualizer-studio--cinema-mode-f24)
 - [System Architecture & Layering](#-system-architecture--layering)
 - [Project Directory Structure](#-project-directory-structure)
 - [Technology Stack](#-technology-stack)
@@ -185,6 +186,24 @@ Custom binary parsers implemented with pure `ArrayBuffer` and `DataView` operati
 - **Sub-Millisecond Timestamp Conversion**: $75\text{ frames/sec}$ timestamp conversion formula ($1\text{ frame} = 13.3333\dots\text{ms}$) ensuring zero boundary drift across entire multi-hour albums.
 - **Virtual Playback Engine Integration**: Seeking and time updates in `PlaybackManager` translate virtual relative offsets ($0.0\text{s}$ to virtual track duration) into physical file offsets while respecting track boundary termination ($150\text{ms}$ end-of-virtual-track threshold).
 - **Interactive Import Modal**: Local `.cue` file picker displaying metadata preview, track list, timestamp boundaries, and validation errors/warnings before committing to IndexedDB.
+
+### 15. 3D WebGL Audio Visualizer Studio & Cinema Mode (F24)
+- **Native GPU-Accelerated WebGL 2.0 Engine**: Pure WebGL 2.0 shaders written in GLSL ES 3.00 with zero external framework dependencies (no Three.js / Babylon.js overhead).
+- **5 Cinematic Procedural Presets**:
+  - **Neon Nebula**: Deep-space cosmic fractal nebula with audio-reactive luminosity, bass cloud displacement, treble starlight sparks, and beat pulse blooms.
+  - **3D Hyperspace Tunnel**: Forward-moving relativistic warp tunnel with audio speed modulation, bass expansion, and acceleration jumps.
+  - **Liquid Audio Wave**: 3D fluidic raymarched wave field with multi-harmonic frequency displacement and caustic specular reflections.
+  - **Oscilloscope Phosphor CRT**: Laboratory vector CRT scope tracing authentic time-domain audio waveforms with scanlines and phosphor decay.
+  - **Cybernetic Equalizer Ring**: Holographic radial equalizer with segmented multi-band energy arcs, rotating reticles, and shockwave pulses.
+- **Audio-Reactive Analysis Engine**: Normalized real-time computation of RMS amplitude, low (bass), mid, high (treble), overall energy, spectral intensity, and dynamic beat onset pulses with exponential smoothing. Zero allocations in the hot loop.
+- **Cinema Mode & Keyboard Controls**:
+  - `F`: Toggle Fullscreen / Cinema mode.
+  - `V`: Cycle visualizer presets in real time.
+  - `Tab`: Toggle HUD controls for distraction-free immersion.
+  - `Escape`: Exit Cinema mode cleanly.
+  - `Space`: Play / pause active track.
+- **Configurable Controls**: Real-time adjustments for Sensitivity ($0.2\times - 2.5\times$), Exponential Smoothing ($0.0 - 0.95$), Beat Boost ($0.2\times - 2.5\times$), and FPS Limiter ($30, 45, 60, 90, 120\text{ FPS}$).
+- **Hardware Fault Tolerance & Accessibility**: Bounded DPI resolution scaling ($\le 2.0\text{ DPR}$), automatic context loss/restoration handling, reduced-motion dampening, and graceful fallback notification if WebGL 2.0 is unavailable.
 
 ---
 

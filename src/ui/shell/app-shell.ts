@@ -16,6 +16,7 @@ import { SidebarComponent } from './sidebar-component';
 import { MiniPlayerComponent } from './mini-player-component';
 import { KeyboardManager } from '../keyboard/keyboard-manager';
 import { MediaSessionService } from '../../services/playback/media-session-service';
+import { VisualizerStudioModal } from '../components/visualizer/visualizer-studio-modal';
 import type {
   IPlaybackManager,
   ILibraryService,
@@ -109,7 +110,15 @@ export class AppShell {
     });
     this.keyboardManager = new KeyboardManager({
       playbackManager: deps.playbackManager,
-      router: this.router
+      router: this.router,
+      onToggleCinemaMode: () => {
+        VisualizerStudioModal.show({
+          audioEngine: deps.audioEngine,
+          playbackManager: deps.playbackManager,
+          artworkService: deps.artworkService,
+          eventBus: deps.eventBus
+        });
+      }
     });
     this.mediaSessionService = new MediaSessionService({
       playbackManager: deps.playbackManager,
