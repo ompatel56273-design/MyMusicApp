@@ -228,4 +228,75 @@ describe('GalaxyView', () => {
       durationMs: 300000
     });
   });
+
+  it('switches between Galaxy View, List View, and Map View repeatedly', async () => {
+    await view.mount(container);
+
+    const galaxyBtn = container.querySelector<HTMLButtonElement>('#galaxy-view-mode-galaxy');
+    const listBtn = container.querySelector<HTMLButtonElement>('#galaxy-toggle-accessible');
+    const mapBtn = container.querySelector<HTMLButtonElement>('#galaxy-view-mode-map');
+    const mainBody = container.querySelector<HTMLElement>('#galaxy-main-body');
+    const listNav = container.querySelector<HTMLElement>('#galaxy-accessible-nav');
+    const mapView = container.querySelector<HTMLElement>('#galaxy-map-view');
+
+    expect(galaxyBtn).not.toBeNull();
+    expect(listBtn).not.toBeNull();
+    expect(mapBtn).not.toBeNull();
+
+    // Initial state: Galaxy View
+    expect(view.getViewMode()).toBe('galaxy');
+    expect(galaxyBtn?.classList.contains('active')).toBe(true);
+    expect(mainBody?.style.display).not.toBe('none');
+    expect(mapView?.style.display).toBe('none');
+
+    // Switch to Map View
+    mapBtn?.click();
+    expect(view.getViewMode()).toBe('map');
+    expect(mapBtn?.classList.contains('active')).toBe(true);
+    expect(galaxyBtn?.classList.contains('active')).toBe(false);
+    expect(mapView?.style.display).toBe('flex');
+    expect(mainBody?.style.display).toBe('none');
+
+    // Map View rendered sectors
+    const sectorCards = container.querySelectorAll('.galaxy-map-artist-card');
+    expect(sectorCards.length).toBeGreaterThan(0);
+
+    // Switch to List View
+    listBtn?.click();
+    expect(view.getViewMode()).toBe('list');
+    expect(listBtn?.classList.contains('active')).toBe(true);
+    expect(listNav?.style.display).toBe('block');
+    expect(mapView?.style.display).toBe('none');
+
+    // Switch back to Galaxy View
+    galaxyBtn?.click();
+    expect(view.getViewMode()).toBe('galaxy');
+    expect(galaxyBtn?.classList.contains('active')).toBe(true);
+    expect(mainBody?.style.display).toBe('flex');
+
+    // Repeated switch: Map View -> Galaxy View
+    mapBtn?.click();
+    expect(view.getViewMode()).toBe('map');
+    expect(mapView?.style.display).toBe('flex');
+
+    galaxyBtn?.click();
+    expect(view.getViewMode()).toBe('galaxy');
+    expect(galaxyBtn?.classList.contains('active')).toBe(true);
+  });
+
+  it('filters sectors and star systems in Map View with in-map search', async () => {
+    await view.mount(container);
+    view.setViewMode('map');
+
+    const filterInput = container.querySelector<HTMLInputElement>('#galaxy-map-filter-input');
+    expect(filterInput).not.toBeNull();
+
+    if (filterInput) {
+      filterInput.value = 'Daft Punk';
+      filterInput.dispatchEvent(new Event('input'));
+    }
+
+    const artistCards = container.querySelectorAll('.galaxy-map-artist-card');
+    expect(artistCards.length).toBeGreaterThan(0);
+  });
 });

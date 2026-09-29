@@ -222,6 +222,9 @@ export class LibraryView implements IView {
           min-width: 0;
           width: 100%;
           box-sizing: border-box;
+          position: sticky;
+          top: var(--space-6);
+          align-self: start;
         }
 
         /* Library Header Banner (Template 3) */
@@ -682,7 +685,8 @@ export class LibraryView implements IView {
     this.inspector = new TrackInspectorComponent({
       playbackManager: this.playbackManager,
       artworkService: this.artworkService,
-      metadataEditorService: this.metadataEditorService
+      metadataEditorService: this.metadataEditorService,
+      libraryService: this.libraryService
     });
     this.inspector.mount(inspectorSlot);
   }

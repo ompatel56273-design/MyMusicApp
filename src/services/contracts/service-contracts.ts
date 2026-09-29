@@ -90,6 +90,7 @@ export interface ILibraryService {
   getLibraryStats(): Promise<{ trackCount: number; albumCount: number; artistCount: number }>;
   listGenres(options?: PaginationOptions): Promise<PaginatedResult<Genre>>;
   listFolders(parentId?: EntityId): Promise<readonly Folder[]>;
+  removeTrackFromLibrary?(trackId: EntityId): Promise<boolean>;
 }
 
 /**

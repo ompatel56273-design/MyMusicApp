@@ -12,6 +12,7 @@ import { BatchMetadataModal } from '../../components/library/batch-metadata-moda
 import { FilenameRenameModal } from '../../components/library/filename-rename-modal';
 import { NormalizationModal } from '../../components/library/normalization-modal';
 import { CueImportModal } from '../../components/library/cue-import-modal';
+import { RemoveTrackConfirmModal } from '../../components/library/remove-track-confirm-modal';
 import { getIconSvg } from '../../icons/icon-registry';
 
 export interface SongsTabViewDependencies {
@@ -217,7 +218,17 @@ export class SongsTabView {
                     playlistService: this.playlistService!
                   });
                 }
-              : undefined
+              : undefined,
+            onRemove: t => {
+              void RemoveTrackConfirmModal.show({
+                track: t,
+                libraryService: this.libraryService,
+                playbackManager: this.playbackManager,
+                onRemoved: () => {
+                  void this.loadTracks();
+                }
+              });
+            }
           },
           this.artworkService
         );

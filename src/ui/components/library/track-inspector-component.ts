@@ -1,15 +1,17 @@
 import type { Track } from '../../../domain/entities/models';
-import type { IArtworkService, IPlaybackManager } from '../../../services/contracts/service-contracts';
+import type { IArtworkService, IPlaybackManager, ILibraryService } from '../../../services/contracts/service-contracts';
 import { getIconSvg } from '../../icons/icon-registry';
 import { escapeHtml } from '../../../core/security/html-sanitizer';
 
 import type { MetadataEditorService } from '../../../services/metadata-editor/metadata-editor-service';
 import { SingleTrackMetadataModal } from './single-track-metadata-modal';
+import { RemoveTrackConfirmModal } from './remove-track-confirm-modal';
 
 export interface TrackInspectorDependencies {
   playbackManager?: IPlaybackManager | undefined;
   artworkService?: IArtworkService | undefined;
   metadataEditorService?: MetadataEditorService | undefined;
+  libraryService?: ILibraryService | undefined;
 }
 
 /**
@@ -21,12 +23,14 @@ export class TrackInspectorComponent {
   private readonly playbackManager?: IPlaybackManager | undefined;
   private readonly artworkService?: IArtworkService | undefined;
   private readonly metadataEditorService?: MetadataEditorService | undefined;
+  private readonly libraryService?: ILibraryService | undefined;
   private selectedTrack: Track | null = null;
 
   constructor(deps: TrackInspectorDependencies) {
     this.playbackManager = deps.playbackManager;
     this.artworkService = deps.artworkService;
     this.metadataEditorService = deps.metadataEditorService;
+    this.libraryService = deps.libraryService;
   }
 
   public mount(container: HTMLElement): void {
@@ -144,6 +148,20 @@ export class TrackInspectorComponent {
         });
       });
     }
+
+    if (track && this.libraryService) {
+      this.container.querySelector('#inspector-remove-track-btn')?.addEventListener('click', () => {
+        void RemoveTrackConfirmModal.show({
+          track,
+          libraryService: this.libraryService!,
+          playbackManager: this.playbackManager,
+          onRemoved: () => {
+            this.selectedTrack = null;
+            this.render();
+          }
+        });
+      });
+    }
   }
 
   private renderTrackDetails(track: Track): string {
@@ -200,15 +218,27 @@ export class TrackInspectorComponent {
         </div>
       </div>
 
-      ${this.metadataEditorService ? `
-        <button
-          id="inspector-edit-meta-btn"
-          style="width: 100%; padding: 8px 14px; background: rgba(168, 85, 247, 0.15); border: 1px solid var(--glass-border-interactive); border-radius: var(--radius-lg); color: var(--color-accent-purple-glow); font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 4px; transition: all var(--duration-fast);"
-        >
-          <span>${getIconSvg('edit', { size: 14 })}</span>
-          <span>Edit Metadata</span>
-        </button>
-      ` : ''}
+      <div style="display: flex; gap: 8px; margin-top: 4px;">
+        ${this.metadataEditorService ? `
+          <button
+            id="inspector-edit-meta-btn"
+            style="flex: 1; padding: 8px 12px; background: rgba(168, 85, 247, 0.15); border: 1px solid var(--glass-border-interactive); border-radius: var(--radius-lg); color: var(--color-accent-purple-glow); font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all var(--duration-fast);"
+          >
+            <span>${getIconSvg('edit', { size: 13 })}</span>
+            <span>Edit</span>
+          </button>
+        ` : ''}
+        ${this.libraryService ? `
+          <button
+            id="inspector-remove-track-btn"
+            title="Remove from Library"
+            style="padding: 8px 12px; background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.3); border-radius: var(--radius-lg); color: #f43f5e; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all var(--duration-fast);"
+          >
+            <span>${getIconSvg('trash', { size: 13 })}</span>
+            <span>Remove</span>
+          </button>
+        ` : ''}
+      </div>
     `;
   }
 

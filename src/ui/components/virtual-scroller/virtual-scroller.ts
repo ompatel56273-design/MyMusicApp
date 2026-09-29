@@ -200,8 +200,6 @@ export class VirtualScroller<T> {
     }
 
     // Mount/Render new items inside the window
-    // Clear and re-append in deterministic sequence
-    const fragment = document.createDocumentFragment();
     for (let i = startIndex; i < endIndex; i++) {
       const item = this.items[i]!;
       let entry = this.renderedElements.get(i);
@@ -211,11 +209,18 @@ export class VirtualScroller<T> {
         entry = { element: el, item };
         this.renderedElements.set(i, entry);
       }
-      fragment.appendChild(entry.element);
     }
 
-    this.contentEl.innerHTML = '';
-    this.contentEl.appendChild(fragment);
+    // Reconcile DOM children in deterministic sequence without clearing innerHTML
+    let currentChild = this.contentEl.firstChild as HTMLElement | null;
+    for (let i = startIndex; i < endIndex; i++) {
+      const targetEl = this.renderedElements.get(i)!.element;
+      if (currentChild !== targetEl) {
+        this.contentEl.insertBefore(targetEl, currentChild);
+      } else {
+        currentChild = currentChild.nextSibling as HTMLElement | null;
+      }
+    }
   }
 
   private unmountAllRendered(): void {

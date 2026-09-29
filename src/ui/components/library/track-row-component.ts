@@ -10,6 +10,7 @@ export interface TrackRowCallbacks {
   onAddToQueue?: ((track: Track) => void) | undefined;
   onAddToPlaylist?: ((track: Track) => void) | undefined;
   onInspect?: ((track: Track) => void) | undefined;
+  onRemove?: ((track: Track) => void) | undefined;
 }
 
 export class TrackRowComponent {
@@ -89,10 +90,21 @@ export class TrackRowComponent {
           class="track-fav-btn"
           aria-label="${track.isFavorite ? 'Remove from favorites' : 'Add to favorites'}"
           aria-pressed="${track.isFavorite}"
+          title="${track.isFavorite ? 'Remove from favorites' : 'Add to favorites'}"
           style="background: transparent; border: none; cursor: pointer; color: ${track.isFavorite ? 'var(--color-accent-pink)' : 'var(--color-text-muted)'}; padding: 4px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: all 0.15s ease;"
         >
           ${getIconSvg(track.isFavorite ? 'heart-filled' : 'heart', { size: 18, color: track.isFavorite ? 'var(--color-accent-pink)' : 'currentColor' })}
         </button>
+        ${callbacks.onRemove ? `
+        <button
+          class="track-remove-btn"
+          aria-label="Remove ${escapeHtml(track.title)} from library"
+          title="Remove from library"
+          style="background: transparent; border: none; cursor: pointer; color: var(--color-text-muted); padding: 4px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: all 0.15s ease;"
+        >
+          ${getIconSvg('trash', { size: 16 })}
+        </button>
+        ` : ''}
       </div>
     `;
 
@@ -119,7 +131,7 @@ export class TrackRowComponent {
     if (!isMissing) {
       row.addEventListener('click', e => {
         const target = e.target as HTMLElement;
-        if (target && (target.closest('.track-fav-btn') || target.closest('.track-add-playlist-btn'))) return;
+        if (target && (target.closest('.track-fav-btn') || target.closest('.track-add-playlist-btn') || target.closest('.track-remove-btn'))) return;
         callbacks.onPlay(track);
         callbacks.onInspect?.(track);
       });
@@ -143,6 +155,12 @@ export class TrackRowComponent {
     addPlBtn?.addEventListener('click', e => {
       e.stopPropagation();
       callbacks.onAddToPlaylist?.(track);
+    });
+
+    const removeBtn = row.querySelector('.track-remove-btn');
+    removeBtn?.addEventListener('click', e => {
+      e.stopPropagation();
+      callbacks.onRemove?.(track);
     });
 
     return row;

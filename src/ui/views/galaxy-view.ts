@@ -52,11 +52,15 @@ export class GalaxyView implements IView {
   private readonly deps?: GalaxyViewDependencies | undefined;
   private currentGraph: GalaxyGraph | null = null;
   private selectedNode: GalaxyNode | null = null;
-  private isAccessibleViewOpen = false;
+  private viewMode: 'galaxy' | 'list' | 'map' = 'galaxy';
   private keyboardFocusIndex = 0;
 
   public getSelectedNode(): GalaxyNode | null {
     return this.selectedNode;
+  }
+
+  public getViewMode(): 'galaxy' | 'list' | 'map' {
+    return this.viewMode;
   }
 
   constructor(deps?: GalaxyViewDependencies) {
@@ -274,7 +278,7 @@ export class GalaxyView implements IView {
         </header>
 
         <!-- Main Workspace (Canvas + Explore Side Panel) -->
-        <div class="galaxy-main-body" style="
+        <div class="galaxy-main-body" id="galaxy-main-body" style="
           flex: 1;
           display: flex;
           position: relative;
@@ -475,6 +479,63 @@ export class GalaxyView implements IView {
           </div>
           <div id="galaxy-accessible-list"></div>
         </nav>
+
+        <!-- Constellation Sector Map View (Template 10 Map Mode) -->
+        <div
+          id="galaxy-map-view"
+          aria-label="Constellation Sector Map"
+          style="
+            display: none;
+            position: absolute;
+            inset: 69px 0 0 0;
+            background: #06060a;
+            padding: 24px 32px;
+            overflow-y: auto;
+            z-index: 25;
+            box-sizing: border-box;
+            flex-direction: column;
+            gap: 20px;
+          "
+        >
+          <!-- Map View Header Toolbar -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 36px; height: 36px; border-radius: var(--radius-full, 9999px); background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(124, 58, 237, 0.3)); border: 1px solid rgba(56, 189, 248, 0.4); display: flex; align-items: center; justify-content: center; color: var(--accent-cyan, #38bdf8); font-size: 18px;">
+                🗺️
+              </div>
+              <div>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #ffffff;">Constellation Sector Map</h3>
+                <span id="galaxy-map-stats-badge" style="font-size: 12px; color: var(--color-text-secondary, #94a3b8);">
+                  Topological Constellations & Star Systems
+                </span>
+              </div>
+            </div>
+
+            <!-- In-Map Search & Filter -->
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <input
+                type="text"
+                id="galaxy-map-filter-input"
+                placeholder="Filter sectors & star systems..."
+                aria-label="Filter Constellation Map"
+                style="
+                  padding: 8px 16px;
+                  border-radius: var(--radius-full, 9999px);
+                  background: rgba(255, 255, 255, 0.06);
+                  border: 1px solid rgba(255, 255, 255, 0.12);
+                  color: #ffffff;
+                  font-size: 12px;
+                  outline: none;
+                  width: 240px;
+                  transition: all 0.2s ease;
+                "
+              />
+            </div>
+          </div>
+
+          <!-- Map Sectors Grid -->
+          <div id="galaxy-map-sectors-container" style="display: flex; flex-direction: column; gap: 24px; width: 100%;"></div>
+        </div>
       </section>
     `;
   }
@@ -783,10 +844,24 @@ export class GalaxyView implements IView {
     const zoomOutBtn = this.container.querySelector<HTMLButtonElement>('#galaxy-zoom-out');
     const resetBtn = this.container.querySelector<HTMLButtonElement>('#galaxy-reset-camera');
     const searchInput = this.container.querySelector<HTMLInputElement>('#galaxy-search-input');
-    const toggleAccessibleBtn = this.container.querySelector<HTMLButtonElement>('#galaxy-toggle-accessible');
-    const closeAccessibleBtn = this.container.querySelector<HTMLButtonElement>('#galaxy-close-accessible');
     const exploreNowBtn = this.container.querySelector<HTMLButtonElement>('#galaxy-explore-now-btn');
     const canvas = this.container.querySelector<HTMLCanvasElement>('#galaxy-canvas');
+
+    // View Mode Switchers
+    const galaxyViewBtn = this.container.querySelector<HTMLButtonElement>('#galaxy-view-mode-galaxy');
+    const toggleAccessibleBtn = this.container.querySelector<HTMLButtonElement>('#galaxy-toggle-accessible');
+    const mapViewBtn = this.container.querySelector<HTMLButtonElement>('#galaxy-view-mode-map');
+    const closeAccessibleBtn = this.container.querySelector<HTMLButtonElement>('#galaxy-close-accessible');
+    const mapFilterInput = this.container.querySelector<HTMLInputElement>('#galaxy-map-filter-input');
+
+    galaxyViewBtn?.addEventListener('click', () => this.setViewMode('galaxy'));
+    toggleAccessibleBtn?.addEventListener('click', () => this.setViewMode('list'));
+    mapViewBtn?.addEventListener('click', () => this.setViewMode('map'));
+    closeAccessibleBtn?.addEventListener('click', () => this.setViewMode('galaxy'));
+
+    mapFilterInput?.addEventListener('input', () => {
+      this.renderMapView(mapFilterInput.value);
+    });
 
     zoomInBtn?.addEventListener('click', () => this.canvasRenderer?.zoomIn());
     zoomOutBtn?.addEventListener('click', () => this.canvasRenderer?.zoomOut());
@@ -828,18 +903,6 @@ export class GalaxyView implements IView {
           void this.detailPanel?.setNode(node);
         }
       }
-    });
-
-    // Accessible view toggles
-    const navEl = this.container.querySelector<HTMLElement>('#galaxy-accessible-nav');
-    toggleAccessibleBtn?.addEventListener('click', () => {
-      this.isAccessibleViewOpen = !this.isAccessibleViewOpen;
-      if (navEl) navEl.style.display = this.isAccessibleViewOpen ? 'block' : 'none';
-    });
-
-    closeAccessibleBtn?.addEventListener('click', () => {
-      this.isAccessibleViewOpen = false;
-      if (navEl) navEl.style.display = 'none';
     });
 
     // Keyboard navigation
@@ -893,6 +956,282 @@ export class GalaxyView implements IView {
           void this.handleQuickPlay(nodeToPlay);
         }
       }
+    });
+  }
+
+  public setViewMode(mode: 'galaxy' | 'list' | 'map'): void {
+    this.viewMode = mode;
+
+    if (!this.container) return;
+
+    // 1. Update button states
+    const galaxyBtn = this.container.querySelector<HTMLButtonElement>('#galaxy-view-mode-galaxy');
+    const listBtn = this.container.querySelector<HTMLButtonElement>('#galaxy-toggle-accessible');
+    const mapBtn = this.container.querySelector<HTMLButtonElement>('#galaxy-view-mode-map');
+
+    if (galaxyBtn) {
+      galaxyBtn.className = `galaxy-header-pill ${mode === 'galaxy' ? 'active' : ''}`;
+    }
+    if (listBtn) {
+      listBtn.className = `galaxy-header-pill ${mode === 'list' ? 'active' : ''}`;
+    }
+    if (mapBtn) {
+      mapBtn.className = `galaxy-header-pill ${mode === 'map' ? 'active' : ''}`;
+    }
+
+    // 2. Toggle viewport visibility
+    const mainBody = this.container.querySelector<HTMLElement>('#galaxy-main-body');
+    const accessibleNav = this.container.querySelector<HTMLElement>('#galaxy-accessible-nav');
+    const mapView = this.container.querySelector<HTMLElement>('#galaxy-map-view');
+
+    if (mainBody) mainBody.style.display = mode === 'galaxy' ? 'flex' : 'none';
+    if (accessibleNav) accessibleNav.style.display = mode === 'list' ? 'block' : 'none';
+    if (mapView) mapView.style.display = mode === 'map' ? 'flex' : 'none';
+
+    if (mode === 'galaxy') {
+      this.canvasRenderer?.resize();
+      this.canvasRenderer?.requestRedraw();
+    } else if (mode === 'list') {
+      this.renderAccessibleList();
+    } else if (mode === 'map') {
+      this.renderMapView();
+    }
+  }
+
+  private renderMapView(filterQuery = ''): void {
+    if (!this.container || !this.currentGraph) return;
+    const container = this.container.querySelector<HTMLElement>('#galaxy-map-sectors-container');
+    const statsBadge = this.container.querySelector<HTMLElement>('#galaxy-map-stats-badge');
+    if (!container) return;
+
+    const query = filterQuery.toLowerCase().trim();
+
+    const genres = this.currentGraph.nodes.filter(n => n.type === 'genre');
+    const artists = this.currentGraph.nodes.filter(n => n.type === 'artist');
+    const albums = this.currentGraph.nodes.filter(n => n.type === 'album');
+    const edges = this.currentGraph.edges;
+
+    if (statsBadge) {
+      statsBadge.textContent = `${genres.length} Sectors • ${artists.length} Star Systems • ${albums.length} Orbital Clusters • ${this.currentGraph.nodes.length} Constellations`;
+    }
+
+    if (genres.length === 0 && artists.length === 0) {
+      container.innerHTML = `
+        <div style="padding: 48px; text-align: center; color: var(--color-text-muted, #94a3b8);">
+          <div style="font-size: 36px; margin-bottom: 12px;">🗺️</div>
+          <h4 style="font-size: 16px; color: #ffffff; margin-bottom: 8px;">No Constellation Sectors Mapped</h4>
+          <p style="font-size: 13px; max-width: 400px; margin: 0 auto;">Scan your local music files to generate the cosmic sector map.</p>
+        </div>
+      `;
+      return;
+    }
+
+    // Group artists by genre
+    const sectorGroups: Array<{
+      genre: GalaxyNode | null;
+      sectorName: string;
+      color: string;
+      artists: GalaxyNode[];
+      trackCount: number;
+    }> = [];
+
+    // Map each genre node to its connected artists
+    for (const genre of genres) {
+      const connectedArtistIds = new Set<string>();
+      edges.filter(e => e.sourceId === genre.id || e.targetId === genre.id).forEach(e => {
+        if (e.sourceId !== genre.id && e.sourceId.startsWith('artist:')) connectedArtistIds.add(e.sourceId);
+        if (e.targetId !== genre.id && e.targetId.startsWith('artist:')) connectedArtistIds.add(e.targetId);
+      });
+
+      let sectorArtists = artists.filter(a => connectedArtistIds.has(a.id) || a.metadata.genreName === genre.label);
+      if (sectorArtists.length === 0) {
+        sectorArtists = artists.filter(a => (a as any).genreId === genre.entityId);
+      }
+
+      if (query) {
+        sectorArtists = sectorArtists.filter(a =>
+          a.label.toLowerCase().includes(query) ||
+          genre.label.toLowerCase().includes(query)
+        );
+        if (sectorArtists.length === 0 && !genre.label.toLowerCase().includes(query)) {
+          continue;
+        }
+      }
+
+      sectorGroups.push({
+        genre,
+        sectorName: `${genre.label} Sector`,
+        color: genre.color || '#a855f7',
+        artists: sectorArtists,
+        trackCount: genre.metadata.trackCount ?? 0
+      });
+    }
+
+    // Catch-all sector for unclassified artists
+    const mappedArtistIds = new Set(sectorGroups.flatMap(s => s.artists.map(a => a.id)));
+    let unmappedArtists = artists.filter(a => !mappedArtistIds.has(a.id));
+    if (query) {
+      unmappedArtists = unmappedArtists.filter(a => a.label.toLowerCase().includes(query));
+    }
+    if (unmappedArtists.length > 0) {
+      sectorGroups.push({
+        genre: null,
+        sectorName: 'Deep Space Constellations',
+        color: '#38bdf8',
+        artists: unmappedArtists,
+        trackCount: unmappedArtists.reduce((acc, a) => acc + (a.metadata.trackCount ?? 0), 0)
+      });
+    }
+
+    container.innerHTML = sectorGroups.map(sector => `
+      <div class="glass-panel" style="
+        border-radius: var(--radius-2xl, 20px);
+        background: linear-gradient(135deg, rgba(15, 18, 32, 0.85) 0%, rgba(8, 10, 20, 0.95) 100%);
+        border: 1px solid ${sector.color}44;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 16px ${sector.color}22;
+        padding: 20px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      ">
+        <!-- Sector Banner -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="
+              width: 32px;
+              height: 32px;
+              border-radius: 8px;
+              background: ${sector.color}33;
+              border: 1px solid ${sector.color};
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 14px;
+              color: ${sector.color};
+              font-weight: 700;
+            ">✦</div>
+            <div>
+              <h4 style="margin: 0; font-size: 16px; font-weight: 700; color: #ffffff;">${this.escapeHtml(sector.sectorName)}</h4>
+              <span style="font-size: 11px; color: var(--color-text-muted, #94a3b8);">
+                ${sector.artists.length} Star Systems • ${sector.trackCount} Tracks
+              </span>
+            </div>
+          </div>
+          ${sector.genre ? `
+            <button class="galaxy-map-play-genre-btn" data-node-id="${this.escapeHtml(sector.genre.id)}" style="
+              padding: 6px 14px;
+              border-radius: var(--radius-full, 9999px);
+              background: ${sector.color}22;
+              border: 1px solid ${sector.color}66;
+              color: #ffffff;
+              font-size: 11px;
+              font-weight: 600;
+              cursor: pointer;
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+              transition: all 0.15s ease;
+            ">
+              <span>▶</span>
+              <span>Play Sector</span>
+            </button>
+          ` : ''}
+        </div>
+
+        <!-- Star Systems Grid -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px;">
+          ${sector.artists.map(a => `
+            <div class="galaxy-map-artist-card glass-panel" data-node-id="${this.escapeHtml(a.id)}" style="
+              padding: 12px 14px;
+              border-radius: var(--radius-xl, 14px);
+              background: rgba(255, 255, 255, 0.03);
+              border: 1px solid rgba(255, 255, 255, 0.08);
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              cursor: pointer;
+              transition: all 0.15s ease;
+            ">
+              <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;">
+                <div style="
+                  width: 32px;
+                  height: 32px;
+                  border-radius: var(--radius-full, 9999px);
+                  background: linear-gradient(135deg, ${a.color}55, #1e1b4b);
+                  border: 1px solid ${a.color};
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  font-size: 12px;
+                  color: #ffffff;
+                  flex-shrink: 0;
+                ">★</div>
+                <div style="min-width: 0; flex: 1;">
+                  <div style="font-size: 13px; font-weight: 600; color: #ffffff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    ${this.escapeHtml(a.label)}
+                  </div>
+                  <div style="font-size: 11px; color: var(--color-text-muted, #94a3b8);">
+                    ${a.metadata.albumCount ?? 0} albums • ${a.metadata.trackCount ?? 0} tracks
+                  </div>
+                </div>
+              </div>
+              <button class="galaxy-map-play-node-btn" data-node-id="${this.escapeHtml(a.id)}" title="Play ${this.escapeHtml(a.label)}" style="
+                background: transparent;
+                border: none;
+                color: var(--color-text-muted, #94a3b8);
+                cursor: pointer;
+                padding: 6px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-full, 9999px);
+              ">
+                ▶
+              </button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    // Attach listeners
+    container.querySelectorAll<HTMLElement>('.galaxy-map-artist-card').forEach(card => {
+      card.addEventListener('click', e => {
+        const target = e.target as HTMLElement;
+        if (target.closest('.galaxy-map-play-node-btn')) return;
+        const nodeId = card.getAttribute('data-node-id');
+        if (nodeId && this.currentGraph) {
+          const node = this.currentGraph.nodes.find(n => n.id === nodeId);
+          if (node) {
+            this.selectedNode = node;
+            this.canvasRenderer?.setSelectedNode(node.id);
+            this.canvasRenderer?.setFocusedNode(node.id);
+            void this.detailPanel?.setNode(node);
+          }
+        }
+      });
+    });
+
+    container.querySelectorAll<HTMLButtonElement>('.galaxy-map-play-node-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const nodeId = btn.getAttribute('data-node-id');
+        if (nodeId && this.currentGraph) {
+          const node = this.currentGraph.nodes.find(n => n.id === nodeId);
+          if (node) void this.handleQuickPlay(node);
+        }
+      });
+    });
+
+    container.querySelectorAll<HTMLButtonElement>('.galaxy-map-play-genre-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const nodeId = btn.getAttribute('data-node-id');
+        if (nodeId && this.currentGraph) {
+          const node = this.currentGraph.nodes.find(n => n.id === nodeId);
+          if (node) void this.handleQuickPlay(node);
+        }
+      });
     });
   }
 
@@ -957,9 +1296,7 @@ export class GalaxyView implements IView {
             this.canvasRenderer?.setSelectedNode(node.id);
             this.canvasRenderer?.setFocusedNode(node.id);
             void this.detailPanel?.setNode(node);
-            this.isAccessibleViewOpen = false;
-            const navEl = this.container?.querySelector<HTMLElement>('#galaxy-accessible-nav');
-            if (navEl) navEl.style.display = 'none';
+            this.setViewMode('galaxy');
           }
         }
       });
@@ -1010,6 +1347,9 @@ export class GalaxyView implements IView {
         this.currentGraph = await this.deps.galaxyService.getGraph();
         this.canvasRenderer?.setGraph(this.currentGraph);
         this.renderAccessibleList();
+        if (this.viewMode === 'map') {
+          this.renderMapView();
+        }
         await this.renderExplorePanels();
       }
     };

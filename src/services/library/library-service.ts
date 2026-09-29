@@ -149,4 +149,24 @@ export class LibraryService implements ILibraryService {
       artistCount
     };
   }
+
+  public async removeTrackFromLibrary(trackId: EntityId): Promise<boolean> {
+    const track = await this.trackRepo.getById(trackId);
+    if (!track) {
+      this.logger.warn(`Cannot remove nonexistent track: ${trackId}`);
+      return false;
+    }
+
+    // 1. Delete track record from library database
+    await this.trackRepo.delete(trackId);
+    this.logger.info(`Removed track record from library: ${trackId} ("${track.title}")`);
+
+    // 2. Publish DomainEvents to refresh UI across all components
+    this.eventBus.publish(DomainEvents.LIBRARY_UPDATED, {
+      type: 'track_removed',
+      trackId
+    });
+
+    return true;
+  }
 }

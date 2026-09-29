@@ -50,6 +50,7 @@ describe('LibraryService', () => {
       getById: vi.fn((id: string) => Promise.resolve(id === 'track_1' ? sampleTrack : null)),
       list: vi.fn().mockResolvedValue({ items: [sampleTrack], total: 1, offset: 0, limit: 50 }),
       setFavorite: vi.fn().mockResolvedValue(undefined),
+      delete: vi.fn().mockResolvedValue(undefined),
       count: vi.fn().mockResolvedValue(42)
     };
 
@@ -102,5 +103,22 @@ describe('LibraryService', () => {
     expect(stats.trackCount).toBe(42);
     expect(stats.albumCount).toBe(5);
     expect(stats.artistCount).toBe(3);
+  });
+
+  it('should remove track from library repository and broadcast LIBRARY_UPDATED event', async () => {
+    let emittedEvent: any = null;
+    eventBus.subscribe(DomainEvents.LIBRARY_UPDATED, (data: any) => {
+      emittedEvent = data;
+    });
+
+    const success = await libraryService.removeTrackFromLibrary('track_1');
+    expect(success).toBe(true);
+    expect(mockTrackRepo.delete).toHaveBeenCalledWith('track_1');
+    expect(emittedEvent).toEqual({ type: 'track_removed', trackId: 'track_1' });
+  });
+
+  it('should return false when trying to remove a nonexistent track', async () => {
+    const success = await libraryService.removeTrackFromLibrary('nonexistent_track');
+    expect(success).toBe(false);
   });
 });

@@ -312,9 +312,22 @@ export class MockElement {
     return child;
   }
 
-  public insertBefore<T extends MockElement>(child: T, _refNode: MockElement | null): T {
+  public insertBefore<T extends MockElement>(child: T, refNode: MockElement | null): T {
+    const existingIdx = this.children.indexOf(child);
+    if (existingIdx !== -1) {
+      this.children.splice(existingIdx, 1);
+    }
     child.parent = this;
-    this.children.unshift(child);
+    if (!refNode) {
+      this.children.push(child);
+    } else {
+      const idx = this.children.indexOf(refNode);
+      if (idx !== -1) {
+        this.children.splice(idx, 0, child);
+      } else {
+        this.children.push(child);
+      }
+    }
     return child;
   }
 
