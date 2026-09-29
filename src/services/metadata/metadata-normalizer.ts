@@ -41,7 +41,7 @@ export class MetadataNormalizer {
 
       if (!rawTitle && rawArtist) {
         // Artist is known, use baseName as title fallback
-        rawTitle = baseName;
+        rawTitle = baseName.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
       } else if (!rawTitle || !rawArtist) {
         // Pattern: "01 - Artist - Title" or "Artist - Title"
         const matchWithTrack = baseName.match(/^(\d+)[\s._-]+\s*(.+?)\s+-\s+(.+)$/);
@@ -49,13 +49,19 @@ export class MetadataNormalizer {
 
         if (matchWithTrack) {
           extractedTrackNumber = parseInt(matchWithTrack[1]!, 10);
-          if (!rawArtist) rawArtist = matchWithTrack[2]!.trim();
-          if (!rawTitle) rawTitle = matchWithTrack[3]!.trim();
+          if (!rawArtist) rawArtist = matchWithTrack[2]!.replace(/_/g, ' ').trim();
+          if (!rawTitle) rawTitle = matchWithTrack[3]!.replace(/_/g, ' ').trim();
         } else if (matchSimple) {
-          if (!rawArtist) rawArtist = matchSimple[1]!.trim();
-          if (!rawTitle) rawTitle = matchSimple[2]!.trim();
+          if (!rawArtist) rawArtist = matchSimple[1]!.replace(/_/g, ' ').trim();
+          if (!rawTitle) rawTitle = matchSimple[2]!.replace(/_/g, ' ').trim();
         } else if (!rawTitle) {
-          rawTitle = baseName;
+          // Check for track prefix e.g. "01_Title"
+          const prefixMatch = baseName.match(/^(\d+)[\s._-]+(.+)$/);
+          if (prefixMatch && prefixMatch[2]) {
+            rawTitle = prefixMatch[2].replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+          } else {
+            rawTitle = baseName.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+          }
         }
       }
     }

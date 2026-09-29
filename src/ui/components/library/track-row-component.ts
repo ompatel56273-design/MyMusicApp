@@ -2,6 +2,7 @@ import type { Track } from '../../../domain/entities/models';
 import type { IArtworkService } from '../../../services/contracts/service-contracts';
 import { escapeHtml } from '../../../core/security/html-sanitizer';
 import { getIconSvg } from '../../icons/icon-registry';
+import { resolveDisplayTitle } from '../../../domain/utils/title-resolver';
 
 export interface TrackRowCallbacks {
   onPlay: (track: Track) => void;
@@ -21,12 +22,13 @@ export class TrackRowComponent {
     artworkService?: IArtworkService,
     isPlaying: boolean = false
   ): HTMLElement {
+    const displayTitle = resolveDisplayTitle(track);
     const row = document.createElement('div');
     row.className = `track-row ${track.availability === 'missing' ? 'track-missing' : ''} ${isPlaying ? 'track-row-playing' : ''}`;
     row.setAttribute('role', 'row');
     row.setAttribute('tabindex', '0');
     row.setAttribute('data-track-id', track.id);
-    row.setAttribute('aria-label', `${track.title} by ${track.artistName ?? 'Unknown Artist'}`);
+    row.setAttribute('aria-label', `${displayTitle} by ${track.artistName ?? 'Unknown Artist'}`);
 
     const isMissing = track.availability === 'missing';
     const durationStr = TrackRowComponent.formatDuration(track.durationMs);
@@ -54,8 +56,8 @@ export class TrackRowComponent {
       </div>
 
       <div style="display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
-        <span class="track-title-text" title="${escapeHtml(track.title)}" style="font-size: 13px; font-weight: var(--font-weight-semibold); color: ${isPlaying ? 'var(--color-accent-cyan)' : 'var(--color-text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-          ${escapeHtml(track.title)}
+        <span class="track-title-text" title="${escapeHtml(displayTitle)}" style="font-size: 13px; font-weight: var(--font-weight-semibold); color: ${isPlaying ? 'var(--color-accent-cyan)' : 'var(--color-text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          ${escapeHtml(displayTitle)}
         </span>
       </div>
 
@@ -79,7 +81,7 @@ export class TrackRowComponent {
         ${callbacks.onAddToPlaylist ? `
         <button
           class="track-add-playlist-btn"
-          aria-label="Add ${escapeHtml(track.title)} to playlist"
+          aria-label="Add ${escapeHtml(displayTitle)} to playlist"
           title="Add to playlist"
           style="background: transparent; border: none; cursor: pointer; color: var(--color-text-muted); padding: 4px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: all 0.15s ease;"
         >
@@ -98,7 +100,7 @@ export class TrackRowComponent {
         ${callbacks.onRemove ? `
         <button
           class="track-remove-btn"
-          aria-label="Remove ${escapeHtml(track.title)} from library"
+          aria-label="Remove ${escapeHtml(displayTitle)} from library"
           title="Remove from library"
           style="background: transparent; border: none; cursor: pointer; color: var(--color-text-muted); padding: 4px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: all 0.15s ease;"
         >

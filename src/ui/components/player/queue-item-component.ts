@@ -2,6 +2,7 @@ import type { Track } from '../../../domain/entities/models';
 import type { IArtworkService } from '../../../services/contracts/service-contracts';
 import { getIconSvg } from '../../icons/icon-registry';
 import { escapeHtml } from '../../../core/security/html-sanitizer';
+import { resolveDisplayTitle } from '../../../domain/utils/title-resolver';
 
 export interface QueueItemCallbacks {
   onPlay: (index: number) => void;
@@ -39,12 +40,13 @@ export class QueueItemComponent {
       artworkService = arg5 as IArtworkService;
     }
 
+    const displayTitle = resolveDisplayTitle(track);
     const row = document.createElement('div');
     row.className = `queue-item-row ${isActive ? 'queue-item-active' : ''}`;
     row.setAttribute('role', 'listitem');
     row.setAttribute('tabindex', '0');
     row.setAttribute('data-queue-index', String(index));
-    row.setAttribute('aria-label', `${isActive ? 'Now Playing: ' : ''}${track.title} by ${track.artistName ?? 'Unknown'}`);
+    row.setAttribute('aria-label', `${isActive ? 'Now Playing: ' : ''}${displayTitle} by ${track.artistName ?? 'Unknown'}`);
 
     const durationStr = QueueItemComponent.formatDuration(track.durationMs);
 
@@ -79,8 +81,8 @@ export class QueueItemComponent {
       </div>
 
       <div style="display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
-        <span style="font-size: var(--font-size-xs); font-weight: ${isActive ? 'var(--font-weight-bold)' : 'var(--font-weight-medium)'}; color: ${isActive ? '#ffffff' : 'var(--color-text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-          ${escapeHtml(track.title)}
+        <span title="${escapeHtml(displayTitle)}" style="font-size: var(--font-size-xs); font-weight: ${isActive ? 'var(--font-weight-bold)' : 'var(--font-weight-medium)'}; color: ${isActive ? '#ffffff' : 'var(--color-text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          ${escapeHtml(displayTitle)}
         </span>
         <span style="font-size: 11px; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;">
           ${escapeHtml(track.artistName ?? 'Unknown Artist')}

@@ -102,6 +102,10 @@ export class SettingsView implements IView {
   private eventBusSubs: Disposable[] = [];
   private connectedFolderName: string | null = null;
   private activeSection: SettingsSectionId = 'music-access';
+  private mobileView: 'menu' | 'detail' = 'menu';
+  private selectedMobileSection: SettingsSectionId | null = null;
+  private scrollObserver: IntersectionObserver | null = null;
+  private isProgrammaticScrolling = false;
 
   private readonly sections: SectionNavItem[] = [
     { id: 'music-access', label: 'Local Music Access', icon: 'folder' },
@@ -140,11 +144,18 @@ export class SettingsView implements IView {
     const requestedSection = (params as any)?.section || (params?.tab as any);
     if (requestedSection && this.sections.some(s => s.id === requestedSection)) {
       this.activeSection = requestedSection as SettingsSectionId;
+      this.selectedMobileSection = requestedSection as SettingsSectionId;
+      this.mobileView = 'detail';
+    } else {
+      this.mobileView = 'menu';
+      this.selectedMobileSection = null;
     }
 
     this.render();
+    this.updateMobileViewDom();
     this.mountSubComponents();
     this.attachNavigationEvents();
+    this.setupScrollObserver();
     this.attachThemeListeners();
     this.attachPlaybackSettingsListeners();
     this.attachVisualizerSettingsListeners();
@@ -159,6 +170,10 @@ export class SettingsView implements IView {
   }
 
   public unmount(): void {
+    if (this.scrollObserver) {
+      this.scrollObserver.disconnect();
+      this.scrollObserver = null;
+    }
     if (this.themeUnsub) {
       this.themeUnsub();
       this.themeUnsub = null;
@@ -212,6 +227,7 @@ export class SettingsView implements IView {
     const requestedSection = (params as any)?.section || (params?.tab as any);
     if (requestedSection && this.sections.some(s => s.id === requestedSection)) {
       this.switchToSection(requestedSection as SettingsSectionId);
+      this.openMobileSection(requestedSection as SettingsSectionId);
     }
   }
 
@@ -395,6 +411,9 @@ export class SettingsView implements IView {
           flex-direction: column;
           gap: var(--space-4);
           box-sizing: border-box;
+          position: sticky;
+          top: var(--space-4);
+          align-self: start;
         }
 
         .settings-info-card {
@@ -742,26 +761,37 @@ export class SettingsView implements IView {
             gap: var(--space-4);
           }
           .settings-sidebar-info {
-            display: none;
+            display: none !important;
           }
           .settings-nav-panel {
-            position: static;
-            flex-direction: row;
-            overflow-x: auto;
-            border-radius: var(--radius-xl);
-            padding: 4px;
-            max-width: 100%;
-            scrollbar-width: none;
-            -webkit-overflow-scrolling: touch;
+            display: none !important;
           }
-          .settings-nav-panel::-webkit-scrollbar {
-            display: none;
+          .settings-mobile-menu-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
           }
-          .settings-nav-btn {
-            flex: 0 0 auto;
-            padding: 8px 14px;
-            font-size: 12px;
-            min-height: 40px;
+          .settings-mobile-mode-menu .settings-sections-wrapper {
+            display: none !important;
+          }
+          .settings-mobile-mode-menu #settings-mobile-back-bar {
+            display: none !important;
+          }
+          .settings-mobile-mode-detail #settings-mobile-menu {
+            display: none !important;
+          }
+          .settings-mobile-mode-detail #settings-mobile-back-bar {
+            display: flex !important;
+          }
+          .settings-mobile-mode-detail .settings-sections-wrapper {
+            display: flex !important;
+          }
+          .settings-mobile-mode-detail .settings-sections-wrapper section.settings-card {
+            display: none !important;
+          }
+          .settings-mobile-mode-detail .settings-sections-wrapper section.settings-card.mobile-active-section {
+            display: flex !important;
           }
           .settings-theme-grid {
             grid-template-columns: 1fr;
@@ -777,9 +807,21 @@ export class SettingsView implements IView {
             width: 100%;
           }
         }
+
+        @media (min-width: 768px) {
+          #settings-mobile-menu {
+            display: none !important;
+          }
+          #settings-mobile-back-bar {
+            display: none !important;
+          }
+          .settings-sections-wrapper section.settings-card {
+            display: flex !important;
+          }
+        }
       </style>
 
-      <section class="settings-view-root" role="region" aria-label="Settings Studio">
+      <section class="settings-view-root ${this.mobileView === 'detail' ? 'settings-mobile-mode-detail' : 'settings-mobile-mode-menu'}" role="region" aria-label="Settings Studio">
         <!-- Template 9 Studio Hero Banner -->
         <header class="settings-hero-card">
           <div class="settings-hero-glow" aria-hidden="true"></div>
@@ -813,7 +855,7 @@ export class SettingsView implements IView {
 
         <!-- Main Layout: Navigation Sidebar + Central Content + Right-Side Info -->
         <div class="settings-main-layout">
-          <!-- Sub-Navigation Panel -->
+          <!-- Desktop/Tablet Sub-Navigation Panel -->
           <nav class="settings-nav-panel" role="tablist" aria-label="Settings Categories">
             ${this.sections
               .map(
@@ -834,10 +876,66 @@ export class SettingsView implements IView {
               .join('')}
           </nav>
 
+          <!-- Mobile Settings Category Menu (Screen A) -->
+          <div id="settings-mobile-menu" class="settings-mobile-menu-panel" style="${this.mobileView === 'detail' ? 'display: none;' : ''}">
+            ${this.sections
+              .map(
+                s => `
+              <button
+                class="settings-mobile-category-row glass-panel"
+                data-section-id="${s.id}"
+                role="button"
+                aria-label="Open ${s.label} Settings"
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  padding: 14px 18px;
+                  border-radius: var(--radius-xl);
+                  background: var(--glass-surface);
+                  border: 1px solid var(--glass-border);
+                  color: var(--color-text-primary);
+                  cursor: pointer;
+                  transition: all var(--duration-fast) var(--ease-smooth);
+                  width: 100%;
+                  box-sizing: border-box;
+                  min-height: 52px;
+                "
+              >
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <span style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: var(--radius-lg); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: var(--color-accent-purple-glow); flex-shrink: 0;">
+                    ${getIconSvg(s.icon as any, { size: 18 })}
+                  </span>
+                  <span style="font-size: 14px; font-weight: 600; color: #ffffff;">${s.label}</span>
+                </div>
+                <span style="color: var(--color-text-muted); display: flex; align-items: center;">
+                  ${getIconSvg('chevron-right', { size: 18 })}
+                </span>
+              </button>
+            `
+              )
+              .join('')}
+          </div>
+
           <!-- Central Content Sections -->
           <div class="settings-sections-wrapper" role="tabpanel" id="settings-tab-panel">
+            <!-- Mobile Detail Back Bar (Screen B) -->
+            <div id="settings-mobile-back-bar" style="${this.mobileView === 'detail' ? 'display: flex;' : 'display: none;'} align-items: center; justify-content: space-between; width: 100%; border-bottom: 1px solid var(--glass-border); padding-bottom: var(--space-3); gap: 12px;">
+              <button
+                id="settings-mobile-back-btn"
+                class="settings-action-btn"
+                style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius-full); font-size: 13px; font-weight: 700; color: #ffffff;"
+              >
+                <span style="display: flex;">${getIconSvg('chevron-left', { size: 16 })}</span>
+                <span>Back</span>
+              </button>
+              <span id="settings-mobile-back-title" style="font-size: 15px; font-weight: 700; color: var(--color-text-primary);">
+                ${this.sections.find(s => s.id === this.selectedMobileSection)?.label || ''}
+              </span>
+            </div>
+
             <!-- 1. Local Music Access Section -->
-            <section id="section-music-access" class="settings-card" tabindex="-1">
+            <section id="section-music-access" class="settings-card ${this.selectedMobileSection === 'music-access' ? 'mobile-active-section' : ''}" tabindex="-1">
               <div class="settings-card-header">
                 <div>
                   <span class="settings-card-category">Local Filesystem</span>
@@ -1004,10 +1102,10 @@ export class SettingsView implements IView {
             </section>
 
             <!-- 3. Audio DSP & Equalizer Section -->
-            <div id="section-audio" style="display: flex; flex-direction: column; gap: var(--space-6); width: 100%;" tabindex="-1">
+            <section id="section-audio" class="settings-card" style="display: flex; flex-direction: column; gap: var(--space-6); width: 100%; background: transparent; border: none; padding: 0;" tabindex="-1">
               <div id="settings-equalizer-slot"></div>
               <div id="settings-replaygain-slot"></div>
-            </div>
+            </section>
 
             <!-- 4. Theme & Appearance Section -->
             <section id="section-appearance" class="settings-card" tabindex="-1">
@@ -1585,8 +1683,9 @@ export class SettingsView implements IView {
 
   private attachNavigationEvents(): void {
     if (!this.container) return;
-    const navBtns = this.container.querySelectorAll<HTMLButtonElement>('.settings-nav-btn');
 
+    // Desktop nav buttons
+    const navBtns = this.container.querySelectorAll<HTMLButtonElement>('.settings-nav-btn');
     navBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         const targetId = btn.getAttribute('data-target')?.replace('section-', '') as SettingsSectionId;
@@ -1594,6 +1693,23 @@ export class SettingsView implements IView {
           this.switchToSection(targetId);
         }
       });
+    });
+
+    // Mobile category menu buttons
+    const mobileRows = this.container.querySelectorAll<HTMLButtonElement>('.settings-mobile-category-row');
+    mobileRows.forEach(row => {
+      row.addEventListener('click', () => {
+        const sectionId = row.getAttribute('data-section-id') as SettingsSectionId;
+        if (sectionId) {
+          this.openMobileSection(sectionId);
+        }
+      });
+    });
+
+    // Mobile back button
+    const mobileBackBtn = this.container.querySelector<HTMLButtonElement>('#settings-mobile-back-btn');
+    mobileBackBtn?.addEventListener('click', () => {
+      this.closeMobileSection();
     });
 
     const goAudioBtn = this.container.querySelector<HTMLButtonElement>('#settings-btn-go-audio');
@@ -1606,6 +1722,21 @@ export class SettingsView implements IView {
 
   public switchToSection(sectionId: SettingsSectionId): void {
     if (!this.container) return;
+    this.setActiveNavButton(sectionId);
+
+    this.isProgrammaticScrolling = true;
+    const targetSection = this.container.querySelector<HTMLElement>(`#section-${sectionId}`);
+    if (targetSection) {
+      targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      targetSection.focus();
+    }
+    setTimeout(() => {
+      this.isProgrammaticScrolling = false;
+    }, 600);
+  }
+
+  private setActiveNavButton(sectionId: SettingsSectionId): void {
+    if (!this.container) return;
     this.activeSection = sectionId;
 
     const navBtns = this.container.querySelectorAll<HTMLButtonElement>('.settings-nav-btn');
@@ -1615,11 +1746,89 @@ export class SettingsView implements IView {
       btn.classList.toggle('active', isActive);
       btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
     });
+  }
 
-    const targetSection = this.container.querySelector<HTMLElement>(`#section-${sectionId}`);
-    if (targetSection) {
-      targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      targetSection.focus();
+  private setupScrollObserver(): void {
+    if (!this.container || typeof IntersectionObserver === 'undefined') return;
+
+    const sections = this.container.querySelectorAll<HTMLElement>('.settings-card');
+    if (sections.length === 0) return;
+
+    const observerOptions: IntersectionObserverInit = {
+      root: null,
+      rootMargin: '-10% 0px -50% 0px',
+      threshold: [0, 0.25, 0.5, 0.75, 1.0]
+    };
+
+    this.scrollObserver = new IntersectionObserver(entries => {
+      if (this.isProgrammaticScrolling) return;
+
+      const visibleEntries = entries.filter(e => e.isIntersecting);
+      if (visibleEntries.length === 0) return;
+
+      visibleEntries.sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+      const bestEntry = visibleEntries[0];
+      if (!bestEntry) return;
+
+      const sectionId = bestEntry.target.id.replace('section-', '') as SettingsSectionId;
+      if (sectionId && sectionId !== this.activeSection) {
+        this.setActiveNavButton(sectionId);
+      }
+    }, observerOptions);
+
+    sections.forEach(sec => this.scrollObserver?.observe(sec));
+  }
+
+  public openMobileSection(sectionId: SettingsSectionId): void {
+    this.mobileView = 'detail';
+    this.selectedMobileSection = sectionId;
+    this.activeSection = sectionId;
+    this.updateMobileViewDom();
+  }
+
+  public closeMobileSection(): void {
+    this.mobileView = 'menu';
+    this.selectedMobileSection = null;
+    this.updateMobileViewDom();
+  }
+
+  public getMobileView(): 'menu' | 'detail' {
+    return this.mobileView;
+  }
+
+  public getSelectedMobileSection(): SettingsSectionId | null {
+    return this.selectedMobileSection;
+  }
+
+  private updateMobileViewDom(): void {
+    if (!this.container) return;
+    const root = this.container.querySelector('.settings-view-root');
+    const mobileMenu = this.container.querySelector<HTMLElement>('#settings-mobile-menu');
+    const backBar = this.container.querySelector<HTMLElement>('#settings-mobile-back-bar');
+    const backTitle = this.container.querySelector<HTMLElement>('#settings-mobile-back-title');
+    const allSections = this.container.querySelectorAll<HTMLElement>('.settings-card');
+
+    if (this.mobileView === 'menu') {
+      root?.classList.remove('settings-mobile-mode-detail');
+      root?.classList.add('settings-mobile-mode-menu');
+      if (mobileMenu) mobileMenu.style.display = '';
+      if (backBar) backBar.style.display = 'none';
+      allSections.forEach(sec => {
+        sec.classList.remove('mobile-active-section');
+      });
+    } else {
+      root?.classList.remove('settings-mobile-mode-menu');
+      root?.classList.add('settings-mobile-mode-detail');
+      if (mobileMenu) mobileMenu.style.display = 'none';
+      if (backBar) backBar.style.display = 'flex';
+
+      const secObj = this.sections.find(s => s.id === this.selectedMobileSection);
+      if (backTitle) backTitle.textContent = secObj?.label || '';
+
+      allSections.forEach(sec => {
+        const isMatch = sec.id === `section-${this.selectedMobileSection}`;
+        sec.classList.toggle('mobile-active-section', isMatch);
+      });
     }
   }
 

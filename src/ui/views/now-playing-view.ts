@@ -31,6 +31,7 @@ import { SleepTimerService } from '../../services/playback/sleep-timer-service';
 import { SleepTimerModalComponent } from '../components/player/sleep-timer-modal';
 import { escapeHtml } from '../../core/security/html-sanitizer';
 import { getIconSvg, type IconName } from '../icons/icon-registry';
+import { resolveDisplayTitle } from '../../domain/utils/title-resolver';
 
 import type { IAudioFileRepository } from '../../domain/repositories/repository-contracts';
 
@@ -377,9 +378,9 @@ export class NowPlayingView implements IView {
                   white-space: nowrap;
                   max-width: 100%;
                 "
-                title="${escapeHtml(t.title)}"
+                title="${escapeHtml(resolveDisplayTitle(t))}"
               >
-                ${escapeHtml(t.title)}
+                ${escapeHtml(resolveDisplayTitle(t))}
               </h1>
               <h2
                 id="np-track-artist"

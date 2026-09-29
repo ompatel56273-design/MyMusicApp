@@ -2,6 +2,7 @@ import type { Track } from '../../../domain/entities/models';
 import type { IArtworkService, IPlaybackManager, ILibraryService } from '../../../services/contracts/service-contracts';
 import { getIconSvg } from '../../icons/icon-registry';
 import { escapeHtml } from '../../../core/security/html-sanitizer';
+import { resolveDisplayTitle } from '../../../domain/utils/title-resolver';
 
 import type { MetadataEditorService } from '../../../services/metadata-editor/metadata-editor-service';
 import { SingleTrackMetadataModal } from './single-track-metadata-modal';
@@ -178,8 +179,8 @@ export class TrackInspectorComponent {
           <span style="color: var(--color-text-muted);">${getIconSvg('music', { size: 28 })}</span>
         </div>
         <div style="display: flex; flex-direction: column; min-width: 0; flex: 1;">
-          <span style="font-size: var(--font-size-sm); font-weight: var(--font-weight-bold); color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(track.title)}">
-            ${escapeHtml(track.title)}
+          <span style="font-size: var(--font-size-sm); font-weight: var(--font-weight-bold); color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(resolveDisplayTitle(track))}">
+            ${escapeHtml(resolveDisplayTitle(track))}
           </span>
           <span style="font-size: var(--font-size-xs); color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;" title="${escapeHtml(track.artistName ?? 'Unknown Artist')}">
             ${escapeHtml(track.artistName ?? 'Unknown Artist')}

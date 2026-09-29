@@ -256,4 +256,76 @@ describe('SettingsView (Template 9 Visual & Functional Rebuild)', () => {
 
     view.unmount();
   });
+
+  it('renders sticky right-side info sidebar on desktop (Issue 2)', () => {
+    const view = new SettingsView({ eventBus });
+    view.mount(container);
+
+    const sidebarInfo = container.querySelector<HTMLElement>('.settings-sidebar-info');
+    expect(sidebarInfo).not.toBeNull();
+    expect(container.querySelector('#settings-profile-storage-type')).not.toBeNull();
+
+    view.unmount();
+  });
+
+  it('handles mobile Settings menu -> detail -> back workflow cleanly (Issue 4)', () => {
+    const view = new SettingsView({
+      playbackManager: mockPlaybackManager as IPlaybackManager,
+      eventBus
+    });
+    view.mount(container);
+
+    // Initial state on mobile: Menu mode
+    expect(view.getMobileView()).toBe('menu');
+    expect(view.getSelectedMobileSection()).toBeNull();
+
+    const mobileMenu = container.querySelector<HTMLElement>('#settings-mobile-menu');
+    expect(mobileMenu).not.toBeNull();
+    const categoryRows = container.querySelectorAll<HTMLButtonElement>('.settings-mobile-category-row');
+    expect(categoryRows.length).toBe(12);
+
+    // Tap "Storage & Database"
+    const storageRow = Array.from(categoryRows).find(r => r.getAttribute('data-section-id') === 'storage');
+    expect(storageRow).not.toBeNull();
+    storageRow?.click();
+
+    // Verify detail mode opened ONLY for Storage & Database
+    expect(view.getMobileView()).toBe('detail');
+    expect(view.getSelectedMobileSection()).toBe('storage');
+
+    const backBar = container.querySelector<HTMLElement>('#settings-mobile-back-bar');
+    expect(backBar).not.toBeNull();
+    const backTitle = container.querySelector<HTMLElement>('#settings-mobile-back-title');
+    expect(backTitle?.textContent).toBe('Storage & Database');
+
+    const storageSection = container.querySelector<HTMLElement>('#section-storage');
+    expect(storageSection?.classList.contains('mobile-active-section')).toBe(true);
+
+    const musicAccessSection = container.querySelector<HTMLElement>('#section-music-access');
+    expect(musicAccessSection?.classList.contains('mobile-active-section')).toBe(false);
+
+    // Tap Back button
+    const backBtn = container.querySelector<HTMLButtonElement>('#settings-mobile-back-btn');
+    expect(backBtn).not.toBeNull();
+    backBtn?.click();
+
+    // Verify returned to Menu mode
+    expect(view.getMobileView()).toBe('menu');
+    expect(view.getSelectedMobileSection()).toBeNull();
+
+    // Tap another category: "Audio DSP & EQ"
+    const audioRow = Array.from(categoryRows).find(r => r.getAttribute('data-section-id') === 'audio');
+    expect(audioRow).not.toBeNull();
+    audioRow?.click();
+
+    expect(view.getMobileView()).toBe('detail');
+    expect(view.getSelectedMobileSection()).toBe('audio');
+    expect(backTitle?.textContent).toBe('Audio DSP & EQ');
+
+    const audioSection = container.querySelector<HTMLElement>('#section-audio');
+    expect(audioSection?.classList.contains('mobile-active-section')).toBe(true);
+    expect(storageSection?.classList.contains('mobile-active-section')).toBe(false);
+
+    view.unmount();
+  });
 });

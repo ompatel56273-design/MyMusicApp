@@ -8,6 +8,7 @@ import type { ShuffleMode, RepeatMode } from '../../domain/value-objects/audio-t
 import { SleepTimerService } from '../../services/playback/sleep-timer-service';
 import { SleepTimerModalComponent } from '../components/player/sleep-timer-modal';
 import { getIconSvg } from '../icons/icon-registry';
+import { resolveDisplayTitle } from '../../domain/utils/title-resolver';
 
 export interface MiniPlayerDependencies {
   playbackManager: IPlaybackManager;
@@ -69,7 +70,7 @@ export class MiniPlayerComponent {
   private render(): void {
     if (!this.container) return;
 
-    const title = this.currentTrack?.title || 'No Track Selected';
+    const title = this.currentTrack ? resolveDisplayTitle(this.currentTrack) : 'No Track Selected';
     const artist = this.currentTrack?.artistName || 'Select a song to play';
     const playIcon = this.isPlaying ? '⏸' : '▶';
 
@@ -674,7 +675,11 @@ export class MiniPlayerComponent {
     const slider = this.container.querySelector<HTMLInputElement>('#mini-progress-slider');
     const favBtn = this.container.querySelector<HTMLButtonElement>('#mini-fav-btn');
 
-    if (titleEl) titleEl.textContent = this.currentTrack?.title || 'No Track Selected';
+    const displayTitle = this.currentTrack ? resolveDisplayTitle(this.currentTrack) : 'No Track Selected';
+    if (titleEl) {
+      titleEl.textContent = displayTitle;
+      titleEl.setAttribute('title', displayTitle);
+    }
     if (artistEl) artistEl.textContent = this.currentTrack?.artistName || 'Select a song to play';
     if (totalEl) totalEl.textContent = this.formatTime(this.currentDurationMs);
     if (slider) {

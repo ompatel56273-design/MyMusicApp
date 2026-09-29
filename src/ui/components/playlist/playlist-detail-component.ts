@@ -10,6 +10,7 @@ import { PlaylistModalComponent } from './playlist-modal-component';
 import { SmartPlaylistModalComponent } from './smart-playlist-modal-component';
 import { escapeHtml } from '../../../core/security/html-sanitizer';
 import { getIconSvg } from '../../icons/icon-registry';
+import { resolveDisplayTitle } from '../../../domain/utils/title-resolver';
 
 export interface PlaylistDetailCallbacks {
   onBack: () => void;
@@ -336,8 +337,8 @@ export class PlaylistDetailComponent {
           <span style="display: flex; color: var(--color-text-muted);">${getIconSvg('music', { size: 16 })}</span>
         </div>
         <div style="display: flex; flex-direction: column; min-width: 0; gap: 2px;">
-          <span class="row-title" style="font-weight: var(--font-weight-bold); color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(track.title)}">
-            ${escapeHtml(track.title)}
+          <span class="row-title" style="font-weight: var(--font-weight-bold); color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(resolveDisplayTitle(track))}">
+            ${escapeHtml(resolveDisplayTitle(track))}
           </span>
           <span class="row-artist" style="font-size: 11px; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(track.artistName ?? 'Unknown Artist')}">
             ${escapeHtml(track.artistName ?? 'Unknown Artist')}
