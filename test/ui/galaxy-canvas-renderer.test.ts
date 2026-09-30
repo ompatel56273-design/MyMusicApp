@@ -55,12 +55,17 @@ describe('GalaxyCanvasRenderer', () => {
 
   it('performs hit testing against node world coordinates', () => {
     renderer.setGraph(mockGraph);
-    renderer.centerOnCoordinates(100, 100, 1.0);
+    const genreState = renderer.getLayoutEngine().getNodeState('genre:1');
+    expect(genreState).toBeDefined();
 
-    // Screen center corresponds to world coordinates (100, 100) where genre:1 is located
-    const rect = canvas.getBoundingClientRect();
-    const hit = renderer.hitTest(rect.width / 2, rect.height / 2);
-    expect(hit?.id).toBe('genre:1');
+    if (genreState) {
+      renderer.centerOnCoordinates(genreState.x, genreState.y, 1.0);
+
+      // Screen center corresponds to world coordinates of genre:1
+      const rect = canvas.getBoundingClientRect();
+      const hit = renderer.hitTest(rect.width / 2, rect.height / 2);
+      expect(hit?.id).toBe('genre:1');
+    }
   });
 
   it('highlights selected and playing nodes', () => {
@@ -113,6 +118,31 @@ describe('GalaxyCanvasRenderer', () => {
 
     renderer.setReducedMotion(false);
     expect(() => renderer.draw()).not.toThrow();
+  });
+
+  it('updates node positions dynamically along orbits when physics step executes', () => {
+    renderer.setGraph(mockGraph);
+    const state = renderer.getLayoutEngine().getNodeState('artist:1') || renderer.getLayoutEngine().getAllNodeStates()[1]!;
+    expect(state).toBeDefined();
+
+    const initialX = state.x;
+    const initialY = state.y;
+
+    // Advance orbit physics
+    renderer.stepOrbitPhysics(500);
+
+    const frame2X = state.x;
+    const frame2Y = state.y;
+
+    // Node must have moved along its orbit
+    expect(frame2X !== initialX || frame2Y !== initialY).toBe(true);
+
+    // Advance further
+    renderer.stepOrbitPhysics(500);
+    const frame3X = state.x;
+    const frame3Y = state.y;
+
+    expect(frame3X !== frame2X || frame3Y !== frame2Y).toBe(true);
   });
 
   it('detaches canvas cleanly', () => {

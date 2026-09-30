@@ -60,32 +60,86 @@ export class SongsTabView {
     }
 
     this.container.innerHTML = `
-      <div class="songs-tab-container glass-panel" style="display: flex; flex-direction: column; flex: 1; min-height: 400px; background: rgba(18, 24, 38, 0.4); border-radius: var(--radius-xl); border: 1px solid var(--glass-border); padding: var(--space-3); overflow: hidden;">
+      <style>
+        .songs-metadata-toolbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: var(--space-2) var(--space-3);
+          margin-bottom: var(--space-2);
+          background: rgba(124, 58, 237, 0.08);
+          border-radius: var(--radius-lg);
+          border: 1px solid var(--glass-border-interactive);
+          gap: var(--space-2);
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .songs-metadata-actions {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+
+        @media (max-width: 768px) {
+          .songs-metadata-toolbar {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+            padding: var(--space-3);
+          }
+
+          .songs-metadata-actions {
+            display: flex;
+            overflow-x: auto;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-x: contain;
+            width: 100%;
+            max-width: 100%;
+            padding-bottom: 2px;
+            box-sizing: border-box;
+          }
+
+          .songs-metadata-actions::-webkit-scrollbar {
+            display: none;
+          }
+
+          .songs-metadata-actions button {
+            min-height: 44px !important;
+            padding: 8px 16px !important;
+            font-size: 12px !important;
+            flex-shrink: 0 !important;
+          }
+        }
+      </style>
+
+      <div class="songs-tab-container glass-panel" style="display: flex; flex-direction: column; flex: 1; min-height: 400px; background: rgba(18, 24, 38, 0.4); border-radius: var(--radius-xl); border: 1px solid var(--glass-border); padding: var(--space-3); overflow: hidden; width: 100%; max-width: 100%; box-sizing: border-box;">
 
         ${(this.metadataEditorService || this.virtualTrackService) ? `
           <!-- Metadata & Virtual Track Action Bar -->
-          <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) var(--space-3); margin-bottom: var(--space-2); background: rgba(124, 58, 237, 0.08); border-radius: var(--radius-lg); border: 1px solid var(--glass-border-interactive);">
-            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--color-accent-purple-glow);">
+          <div class="songs-metadata-toolbar">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--color-accent-purple-glow); white-space: nowrap;">
               <span>${getIconSvg('edit', { size: 15 })}</span>
               <span>Metadata & Virtual Tracks</span>
             </div>
-            <div style="display: flex; gap: 8px;">
+            <div class="songs-metadata-actions">
               ${this.virtualTrackService ? `
-                <button id="import-cue-btn" style="padding: 6px 14px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: var(--radius-md); color: var(--color-accent-blue); font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                <button id="import-cue-btn" style="padding: 6px 14px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: var(--radius-md); color: var(--color-accent-blue); font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;">
                   <span>${getIconSvg('disc', { size: 13 })}</span>
                   <span>Import CUE Sheet</span>
                 </button>
               ` : ''}
               ${this.metadataEditorService ? `
-                <button id="batch-edit-btn" style="padding: 6px 14px; background: rgba(168, 85, 247, 0.2); border: 1px solid var(--glass-border-interactive); border-radius: var(--radius-md); color: #ffffff; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                <button id="batch-edit-btn" style="padding: 6px 14px; background: rgba(168, 85, 247, 0.2); border: 1px solid var(--glass-border-interactive); border-radius: var(--radius-md); color: #ffffff; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;">
                   <span>${getIconSvg('edit', { size: 13 })}</span>
                   <span>Batch Edit Tags</span>
                 </button>
-                <button id="batch-norm-btn" style="padding: 6px 14px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: var(--radius-md); color: var(--color-accent-cyan); font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                <button id="batch-norm-btn" style="padding: 6px 14px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: var(--radius-md); color: var(--color-accent-cyan); font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;">
                   <span>${getIconSvg('sparkles', { size: 13 })}</span>
                   <span>Normalize</span>
                 </button>
-                <button id="batch-rename-btn" style="padding: 6px 14px; background: rgba(236, 72, 153, 0.15); border: 1px solid rgba(236, 72, 153, 0.3); border-radius: var(--radius-md); color: var(--color-accent-pink); font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                <button id="batch-rename-btn" style="padding: 6px 14px; background: rgba(236, 72, 153, 0.15); border: 1px solid rgba(236, 72, 153, 0.3); border-radius: var(--radius-md); color: var(--color-accent-pink); font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;">
                   <span>${getIconSvg('folder', { size: 13 })}</span>
                   <span>Rename Files</span>
                 </button>

@@ -141,7 +141,7 @@ export class SettingsView implements IView {
 
   public mount(container: HTMLElement, params?: RouteParams): void {
     this.container = container;
-    const requestedSection = (params as any)?.section || (params?.tab as any);
+    const requestedSection = (params as any)?.section || (params?.tab as any) || (params as any)?.id;
     if (requestedSection && this.sections.some(s => s.id === requestedSection)) {
       this.activeSection = requestedSection as SettingsSectionId;
       this.selectedMobileSection = requestedSection as SettingsSectionId;
@@ -224,7 +224,7 @@ export class SettingsView implements IView {
   }
 
   public updateParams(params?: RouteParams): void {
-    const requestedSection = (params as any)?.section || (params?.tab as any);
+    const requestedSection = (params as any)?.section || (params?.tab as any) || (params as any)?.id;
     if (requestedSection && this.sections.some(s => s.id === requestedSection)) {
       this.switchToSection(requestedSection as SettingsSectionId);
       this.openMobileSection(requestedSection as SettingsSectionId);
@@ -748,17 +748,30 @@ export class SettingsView implements IView {
         /* Mobile Responsive (< 768px) */
         @media (max-width: 767px) {
           .settings-view-root {
-            padding: var(--space-3);
+            padding: var(--space-4) var(--space-3) calc(var(--mini-player-height, 80px) + var(--bottom-nav-height, 64px) + var(--space-8)) var(--space-3);
             gap: var(--space-4);
+            overflow-x: hidden;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
           }
           .settings-hero-card {
-            padding: var(--space-5);
+            padding: var(--space-5) var(--space-4);
             border-radius: var(--radius-xl);
+            overflow: hidden;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
           }
           .settings-main-layout {
             display: flex;
             flex-direction: column;
             gap: var(--space-4);
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
           }
           .settings-sidebar-info {
             display: none !important;
@@ -769,8 +782,12 @@ export class SettingsView implements IView {
           .settings-mobile-menu-panel {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 10px;
             width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            padding-bottom: var(--space-4);
           }
           .settings-mobile-mode-menu .settings-sections-wrapper {
             display: none !important;
@@ -786,12 +803,22 @@ export class SettingsView implements IView {
           }
           .settings-mobile-mode-detail .settings-sections-wrapper {
             display: flex !important;
+            flex-direction: column !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+            padding-bottom: var(--space-4) !important;
           }
           .settings-mobile-mode-detail .settings-sections-wrapper section.settings-card {
             display: none !important;
           }
           .settings-mobile-mode-detail .settings-sections-wrapper section.settings-card.mobile-active-section {
             display: flex !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
           }
           .settings-theme-grid {
             grid-template-columns: 1fr;

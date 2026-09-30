@@ -294,14 +294,33 @@ export class PlaylistsView implements IView {
           border-radius: 50%;
         }
 
+        .playlist-toolbar-container {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-3);
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+        }
+
         /* Category Filter Tabs */
         .playlist-cat-tabs {
           display: flex;
           gap: var(--space-2);
           overflow-x: auto;
-          padding-bottom: 2px;
+          padding-bottom: 4px;
           scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
           z-index: 1;
+          overscroll-behavior-x: contain;
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          flex-wrap: nowrap;
         }
         .playlist-cat-tabs::-webkit-scrollbar {
           display: none;
@@ -318,7 +337,9 @@ export class PlaylistsView implements IView {
           cursor: pointer;
           white-space: nowrap;
           transition: all var(--duration-fast) var(--ease-smooth);
-          min-height: 40px;
+          min-height: 44px;
+          min-width: 44px;
+          flex-shrink: 0;
           box-sizing: border-box;
         }
 
@@ -355,6 +376,29 @@ export class PlaylistsView implements IView {
           .playlists-hero-banner {
             padding: var(--space-5) var(--space-4);
             border-radius: var(--radius-xl);
+            overflow: hidden;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+          }
+
+          .playlist-toolbar-container {
+            flex-direction: column;
+            align-items: stretch;
+            gap: var(--space-3);
+          }
+
+          .playlist-cat-tabs {
+            width: 100%;
+            max-width: 100%;
+            overflow-x: auto;
+            flex-wrap: nowrap;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .playlist-filter-wrapper {
+            width: 100% !important;
+            min-width: 0 !important;
           }
         }
       </style>
@@ -382,7 +426,7 @@ export class PlaylistsView implements IView {
           </div>
 
           <!-- Action Buttons -->
-          <div style="display: flex; gap: var(--space-3); align-items: center; z-index: 1;">
+          <div style="display: flex; gap: var(--space-3); align-items: center; z-index: 1; flex-wrap: wrap;">
             <button
               class="create-smart-playlist-btn"
               style="
@@ -431,7 +475,7 @@ export class PlaylistsView implements IView {
         </header>
 
         <!-- 2. Category Tabs & Filter Toolbar (Template 5) -->
-        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3);">
+        <div class="playlist-toolbar-container">
           <nav role="tablist" aria-label="Playlist Categories" class="playlist-cat-tabs">
             ${categories
               .map(
@@ -457,7 +501,7 @@ export class PlaylistsView implements IView {
           </nav>
 
           <!-- Search / Filter Input -->
-          <div style="display: flex; align-items: center; gap: var(--space-2); min-width: 240px;">
+          <div class="playlist-filter-wrapper" style="display: flex; align-items: center; gap: var(--space-2); min-width: 240px;">
             <div style="position: relative; flex: 1;">
               <span style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--color-text-muted); pointer-events: none; display: flex;">
                 ${getIconSvg('search', { size: 15 })}

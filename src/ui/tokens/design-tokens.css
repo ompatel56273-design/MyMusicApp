@@ -1491,6 +1491,10 @@ html, body {
   box-sizing: border-box;
 }
 
+.track-row-mobile-subtitle {
+  display: none !important;
+}
+
 @media (max-width: 1199px) and (min-width: 768px) {
   .hide-tablet {
     display: none !important;
@@ -1499,28 +1503,70 @@ html, body {
     grid-template-columns: 32px 38px minmax(140px, 2fr) minmax(100px, 1fr) 60px 88px !important;
     gap: var(--space-2) !important;
   }
+  .track-row-mobile-subtitle {
+    display: none !important;
+  }
 }
 
 @media (max-width: 767px) {
   .hide-mobile {
     display: none !important;
   }
+  .songs-table-header {
+    display: none !important;
+  }
   .app-track-row,
   .track-row {
-    grid-template-columns: 38px minmax(0, 1fr) 44px 44px !important;
-    gap: var(--space-2) !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: var(--space-3) !important;
     padding: var(--space-2) var(--space-3) !important;
+    min-height: 56px !important;
+    height: auto !important;
   }
-  .track-row > div:nth-child(1),
-  .track-row > div:nth-child(4),
-  .track-row > div:nth-child(5),
-  .track-row > div:nth-child(6) {
+  .track-row-index,
+  .track-row-album,
+  .track-row-format,
+  .track-row-time,
+  .track-row-artist {
     display: none !important;
+  }
+  .track-row-art {
+    width: 44px !important;
+    height: 44px !important;
+    flex-shrink: 0 !important;
+    border-radius: var(--radius-md) !important;
+  }
+  .track-row-title-col {
+    flex: 1 !important;
+    min-width: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    overflow: hidden !important;
+  }
+  .track-row-mobile-subtitle {
+    display: block !important;
+    font-size: 12px !important;
+    color: var(--color-text-secondary) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .track-row-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
   }
 }
 
 @media (min-width: 1200px) {
   .hide-desktop {
+    display: none !important;
+  }
+  .track-row-mobile-subtitle {
     display: none !important;
   }
 }

@@ -5,6 +5,7 @@ export type GalaxyNodeType = 'artist' | 'album' | 'track' | 'genre' | 'playlist'
 export type GalaxyEdgeType =
   | 'artist-album'
   | 'album-track'
+  | 'artist-track'
   | 'genre-artist'
   | 'genre-track'
   | 'playlist-track'

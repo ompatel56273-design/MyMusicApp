@@ -162,6 +162,8 @@ export class MockElement {
         strokeText: () => {},
         measureText: () => ({ width: 50 }),
         resetTransform: () => {},
+        setLineDash: () => {},
+        getLineDash: () => [],
         createLinearGradient: () => ({ addColorStop: () => {} }),
         createRadialGradient: () => ({ addColorStop: () => {} }),
         fillStyle: '',

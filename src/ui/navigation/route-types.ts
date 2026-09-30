@@ -5,6 +5,7 @@ export type LibraryTab = 'songs' | 'albums' | 'artists' | 'genres' | 'folders' |
 export interface RouteParams {
   readonly id?: string | undefined;
   readonly tab?: LibraryTab | undefined;
+  readonly section?: string | undefined;
   readonly query?: string | undefined;
 }
 

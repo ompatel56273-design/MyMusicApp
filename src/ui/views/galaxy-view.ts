@@ -17,6 +17,7 @@ import { EventBus } from '../../core/events/event-bus';
 import { DomainEvents } from '../../domain/events/domain-events';
 import type { Disposable } from '../../core/types/common';
 import { getIconSvg } from '../icons/icon-registry';
+import { MobileGalaxyView } from './galaxy/mobile-galaxy-view';
 
 export interface GalaxyViewDependencies {
   galaxyService: IGalaxyService;
@@ -40,11 +41,13 @@ export interface GalaxyViewDependencies {
  * - Bottom Discover Banner ("Discover More Music" with Explore Now)
  * - Contextual Glassmorphic Node Detail Panel with Real Artwork & Relational Tracks
  * - Full Keyboard & Accessible Outline Navigation
+ * - Dedicated Mobile Music Discovery view (< 768px)
  */
 export class GalaxyView implements IView {
   private container: HTMLElement | null = null;
   private canvasRenderer: GalaxyCanvasRenderer | null = null;
   private detailPanel: GalaxyDetailPanel | null = null;
+  private mobileGalaxyView: MobileGalaxyView | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private subscriptions: Disposable[] = [];
   private visibilityHandler: (() => void) | null = null;
@@ -61,6 +64,10 @@ export class GalaxyView implements IView {
 
   public getViewMode(): 'galaxy' | 'list' | 'map' {
     return this.viewMode;
+  }
+
+  public getMobileGalaxyView(): MobileGalaxyView | null {
+    return this.mobileGalaxyView;
   }
 
   constructor(deps?: GalaxyViewDependencies) {
@@ -84,12 +91,10 @@ export class GalaxyView implements IView {
       this.canvasRenderer.detachCanvas();
       this.canvasRenderer = null;
     }
-
     if (this.detailPanel) {
       this.detailPanel.unmount();
       this.detailPanel = null;
     }
-
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
@@ -184,48 +189,98 @@ export class GalaxyView implements IView {
             box-shadow: 0 0 12px rgba(124, 58, 237, 0.5);
           }
 
+          .galaxy-search-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+          }
+
           @media (max-width: 1199px) {
             #galaxy-sidebar-panel {
               width: 260px !important;
             }
           }
           @media (max-width: 768px) {
-            .galaxy-main-body {
-              flex-direction: column !important;
+            .galaxy-view-container header {
+              padding: 8px 10px !important;
+              gap: 4px !important;
+              justify-content: space-between !important;
             }
-            #galaxy-sidebar-panel {
-              display: none !important;
-            }
-            .galaxy-mobile-explore {
-              display: flex !important;
-            }
-            #galaxy-discover-banner {
-              display: none !important;
+            .galaxy-view-container header h1 {
+              font-size: 14px !important;
             }
             .galaxy-header-subtitle {
               display: none !important;
             }
+            .galaxy-aesthetic-tag {
+              display: none !important;
+            }
+            .galaxy-search-container {
+              display: none !important;
+            }
+            .galaxy-controls-group {
+              flex-wrap: nowrap !important;
+              gap: 4px !important;
+            }
+            .galaxy-header-pill {
+              padding: 4px 7px !important;
+              font-size: 10px !important;
+            }
+            #galaxy-mobile-sidebar-toggle {
+              display: inline-flex !important;
+              padding: 4px 7px !important;
+              font-size: 10px !important;
+            }
+            #galaxy-sidebar-panel {
+              position: absolute !important;
+              top: 0 !important;
+              right: 0 !important;
+              bottom: 0 !important;
+              width: 280px !important;
+              max-width: 85vw !important;
+              transform: translateX(100%);
+              transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+              box-shadow: -8px 0 32px rgba(0, 0, 0, 0.7);
+            }
+            #galaxy-sidebar-panel.mobile-open {
+              transform: translateX(0) !important;
+            }
+            #galaxy-discover-banner {
+              display: none !important;
+            }
+            #galaxy-explore-now-btn {
+              display: none !important;
+            }
+            #galaxy-camera-toolbar {
+              bottom: 12px !important;
+              left: 12px !important;
+            }
           }
         </style>
 
+        <!-- Mobile Discovery Container (Preserved for compatibility) -->
+        <div id="galaxy-mobile-root" style="display: none;"></div>
+
+        <!-- Unified Audio Galaxy Viewport -->
+        <div id="galaxy-desktop-root" class="galaxy-root" style="display: flex; flex-direction: column; width: 100%; height: 100%; position: relative;">
         <!-- Top Header (Template 10) -->
         <header style="
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 16px 24px;
+          padding: 12px 20px;
           background: rgba(6, 6, 10, 0.75);
           backdrop-filter: blur(16px);
           -webkit-backdrop-filter: blur(16px);
           border-bottom: 1px solid rgba(255, 255, 255, 0.07);
           z-index: 10;
           flex-shrink: 0;
-          gap: 16px;
+          gap: 12px;
         ">
           <div>
             <h1 style="
               margin: 0;
-              font-size: 22px;
+              font-size: 20px;
               font-weight: 800;
               letter-spacing: -0.02em;
               display: flex;
@@ -239,40 +294,50 @@ export class GalaxyView implements IView {
                 -webkit-text-fill-color: transparent;
               ">Galaxy</span>
             </h1>
-            <p class="galaxy-header-subtitle" style="margin: 3px 0 0 0; font-size: 13px; color: var(--color-text-secondary, #94a3b8);">
+            <p class="galaxy-header-subtitle" style="margin: 2px 0 0 0; font-size: 12px; color: var(--color-text-secondary, #94a3b8);">
               Explore your music in a whole new universe.
             </p>
           </div>
 
-          <!-- Controls: View Switchers & Search -->
-          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+          <!-- Controls: View Switchers, Search, & Mobile Filter Toggle -->
+          <div class="galaxy-controls-group" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
             <!-- Search Bar -->
-            <div style="position: relative; display: flex; align-items: center;">
-              <span style="position: absolute; left: 12px; color: var(--color-text-muted, #64748b); font-size: 13px;">🔍</span>
+            <div class="galaxy-search-container">
+              <span style="position: absolute; left: 10px; color: var(--color-text-muted, #64748b); font-size: 12px;">🔍</span>
               <input
                 type="text"
                 id="galaxy-search-input"
                 placeholder="Search universe..."
                 aria-label="Search Audio Galaxy entities"
                 style="
-                  padding: 7px 14px 7px 34px;
+                  padding: 6px 12px 6px 30px;
                   border-radius: var(--radius-full, 9999px);
                   background: rgba(255, 255, 255, 0.06);
                   border: 1px solid rgba(255, 255, 255, 0.12);
                   color: var(--color-text-primary, #ffffff);
                   font-size: 12px;
-                  width: 170px;
+                  width: 140px;
                   outline: none;
                   transition: all 0.2s ease;
                 "
               />
             </div>
 
-            <!-- View Modes -->
-            <div style="display: flex; gap: 6px; background: rgba(0, 0, 0, 0.35); padding: 3px; border-radius: var(--radius-full, 9999px); border: 1px solid rgba(255, 255, 255, 0.08);">
+            <!-- View Modes & Mobile Genres Drawer Toggle -->
+            <div style="display: flex; align-items: center; gap: 4px; background: rgba(0, 0, 0, 0.35); padding: 3px; border-radius: var(--radius-full, 9999px); border: 1px solid rgba(255, 255, 255, 0.08);">
               <button class="galaxy-header-pill active" id="galaxy-view-mode-galaxy">Galaxy View</button>
               <button class="galaxy-header-pill" id="galaxy-toggle-accessible" aria-label="Toggle Accessible Tree View">List View</button>
               <button class="galaxy-header-pill" id="galaxy-view-mode-map">Map View</button>
+              <button id="galaxy-mobile-sidebar-toggle" class="galaxy-header-pill" aria-label="Toggle Genres Sidebar" style="
+                display: none;
+                background: rgba(168, 85, 247, 0.2);
+                border: 1px solid rgba(168, 85, 247, 0.4);
+                color: #ffffff;
+                cursor: pointer;
+                transition: all 0.15s ease;
+              ">
+                🌐 Genres
+              </button>
             </div>
           </div>
         </header>
@@ -319,7 +384,7 @@ export class GalaxyView implements IView {
             </div>
 
             <!-- Floating Camera Toolbar (Bottom-Left) -->
-            <aside style="
+            <aside id="galaxy-camera-toolbar" style="
               position: absolute;
               bottom: 24px;
               left: 24px;
@@ -356,47 +421,6 @@ export class GalaxyView implements IView {
               </div>
             </aside>
 
-            <!-- Bottom Discover Banner (Template 10) -->
-            <div id="galaxy-discover-banner" class="glass-panel" style="
-              position: absolute;
-              bottom: 24px;
-              left: 200px;
-              right: 24px;
-              max-width: 520px;
-              padding: 16px 20px;
-              border-radius: var(--radius-2xl, 20px);
-              background: linear-gradient(135deg, rgba(30, 27, 75, 0.85), rgba(15, 23, 42, 0.85));
-              backdrop-filter: blur(20px);
-              -webkit-backdrop-filter: blur(20px);
-              border: 1px solid rgba(168, 85, 247, 0.25);
-              box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(124, 58, 237, 0.15);
-              z-index: 5;
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              gap: 16px;
-            ">
-              <div>
-                <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: #ffffff;">Discover More Music</h4>
-                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--color-text-secondary, #94a3b8);">
-                  Let the galaxy guide your next favorite song.
-                </p>
-              </div>
-              <button id="galaxy-explore-now-btn" style="
-                padding: 8px 16px;
-                border-radius: var(--radius-full, 9999px);
-                background: linear-gradient(135deg, var(--accent-purple, #7c3aed), #9333ea);
-                color: #ffffff;
-                border: none;
-                font-size: 12px;
-                font-weight: 700;
-                cursor: pointer;
-                white-space: nowrap;
-                box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
-                transition: all 0.15s ease;
-              ">Explore Now →</button>
-            </div>
-
             <!-- Mobile Explore Planets Horizontal Row (Mobile Template 10) -->
             <div class="galaxy-mobile-explore" style="
               display: none;
@@ -414,7 +438,7 @@ export class GalaxyView implements IView {
           <!-- Contextual Detail Panel Container -->
           <div id="galaxy-detail-panel-slot"></div>
 
-          <!-- Right Sidebar (Template 10: Explore Genres & Recently Played Planets) -->
+          <!-- Right Sidebar (Template 10: Explore Genres, Recently Played Planets, Discover Card) -->
           <aside id="galaxy-sidebar-panel" style="
             width: 300px;
             height: 100%;
@@ -446,6 +470,40 @@ export class GalaxyView implements IView {
                 <span style="font-size: 12px; color: var(--accent-cyan, #38bdf8); cursor: pointer;" id="galaxy-see-all-planets">See all</span>
               </div>
               <div id="galaxy-planets-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+            </div>
+
+            <!-- Section 3: Stacked Discover More Music Banner (Template 10) -->
+            <div id="galaxy-discover-banner" class="glass-panel" style="
+              padding: 14px 18px;
+              border-radius: var(--radius-2xl, 20px);
+              background: linear-gradient(135deg, rgba(30, 27, 75, 0.88), rgba(15, 23, 42, 0.88));
+              border: 1px solid rgba(168, 85, 247, 0.25);
+              box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 16px rgba(124, 58, 237, 0.15);
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 12px;
+              margin-top: auto;
+            ">
+              <div>
+                <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: #ffffff;">Discover More Music</h4>
+                <p style="margin: 3px 0 0 0; font-size: 11px; color: var(--color-text-secondary, #94a3b8);">
+                  Let the galaxy guide your next favorite song.
+                </p>
+              </div>
+              <button id="galaxy-explore-now-btn" style="
+                padding: 8px 14px;
+                border-radius: var(--radius-full, 9999px);
+                background: linear-gradient(135deg, var(--accent-purple, #7c3aed), #9333ea);
+                color: #ffffff;
+                border: none;
+                font-size: 11px;
+                font-weight: 700;
+                cursor: pointer;
+                white-space: nowrap;
+                box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
+                transition: all 0.15s ease;
+              ">Explore Now →</button>
             </div>
           </aside>
         </div>
@@ -536,6 +594,7 @@ export class GalaxyView implements IView {
           <!-- Map Sectors Grid -->
           <div id="galaxy-map-sectors-container" style="display: flex; flex-direction: column; gap: 24px; width: 100%;"></div>
         </div>
+        </div>
       </section>
     `;
   }
@@ -598,18 +657,19 @@ export class GalaxyView implements IView {
 
     // 3. Load Settings & Graph
     const settings = await this.deps.galaxyService.getSettings();
-    this.canvasRenderer.setReducedMotion(settings.reducedMotion);
+    this.canvasRenderer?.setReducedMotion(settings.reducedMotion);
 
     this.currentGraph = await this.deps.galaxyService.getGraph({
       showPlaylists: settings.showPlaylists,
       showFolders: settings.showFolders
     });
+    if (!this.container || !this.canvasRenderer) return;
     this.canvasRenderer.setGraph(this.currentGraph);
     this.renderAccessibleList();
     await this.renderExplorePanels();
 
     // Render empty state overlay if no graph nodes exist
-    if (this.currentGraph.nodes.length === 0) {
+    if (this.currentGraph && this.currentGraph.nodes.length === 0) {
       const canvasContainer = this.container.querySelector<HTMLElement>('#galaxy-canvas-container');
       if (canvasContainer) {
         const emptyOverlay = document.createElement('div');
@@ -861,6 +921,15 @@ export class GalaxyView implements IView {
 
     mapFilterInput?.addEventListener('input', () => {
       this.renderMapView(mapFilterInput.value);
+    });
+
+    const mobileSidebarToggle = this.container.querySelector<HTMLButtonElement>('#galaxy-mobile-sidebar-toggle');
+    const sidebarPanel = this.container.querySelector<HTMLElement>('#galaxy-sidebar-panel');
+    mobileSidebarToggle?.addEventListener('click', () => {
+      sidebarPanel?.classList.toggle('mobile-open');
+    });
+    canvas?.addEventListener('click', () => {
+      sidebarPanel?.classList.remove('mobile-open');
     });
 
     zoomInBtn?.addEventListener('click', () => this.canvasRenderer?.zoomIn());
@@ -1314,6 +1383,7 @@ export class GalaxyView implements IView {
         } else {
           this.canvasRenderer?.setPlayingEntity(null);
         }
+        this.mobileGalaxyView?.updatePlayingHighlights();
       })
     );
 
@@ -1324,6 +1394,7 @@ export class GalaxyView implements IView {
         } else {
           this.canvasRenderer?.setPlayingEntity(null);
         }
+        this.mobileGalaxyView?.updatePlayingHighlights();
       })
     );
 
@@ -1351,6 +1422,9 @@ export class GalaxyView implements IView {
           this.renderMapView();
         }
         await this.renderExplorePanels();
+      }
+      if (this.mobileGalaxyView) {
+        void this.mobileGalaxyView.loadData();
       }
     };
 

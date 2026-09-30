@@ -91,7 +91,7 @@ export class AppShell {
   private mobileNavItems: { id: AppRoute; label: string; icon: IconName }[] = [
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'library', label: 'Library', icon: 'library' },
-    { id: 'search', label: 'Search', icon: 'search' },
+    { id: 'galaxy', label: 'Galaxy', icon: 'galaxy' },
     { id: 'playlists', label: 'Playlists', icon: 'playlist' },
     { id: 'settings', label: 'Settings', icon: 'settings' }
   ];
@@ -99,7 +99,7 @@ export class AppShell {
   constructor(deps: AppShellDependencies) {
     this.eventBus = deps.eventBus;
     this.router = new RouterService('home');
-    this.header = new HeaderComponent(this.router);
+    this.header = new HeaderComponent(this.router, deps.searchService, deps.libraryService, deps.playlistService);
     this.sidebar = new SidebarComponent(this.router, deps.libraryService, deps.eventBus);
     this.miniPlayer = new MiniPlayerComponent({
       playbackManager: deps.playbackManager,

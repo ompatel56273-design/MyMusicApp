@@ -21,6 +21,18 @@ export interface GalaxyServiceDependencies {
   database?: IDatabaseAdapter | undefined;
 }
 
+export function isUnknownTag(val?: string | null): boolean {
+  if (!val || typeof val !== 'string') return true;
+  const trimmed = val.trim().toLowerCase();
+  return (
+    trimmed === '' ||
+    trimmed === 'unknown' ||
+    trimmed === 'unknown artist' ||
+    trimmed === 'unknown album' ||
+    trimmed === 'unknown genre'
+  );
+}
+
 /**
  * Concrete Audio Galaxy Service.
  * Constructs and caches deterministic graph nodes and edges from the real local music library.
@@ -156,10 +168,6 @@ export class GalaxyService implements IGalaxyService {
       });
     });
 
-    // Default Fallback Entities
-    const DEFAULT_GENRE_ID = 'genre_unknown';
-    const DEFAULT_ARTIST_ID = 'artist_unknown';
-
     // Inspect tracks and assign / synthesize parent relationships
     const tracksByAlbum = new Map<string, Track[]>();
     const tracksByArtist = new Map<string, Track[]>();
@@ -168,89 +176,91 @@ export class GalaxyService implements IGalaxyService {
     const artistsByGenre = new Map<string, Set<string>>(); // genreId -> artistIds[]
 
     for (const t of tracks) {
-      // Resolve Genre
-      let gId = t.genreId;
-      if (!gId || !genreMap.has(gId)) {
-        if (t.genreName && t.genreName.trim()) {
-          const cleanGName = t.genreName.trim();
-          gId = `genre_${cleanGName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-          if (!genreMap.has(gId)) {
-            genreMap.set(gId, { id: gId, name: cleanGName });
-          }
-        } else {
-          gId = DEFAULT_GENRE_ID;
-          if (!genreMap.has(gId)) {
-            genreMap.set(gId, { id: gId, name: 'Unknown Genre' });
-          }
+      // Resolve Genre (only if valid)
+      let gId: string | undefined = t.genreId;
+      if (gId && genreMap.has(gId)) {
+        // Valid genre entity from library
+      } else if (t.genreName && !isUnknownTag(t.genreName)) {
+        const cleanGName = t.genreName.trim();
+        gId = `genre_${cleanGName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+        if (!genreMap.has(gId)) {
+          genreMap.set(gId, { id: gId, name: cleanGName });
         }
+      } else {
+        gId = undefined;
       }
 
-      // Resolve Artist
-      let aId = t.artistId;
-      if (!aId || !artistMap.has(aId)) {
-        if (t.artistName && t.artistName.trim()) {
-          const cleanAName = t.artistName.trim();
-          aId = `artist_${cleanAName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-          if (!artistMap.has(aId)) {
-            artistMap.set(aId, { id: aId, name: cleanAName, genreId: gId });
-          }
-        } else {
-          aId = DEFAULT_ARTIST_ID;
-          if (!artistMap.has(aId)) {
-            artistMap.set(aId, { id: aId, name: 'Unknown Artist', genreId: gId });
-          }
+      // Resolve Artist (only if valid)
+      let aId: string | undefined = t.artistId;
+      if (aId && artistMap.has(aId)) {
+        // Valid artist entity from library
+      } else if (t.artistName && !isUnknownTag(t.artistName)) {
+        const cleanAName = t.artistName.trim();
+        aId = `artist_${cleanAName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+        if (!artistMap.has(aId)) {
+          artistMap.set(aId, { id: aId, name: cleanAName, genreId: gId || '' });
         }
+      } else {
+        aId = undefined;
       }
 
-      // Associate Artist with Genre
-      const artistEntry = artistMap.get(aId);
-      if (artistEntry && (!artistEntry.genreId || artistEntry.genreId === DEFAULT_GENRE_ID)) {
-        artistEntry.genreId = gId;
-      }
-      let gArtists = artistsByGenre.get(gId);
-      if (!gArtists) {
-        gArtists = new Set<string>();
-        artistsByGenre.set(gId, gArtists);
-      }
-      gArtists.add(aId);
-
-      // Resolve Album
-      let alId = t.albumId;
-      if (!alId || !albumMap.has(alId)) {
-        if (t.albumTitle && t.albumTitle.trim()) {
-          const cleanAlTitle = t.albumTitle.trim();
-          alId = `album_${cleanAlTitle.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${aId}`;
-          if (!albumMap.has(alId)) {
-            albumMap.set(alId, { id: alId, title: cleanAlTitle, artistId: aId });
-          }
-        } else {
-          alId = `album_unknown_${aId}`;
-          if (!albumMap.has(alId)) {
-            albumMap.set(alId, { id: alId, title: 'Unknown Album', artistId: aId });
-          }
+      // Associate Artist with Genre if valid
+      if (aId && gId) {
+        const artistEntry = artistMap.get(aId);
+        if (artistEntry && !artistEntry.genreId) {
+          artistEntry.genreId = gId;
         }
+        let gArtists = artistsByGenre.get(gId);
+        if (!gArtists) {
+          gArtists = new Set<string>();
+          artistsByGenre.set(gId, gArtists);
+        }
+        gArtists.add(aId);
       }
 
-      // Associate Album with Artist
-      let aAlbums = albumsByArtist.get(aId);
-      if (!aAlbums) {
-        aAlbums = new Set<string>();
-        albumsByArtist.set(aId, aAlbums);
+      // Resolve Album (only if valid)
+      let alId: string | undefined = t.albumId;
+      if (alId && albumMap.has(alId)) {
+        // Valid album entity from library
+      } else if (t.albumTitle && !isUnknownTag(t.albumTitle)) {
+        const cleanAlTitle = t.albumTitle.trim();
+        const artistPrefix = aId || 'various';
+        alId = `album_${cleanAlTitle.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${artistPrefix}`;
+        if (!albumMap.has(alId)) {
+          albumMap.set(alId, { id: alId, title: cleanAlTitle, artistId: aId || '' });
+        }
+      } else {
+        alId = undefined;
       }
-      aAlbums.add(alId);
 
-      // Group tracks
-      const alTrackList = tracksByAlbum.get(alId) || [];
-      alTrackList.push(t);
-      tracksByAlbum.set(alId, alTrackList);
+      // Associate Album with Artist if valid
+      if (alId && aId) {
+        let aAlbums = albumsByArtist.get(aId);
+        if (!aAlbums) {
+          aAlbums = new Set<string>();
+          albumsByArtist.set(aId, aAlbums);
+        }
+        aAlbums.add(alId);
+      }
 
-      const aTrackList = tracksByArtist.get(aId) || [];
-      aTrackList.push(t);
-      tracksByArtist.set(aId, aTrackList);
+      // Group tracks into valid parent collections
+      if (alId) {
+        const alTrackList = tracksByAlbum.get(alId) || [];
+        alTrackList.push(t);
+        tracksByAlbum.set(alId, alTrackList);
+      }
 
-      const gTrackList = tracksByGenre.get(gId) || [];
-      gTrackList.push(t);
-      tracksByGenre.set(gId, gTrackList);
+      if (aId) {
+        const aTrackList = tracksByArtist.get(aId) || [];
+        aTrackList.push(t);
+        tracksByArtist.set(aId, aTrackList);
+      }
+
+      if (gId) {
+        const gTrackList = tracksByGenre.get(gId) || [];
+        gTrackList.push(t);
+        tracksByGenre.set(gId, gTrackList);
+      }
     }
 
     const nodeMap = new Map<string, GalaxyNode>();
@@ -362,8 +372,8 @@ export class GalaxyService implements IGalaxyService {
       });
 
       // Connect Genre -> Artist
-      const gId = aMeta.genreId || DEFAULT_GENRE_ID;
-      if (nodeMap.has(`genre:${gId}`)) {
+      const gId = aMeta.genreId;
+      if (gId && nodeMap.has(`genre:${gId}`)) {
         addEdge(`genre:${gId}`, `artist:${aId}`, 'genre-artist', 2);
       }
     }
@@ -423,8 +433,8 @@ export class GalaxyService implements IGalaxyService {
       // Find resolved parent album
       let parentAlbumId = t.albumId;
       if (!parentAlbumId || !albumMap.has(parentAlbumId)) {
-        const aId = t.artistId || (t.artistName ? `artist_${t.artistName.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}` : DEFAULT_ARTIST_ID);
-        parentAlbumId = t.albumTitle ? `album_${t.albumTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}_${aId}` : `album_singles_${aId}`;
+        const aId = t.artistId || (t.artistName && !isUnknownTag(t.artistName) ? `artist_${t.artistName.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}` : undefined);
+        parentAlbumId = t.albumTitle && !isUnknownTag(t.albumTitle) ? `album_${t.albumTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}_${aId || 'standalone'}` : undefined;
       }
 
       addNode({
@@ -440,8 +450,8 @@ export class GalaxyService implements IGalaxyService {
         lodMax: 4,
         artworkId: t.artworkId,
         metadata: {
-          artistName: t.artistName || (t.artistId ? artistMap.get(t.artistId)?.name : 'Unknown Artist'),
-          albumTitle: t.albumTitle || (parentAlbumId ? albumMap.get(parentAlbumId)?.title : 'Singles'),
+          artistName: t.artistName || (t.artistId ? artistMap.get(t.artistId)?.name : undefined),
+          albumTitle: t.albumTitle || (parentAlbumId ? albumMap.get(parentAlbumId)?.title : undefined),
           durationMs: t.durationMs,
           isFavorite: t.isFavorite,
           playCount: t.playCount,
@@ -449,9 +459,16 @@ export class GalaxyService implements IGalaxyService {
         }
       });
 
-      // Connect Album -> Track
-      if (nodeMap.has(`album:${parentAlbumId}`)) {
+      // Connect Album -> Track (or fallback to Artist -> Track or Genre -> Track)
+      const aId = t.artistId || (t.artistName && !isUnknownTag(t.artistName) ? `artist_${t.artistName.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}` : undefined);
+      const gId = t.genreId || (t.genreName && !isUnknownTag(t.genreName) ? `genre_${t.genreName.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}` : undefined);
+
+      if (parentAlbumId && nodeMap.has(`album:${parentAlbumId}`)) {
         addEdge(`album:${parentAlbumId}`, `track:${t.id}`, 'album-track', 1);
+      } else if (aId && nodeMap.has(`artist:${aId}`)) {
+        addEdge(`artist:${aId}`, `track:${t.id}`, 'artist-track', 1);
+      } else if (gId && nodeMap.has(`genre:${gId}`)) {
+        addEdge(`genre:${gId}`, `track:${t.id}`, 'genre-track', 1);
       }
     }
 

@@ -55,29 +55,32 @@ export class TrackRowComponent {
         <span style="color: var(--color-accent-purple-glow);">${getIconSvg('music', { size: 18 })}</span>
       </div>
 
-      <div style="display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
+      <div class="track-row-title-col" style="display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
         <span class="track-title-text" title="${escapeHtml(displayTitle)}" style="font-size: 13px; font-weight: var(--font-weight-semibold); color: ${isPlaying ? 'var(--color-accent-cyan)' : 'var(--color-text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
           ${escapeHtml(displayTitle)}
         </span>
+        <div class="track-row-mobile-subtitle">
+          ${escapeHtml(track.artistName ?? 'Unknown Artist')} • ${durationStr}
+        </div>
       </div>
 
-      <div title="${escapeHtml(track.artistName ?? 'Unknown Artist')}" style="font-size: 12px; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+      <div class="track-row-artist" title="${escapeHtml(track.artistName ?? 'Unknown Artist')}" style="font-size: 12px; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
         ${escapeHtml(track.artistName ?? 'Unknown Artist')}
       </div>
 
-      <div title="${escapeHtml(track.albumTitle ?? 'Unknown Album')}" style="font-size: 12px; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+      <div class="track-row-album" title="${escapeHtml(track.albumTitle ?? 'Unknown Album')}" style="font-size: 12px; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
         ${escapeHtml(track.albumTitle ?? 'Unknown Album')}
       </div>
 
-      <div>
+      <div class="track-row-format">
         ${formatBadge}
       </div>
 
-      <div style="font-size: 12px; color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums; font-weight: 500;">
+      <div class="track-row-time" style="font-size: 12px; color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums; font-weight: 500;">
         ${durationStr}
       </div>
 
-      <div style="display: flex; justify-content: center; align-items: center; gap: 4px;">
+      <div class="track-row-actions" style="display: flex; justify-content: center; align-items: center; gap: 4px;">
         ${callbacks.onAddToPlaylist ? `
         <button
           class="track-add-playlist-btn"

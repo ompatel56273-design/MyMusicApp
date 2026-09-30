@@ -163,7 +163,7 @@ export class MiniPlayerComponent {
             gap: 10px !important;
           }
 
-          #mini-shuffle-btn, #mini-repeat-btn, #mini-prev-btn {
+          #mini-shuffle-btn, #mini-repeat-btn {
             display: none !important;
           }
 

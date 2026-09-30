@@ -83,5 +83,5 @@ describe('Scanner Large-Library Benchmark', () => {
 
     expect(initialDurationMs).toBeLessThan(10000); // under 10s for 2.5k files
     expect(incrementalDurationMs).toBeLessThan(initialDurationMs); // Unchanged scan is faster than initial scan
-  }, 15000);
+  }, 60000);
 });

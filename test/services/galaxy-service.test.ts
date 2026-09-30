@@ -269,10 +269,9 @@ describe('GalaxyService', () => {
     galaxyService.invalidateCache();
     const graph = await galaxyService.getGraph();
 
-    expect(graph.nodes.some(n => n.id === 'genre:genre_unknown')).toBe(true);
-    expect(graph.nodes.some(n => n.id === 'artist:artist_unknown')).toBe(true);
-    expect(graph.nodes.some(n => n.id === 'album:album_unknown_artist_unknown')).toBe(true);
     expect(graph.nodes.some(n => n.id === 'track:track_orphan')).toBe(true);
+    expect(graph.nodes.some(n => n.id === 'genre:genre_unknown')).toBe(false);
+    expect(graph.nodes.some(n => n.id === 'artist:artist_unknown')).toBe(false);
   });
 
   it('handles 5,000 tracks with excellent performance without infinite loops or memory leaks', async () => {

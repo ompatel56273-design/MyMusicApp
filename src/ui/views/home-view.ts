@@ -1031,18 +1031,31 @@ export class HomeView implements IView {
             max-width: 100%;
           }
 
+          .home-hero-content {
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+          }
+
           .home-hero-actions {
-            margin-top: 20px;
+            margin-top: 18px;
             gap: 10px;
             width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            box-sizing: border-box;
           }
 
           .home-hero-btn-play, .home-hero-btn-shuffle {
             min-height: 48px;
-            padding-inline: 18px;
+            padding-inline: 16px;
+            padding-block: 10px;
             font-size: 14px;
-            flex: 1 1 calc(50% - 6px);
+            flex: 1 1 140px;
+            max-width: 100%;
+            box-sizing: border-box;
             justify-content: center;
+            white-space: nowrap;
           }
 
           .home-hero-decor {

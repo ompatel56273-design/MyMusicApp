@@ -320,10 +320,16 @@ export class SearchView implements IView {
           display: flex;
           gap: var(--space-2);
           overflow-x: auto;
-          padding-bottom: 2px;
+          padding-bottom: 4px;
           scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
           z-index: 1;
           overscroll-behavior-x: contain;
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          flex-wrap: nowrap;
         }
         .search-cat-tabs::-webkit-scrollbar {
           display: none;
@@ -340,7 +346,9 @@ export class SearchView implements IView {
           cursor: pointer;
           white-space: nowrap;
           transition: all var(--duration-fast) var(--ease-smooth);
-          min-height: 40px;
+          min-height: 44px;
+          min-width: 44px;
+          flex-shrink: 0;
           box-sizing: border-box;
         }
 
@@ -381,10 +389,22 @@ export class SearchView implements IView {
           .search-hero-banner {
             padding: var(--space-5) var(--space-4);
             border-radius: var(--radius-xl);
+            overflow: hidden;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
           }
 
           .search-input-wrapper {
             max-width: 100%;
+          }
+
+          .search-cat-tabs {
+            width: 100%;
+            max-width: 100%;
+            overflow-x: auto;
+            flex-wrap: nowrap;
+            -webkit-overflow-scrolling: touch;
           }
         }
       </style>
